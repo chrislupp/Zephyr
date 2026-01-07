@@ -5,6 +5,7 @@
 #define VLM_GEOMETRY_SURFACE_H_
 
 #include <array>
+#include <cmath>
 #include <memory>
 #include <optional>
 #include <string>
@@ -82,17 +83,27 @@ class Surface {
   /// @brief Sets the number of chordwise panels.
   void SetChordwisePanelCount(int count) { chordwise_panel_count_ = count; }
 
-  /// @brief Gets the chordwise spacing parameter.
+  /// @brief Gets the chordwise spacing type.
+  SpacingType GetChordwiseSpacing() const { return chordwise_spacing_type_; }
+
+  /// @brief Sets the chordwise spacing type.
+  void SetChordwiseSpacing(SpacingType spacing) { chordwise_spacing_type_ = spacing; }
+
+  /// @brief Sets the chordwise spacing from a numeric parameter.
   ///
   /// Controls panel distribution along chord:
   /// - 0: Uniform spacing
   /// - 1: Full cosine (clustered at LE and TE)
   /// - -1: Full sine (clustered at TE)
-  /// - Other: Blend
-  Scalar GetChordwiseSpacing() const { return chordwise_spacing_; }
-
-  /// @brief Sets the chordwise spacing parameter.
-  void SetChordwiseSpacing(Scalar spacing) { chordwise_spacing_ = spacing; }
+  void SetChordwiseSpacing(Scalar spacing) {
+    if (std::abs(spacing) < 0.01) {
+      chordwise_spacing_type_ = SpacingType::kUniform;
+    } else if (spacing > 0) {
+      chordwise_spacing_type_ = SpacingType::kCosine;
+    } else {
+      chordwise_spacing_type_ = SpacingType::kSine;
+    }
+  }
 
   /// @brief Gets the number of spanwise panels.
   int GetSpanwisePanelCount() const { return spanwise_panel_count_; }
@@ -100,11 +111,22 @@ class Surface {
   /// @brief Sets the number of spanwise panels.
   void SetSpanwisePanelCount(int count) { spanwise_panel_count_ = count; }
 
-  /// @brief Gets the spanwise spacing parameter.
-  Scalar GetSpanwiseSpacing() const { return spanwise_spacing_; }
+  /// @brief Gets the spanwise spacing type.
+  SpacingType GetSpanwiseSpacing() const { return spanwise_spacing_type_; }
 
-  /// @brief Sets the spanwise spacing parameter.
-  void SetSpanwiseSpacing(Scalar spacing) { spanwise_spacing_ = spacing; }
+  /// @brief Sets the spanwise spacing type.
+  void SetSpanwiseSpacing(SpacingType spacing) { spanwise_spacing_type_ = spacing; }
+
+  /// @brief Sets the spanwise spacing from a numeric parameter.
+  void SetSpanwiseSpacing(Scalar spacing) {
+    if (std::abs(spacing) < 0.01) {
+      spanwise_spacing_type_ = SpacingType::kUniform;
+    } else if (spacing > 0) {
+      spanwise_spacing_type_ = SpacingType::kCosine;
+    } else {
+      spanwise_spacing_type_ = SpacingType::kSine;
+    }
+  }
 
   /// @}
 
@@ -216,9 +238,9 @@ class Surface {
 
   // Paneling
   int chordwise_panel_count_{12};
-  Scalar chordwise_spacing_{1.0};  // Cosine spacing
+  SpacingType chordwise_spacing_type_{SpacingType::kCosine};
   int spanwise_panel_count_{20};
-  Scalar spanwise_spacing_{1.0};   // Cosine spacing
+  SpacingType spanwise_spacing_type_{SpacingType::kCosine};
 
   // Duplication
   std::optional<Scalar> y_duplicate_;

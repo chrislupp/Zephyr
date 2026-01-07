@@ -71,6 +71,7 @@ enum class SymmetryType : int {
 
 /// @brief Spacing distribution type for panel generation.
 enum class SpacingType {
+  kNone,      ///< No spacing specified (use default)
   kUniform,   ///< Uniform spacing
   kCosine,    ///< Cosine spacing (clustered at edges)
   kSine,      ///< Sine spacing

@@ -4,6 +4,8 @@
 #ifndef VLM_GEOMETRY_SECTION_H_
 #define VLM_GEOMETRY_SECTION_H_
 
+#include <array>
+#include <cmath>
 #include <memory>
 #include <string>
 #include <vector>
@@ -161,11 +163,39 @@ class Section {
   /// @brief Sets the spanwise panel count override.
   void SetSpanwisePanelCount(int count) { spanwise_panel_count_ = count; }
 
-  /// @brief Gets the spanwise spacing parameter.
-  Scalar GetSpanwiseSpacing() const { return spanwise_spacing_; }
+  /// @brief Gets the spanwise spacing type.
+  SpacingType GetSpanwiseSpacing() const { return spanwise_spacing_type_; }
 
-  /// @brief Sets the spanwise spacing parameter.
-  void SetSpanwiseSpacing(Scalar spacing) { spanwise_spacing_ = spacing; }
+  /// @brief Sets the spanwise spacing type.
+  void SetSpanwiseSpacing(SpacingType spacing) { spanwise_spacing_type_ = spacing; }
+
+  /// @brief Sets the spanwise spacing from a numeric parameter.
+  void SetSpanwiseSpacing(Scalar spacing) {
+    if (std::abs(spacing) < 0.01) {
+      spanwise_spacing_type_ = SpacingType::kUniform;
+    } else if (spacing > 0.99) {
+      spanwise_spacing_type_ = SpacingType::kCosine;
+    } else if (spacing < -0.99) {
+      spanwise_spacing_type_ = SpacingType::kSine;
+    } else if (spacing > 0) {
+      spanwise_spacing_type_ = SpacingType::kCosine;
+    } else {
+      spanwise_spacing_type_ = SpacingType::kSine;
+    }
+  }
+
+  /// @}
+
+  /// @name Viscous Drag Model
+  /// @{
+
+  /// @brief Gets the viscous polar coefficients.
+  ///
+  /// 6-element array defining parabolic drag polar at this section.
+  const std::array<Scalar, 6>& GetViscousPolar() const { return viscous_polar_; }
+
+  /// @brief Sets the viscous polar coefficients.
+  void SetViscousPolar(const std::array<Scalar, 6>& polar) { viscous_polar_ = polar; }
 
   /// @}
 
@@ -180,7 +210,9 @@ class Section {
   std::vector<DesignVariableDefinition> design_variables_;
 
   int spanwise_panel_count_{0};     ///< Override panel count (0 = use default)
-  Scalar spanwise_spacing_{0.0};    ///< Spacing parameter
+  SpacingType spanwise_spacing_type_{SpacingType::kNone};  ///< Spacing type
+
+  std::array<Scalar, 6> viscous_polar_{0, 0, 0, 0, 0, 0};  ///< Viscous polar
 };
 
 }  // namespace vlm

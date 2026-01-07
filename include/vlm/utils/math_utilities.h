@@ -147,6 +147,20 @@ inline void GenerateUniformSpacing(Index num_points, std::vector<Scalar>& values
   }
 }
 
+/// @brief Generates sine-spaced points in the range [0, 1].
+///
+/// Sine spacing concentrates points near the trailing edge (x=1).
+///
+/// @param num_points Number of points to generate (must be >= 2)
+/// @param values Output vector of sine-spaced values
+inline void GenerateSineSpacing(Index num_points, std::vector<Scalar>& values) {
+  values.resize(num_points);
+  for (Index i = 0; i < num_points; ++i) {
+    Scalar theta = 0.5 * kPi * static_cast<Scalar>(i) / static_cast<Scalar>(num_points - 1);
+    values[i] = std::sin(theta);
+  }
+}
+
 /// @brief Blends between uniform and cosine spacing.
 ///
 /// @param num_points Number of points to generate
@@ -162,6 +176,31 @@ inline void GenerateBlendedSpacing(Index num_points, Scalar blend_factor,
   for (Index i = 0; i < num_points; ++i) {
     values[i] = (1.0 - blend_factor) * uniform[i] + blend_factor * cosine[i];
   }
+}
+
+/// @brief Generates spacing points based on spacing type.
+///
+/// @param num_points Number of points to generate (must be >= 2)
+/// @param spacing_type Type of spacing distribution
+/// @return Vector of spacing values in range [0, 1]
+inline std::vector<Scalar> GenerateCosineSpacing(Index num_points, SpacingType spacing_type) {
+  std::vector<Scalar> values;
+  switch (spacing_type) {
+    case SpacingType::kUniform:
+    case SpacingType::kNone:
+      GenerateUniformSpacing(num_points, values);
+      break;
+    case SpacingType::kCosine:
+      GenerateCosineSpacing(num_points, values);
+      break;
+    case SpacingType::kSine:
+      GenerateSineSpacing(num_points, values);
+      break;
+    case SpacingType::kBlend:
+      GenerateBlendedSpacing(num_points, 0.5, values);
+      break;
+  }
+  return values;
 }
 
 /// @brief Rotates a vector about the x-axis.
