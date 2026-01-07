@@ -103,7 +103,7 @@ Airfoil Airfoil::CreateFromNaca4Digit(int naca_code, int num_points) {
 }
 
 Airfoil Airfoil::CreateFromCoordinateFile(const std::string& filename,
-                                          int num_camber_points) {
+                                          int /*num_camber_points*/) {
   std::ifstream file(filename);
   if (!file.is_open()) {
     throw std::runtime_error(
