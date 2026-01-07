@@ -3,6 +3,7 @@ include(GoogleTest)
 # Unit tests
 add_executable(vlm_unit_tests
     unit/cubic_spline_test.cpp
+    unit/geometry_test.cpp
 )
 
 target_link_libraries(vlm_unit_tests
