@@ -11,6 +11,7 @@ add_executable(vlm_unit_tests
     unit/stability_derivatives_test.cpp
     unit/trim_solver_test.cpp
     unit/eigenmode_test.cpp
+    unit/autodiff_test.cpp
 )
 
 target_link_libraries(vlm_unit_tests
