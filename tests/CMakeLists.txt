@@ -22,5 +22,20 @@ target_link_libraries(vlm_unit_tests
 
 gtest_discover_tests(vlm_unit_tests)
 
+# Integration tests
+add_executable(vlm_integration_tests
+    integration/rectangular_wing_test.cpp
+)
+
+target_link_libraries(vlm_integration_tests
+    PRIVATE
+        vlm
+        GTest::gtest_main
+)
+
+gtest_discover_tests(vlm_integration_tests
+    WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}
+)
+
 # Copy test fixtures to build directory
 file(COPY fixtures DESTINATION ${CMAKE_CURRENT_BINARY_DIR})
