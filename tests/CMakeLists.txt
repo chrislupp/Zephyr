@@ -8,6 +8,7 @@ add_executable(vlm_unit_tests
     unit/influence_matrix_test.cpp
     unit/solver_test.cpp
     unit/force_calculator_test.cpp
+    unit/stability_derivatives_test.cpp
 )
 
 target_link_libraries(vlm_unit_tests
