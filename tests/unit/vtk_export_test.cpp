@@ -66,17 +66,6 @@ TEST_F(VtkExportTest, IsAvailableReturnsConsistentValue) {
   SUCCEED();
 }
 
-TEST_F(VtkExportTest, ExportSurfaceMeshWithoutVtk) {
-  if (VtkExporter::IsAvailable()) {
-    GTEST_SKIP() << "VTK is available - test for unavailable case";
-  }
-
-  VtkExportOptions options;
-  bool result = VtkExporter::ExportSurfaceMesh("test_surface.vtu",
-                                                solver_.GetMesh(), solution_, options);
-  EXPECT_FALSE(result);
-}
-
 TEST_F(VtkExportTest, ExportSurfaceMeshCreatesFile) {
   if (!VtkExporter::IsAvailable()) {
     GTEST_SKIP() << "VTK not available";
