@@ -79,6 +79,66 @@ if(VLM_ENABLE_VTK)
     endif()
 endif()
 
+# Enzyme automatic differentiation support (optional)
+option(VLM_ENABLE_ENZYME "Enable Enzyme automatic differentiation" OFF)
+if(VLM_ENABLE_ENZYME)
+    # Enzyme requires Clang compiler
+    if(NOT CMAKE_CXX_COMPILER_ID MATCHES "Clang")
+        message(FATAL_ERROR "Enzyme requires Clang compiler. "
+            "Set CMAKE_CXX_COMPILER to clang++ or use -DVLM_ENABLE_ENZYME=OFF")
+    endif()
+
+    # Get LLVM version from Clang
+    execute_process(
+        COMMAND ${CMAKE_CXX_COMPILER} --version
+        OUTPUT_VARIABLE CLANG_VERSION_OUTPUT
+        OUTPUT_STRIP_TRAILING_WHITESPACE
+    )
+    string(REGEX MATCH "version ([0-9]+)" _ ${CLANG_VERSION_OUTPUT})
+    set(LLVM_VERSION_MAJOR ${CMAKE_MATCH_1})
+    message(STATUS "Detected LLVM/Clang major version: ${LLVM_VERSION_MAJOR}")
+
+    # Find Enzyme plugin
+    # Search common locations: user-specified, Homebrew, system
+    find_library(ENZYME_PLUGIN
+        NAMES ClangEnzyme-${LLVM_VERSION_MAJOR} ClangEnzyme
+        HINTS
+            ${ENZYME_DIR}
+            $ENV{ENZYME_DIR}
+            /opt/homebrew/lib
+            /usr/local/lib
+            /usr/lib
+        DOC "Path to Enzyme Clang plugin"
+    )
+
+    if(ENZYME_PLUGIN)
+        message(STATUS "Enzyme found: ${ENZYME_PLUGIN}")
+
+        # Add Enzyme compiler flags
+        # -fplugin loads the Enzyme LLVM pass
+        # Optimization flags help Enzyme work correctly
+        target_compile_options(vlm PUBLIC
+            -fplugin=${ENZYME_PLUGIN}
+            -O2
+            -fno-vectorize
+            -fno-slp-vectorize
+            -fno-unroll-loops
+        )
+
+        # Define VLM_USE_ENZYME so code can conditionally use AD features
+        target_compile_definitions(vlm PUBLIC VLM_USE_ENZYME)
+
+        # Enzyme sometimes needs these for complex code
+        target_compile_options(vlm PUBLIC
+            -fno-exceptions  # Enzyme doesn't handle exceptions well
+        )
+    else()
+        message(WARNING "Enzyme not found - automatic differentiation disabled. "
+            "Install with: brew install enzyme (macOS) or set ENZYME_DIR")
+        set(VLM_ENABLE_ENZYME OFF)
+    endif()
+endif()
+
 # Tests with Google Test
 if(VLM_BUILD_TESTS)
     enable_testing()
