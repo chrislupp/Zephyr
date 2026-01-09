@@ -76,6 +76,9 @@
 #include "vlm/utils/cubic_spline.h"
 #include "vlm/utils/math_utilities.h"
 
+// Visualization (VTK export - optional, check VtkExporter::IsAvailable())
+#include "vlm/visualization/vtk_export.h"
+
 /// @namespace vlm
 /// @brief Vortex Lattice Method library namespace.
 ///

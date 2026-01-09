@@ -55,6 +55,30 @@ if(VLM_ENABLE_OPENMP)
     endif()
 endif()
 
+# VTK support (optional)
+option(VLM_ENABLE_VTK "Enable VTK visualization export" ON)
+if(VLM_ENABLE_VTK)
+    find_package(VTK QUIET COMPONENTS
+        CommonCore
+        CommonDataModel
+        IOXML
+    )
+    if(VTK_FOUND)
+        message(STATUS "VTK found: ${VTK_VERSION}")
+        target_link_libraries(vlm PUBLIC ${VTK_LIBRARIES})
+        target_compile_definitions(vlm PUBLIC VLM_USE_VTK)
+        # VTK 9+ requires module autoinit
+        if(VTK_VERSION VERSION_GREATER_EQUAL "9.0")
+            vtk_module_autoinit(
+                TARGETS vlm
+                MODULES ${VTK_LIBRARIES}
+            )
+        endif()
+    else()
+        message(STATUS "VTK not found - visualization export disabled")
+    endif()
+endif()
+
 # Tests with Google Test
 if(VLM_BUILD_TESTS)
     enable_testing()

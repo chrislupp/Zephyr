@@ -11,3 +11,7 @@ target_link_libraries(trim_flight PRIVATE vlm)
 # Stability analysis example
 add_executable(stability_analysis stability_analysis.cpp)
 target_link_libraries(stability_analysis PRIVATE vlm)
+
+# VTK visualization example (builds even without VTK - checks availability at runtime)
+add_executable(vtk_visualization vtk_visualization.cpp)
+target_link_libraries(vtk_visualization PRIVATE vlm)

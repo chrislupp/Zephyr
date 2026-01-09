@@ -13,6 +13,7 @@ add_executable(vlm_unit_tests
     unit/eigenmode_test.cpp
     unit/autodiff_test.cpp
     unit/mass_reader_test.cpp
+    unit/vtk_export_test.cpp
 )
 
 target_link_libraries(vlm_unit_tests
