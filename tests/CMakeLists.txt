@@ -17,6 +17,7 @@ add_executable(vlm_unit_tests
     unit/control_surface_test.cpp
     unit/enzyme_ad_test.cpp
     unit/gradient_calculator_test.cpp
+    unit/adjoint_solver_test.cpp
 )
 
 target_link_libraries(vlm_unit_tests
