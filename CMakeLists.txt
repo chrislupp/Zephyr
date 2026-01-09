@@ -19,7 +19,7 @@ option(VLM_ENABLE_OPENMP "Enable OpenMP parallelization" ON)
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
 # Find dependencies
-find_package(Eigen3 3.3 REQUIRED NO_MODULE)
+find_package(Eigen3 5.0 CONFIG REQUIRED)
 
 # Collect source files
 file(GLOB_RECURSE VLM_SOURCES
