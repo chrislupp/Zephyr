@@ -19,12 +19,17 @@ void ForceCalculator::BodyToStabilityAxis(const Vec3& cf_body, Scalar alpha,
   Scalar ca = std::cos(alpha);
   Scalar sa = std::sin(alpha);
 
+  // Coordinate system: X forward, Y right, Z up
+  // Freestream direction at angle alpha: (cos(alpha), 0, sin(alpha))
+  // Lift direction (perpendicular, upward): (-sin(alpha), 0, cos(alpha))
+  // Drag direction (along freestream): (cos(alpha), 0, sin(alpha))
+
   // Lift: perpendicular to freestream (positive up)
-  // CL = -CZ*cos(alpha) + CX*sin(alpha)
-  CL = -cf_body.z() * ca + cf_body.x() * sa;
+  // CL = F · L_dir = CZ*cos(alpha) - CX*sin(alpha)
+  CL = cf_body.z() * ca - cf_body.x() * sa;
 
   // Drag: along freestream (positive aft)
-  // CD = CX*cos(alpha) + CZ*sin(alpha)
+  // CD = F · D_dir = CX*cos(alpha) + CZ*sin(alpha)
   CD = cf_body.x() * ca + cf_body.z() * sa;
 }
 
@@ -67,11 +72,11 @@ StripLoads ForceCalculator::ComputeStripLoads(
     // Bound vortex vector (from left to right)
     Vec3 gamma_vec = vor.bound_vortex_right - vor.bound_vortex_left;
 
-    // Kutta-Joukowski: F = rho * Gamma_vec x V_eff
-    // (NOT V x Gamma - the order matters for correct lift direction)
-    // For coefficient: F/(q*S) = 2 * Gamma * (Gamma_vec x V_eff) / S
+    // Kutta-Joukowski: dF = rho * Gamma * (V x dl)
+    // For unit circulation element: F = V_eff x gamma_vec
+    // For coefficient: F/(q*S) = 2 * Gamma * (V_eff x gamma_vec) / S
     Scalar gamma = solution.circulation(i);
-    Vec3 f = 2.0 * gamma * gamma_vec.cross(v_eff);
+    Vec3 f = 2.0 * gamma * v_eff.cross(gamma_vec);
 
     total_force += f;
 
@@ -90,7 +95,9 @@ StripLoads ForceCalculator::ComputeStripLoads(
   loads.cf = total_force / loads.area;
 
   // Normalize moments by strip chord * area
-  loads.cm = total_moment / (loads.chord * loads.area);
+  // Convert to aircraft convention (negate x and z for roll/yaw)
+  Vec3 cm_aircraft(-total_moment.x(), total_moment.y(), -total_moment.z());
+  loads.cm = cm_aircraft / (loads.chord * loads.area);
 
   // Span loading
   loads.cnc = cnc / loads.area;
@@ -160,7 +167,10 @@ AerodynamicResults ForceCalculator::ComputeForces(
 
     // Normalize surface forces by reference area
     surf_loads.CF = surf_force / results.reference_area;
-    surf_loads.CM = surf_moment / (results.reference_area * results.reference_chord);
+
+    // Convert moment to aircraft convention (negate x and z for roll/yaw)
+    Vec3 cm_aircraft(-surf_moment.x(), surf_moment.y(), -surf_moment.z());
+    surf_loads.CM = cm_aircraft / (results.reference_area * results.reference_chord);
 
     // Convert to lift/drag
     BodyToStabilityAxis(surf_loads.CF, condition.alpha, surf_loads.CL, surf_loads.CD);
@@ -179,9 +189,13 @@ AerodynamicResults ForceCalculator::ComputeForces(
 
   // Total moments about reference point
   results.CM = total_moment / (results.reference_area * results.reference_chord);
-  results.Cl = results.CM.x();
-  results.Cm = results.CM.y();
-  results.Cn = results.CM.z();
+
+  // Convert from math convention (X fwd, Y right, Z up, right-hand moments)
+  // to aircraft convention (positive roll = right wing down, positive yaw = nose right)
+  // Pitch (about Y axis) has same sign in both conventions
+  results.Cl = -results.CM.x();  // Negate: RH x-moment is left roll, we want right roll positive
+  results.Cm = results.CM.y();   // Same sign: nose up is positive in both
+  results.Cn = -results.CM.z();  // Negate: RH z-moment is nose left, we want nose right positive
 
   // Stability axis coefficients
   BodyToStabilityAxis(results.CF, condition.alpha, results.CL, results.CD);

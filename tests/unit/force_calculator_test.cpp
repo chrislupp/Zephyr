@@ -270,8 +270,11 @@ TEST_F(ForceCalculatorTest, PitchingMomentSign) {
       calculator.ComputeForces(aircraft, solver.GetMesh(), solution, condition);
 
   EXPECT_TRUE(results.is_valid);
-  // Lift acts at ~quarter chord, moment arm is negative, so Cm should be negative
-  EXPECT_LT(results.Cm, 0.0);
+  // With aft moment reference (0.75) and lift at quarter chord (0.25):
+  // Moment arm is negative (force is forward of reference)
+  // Upward lift with forward moment arm creates nose-UP moment (Cm > 0)
+  // This is physically correct for unstable (aft CG) configuration
+  EXPECT_GT(results.Cm, 0.0);
 }
 
 TEST_F(ForceCalculatorTest, AspectRatioCalculation) {
