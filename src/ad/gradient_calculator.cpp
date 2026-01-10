@@ -590,13 +590,12 @@ VecX ComputeRHSGeometrySensitivity(
 
   if (variable == GeometryVariable::kTwist) {
     // Twist affects normals directly
-    // ∂n/∂twist = rotation of normal about spanwise axis
+    // ∂n/∂twist = rotation of normal about spanwise (bound vortex) axis
     // For small angles: ∂n/∂θ ≈ (spanwise × n)
 
     for (Index i = surf_info.first_vortex_index;
          i < surf_info.first_vortex_index + surf_info.num_vortices; ++i) {
       const HorseshoeVortex& vor = mesh.GetVortex(i);
-      const Strip& strip = mesh.GetStrip(vor.strip_index);
 
       // Check if this vortex is affected by this section
       // Use strip's surface_index and position to determine influence
@@ -605,13 +604,14 @@ VecX ComputeRHSGeometrySensitivity(
       // For now, apply to all vortices in the surface with a weight based on position
       // A proper implementation would track which strips correspond to which sections
 
-      // Approximate: twist change rotates normal about Trefftz normal direction
-      // ∂n/∂twist ≈ (trefftz_normal × n) converted to degrees
-      Vec3 n_vec = vor.normal_at_control_point;
-      Vec3 trefftz_norm(0.0, strip.trefftz_normal_y, strip.trefftz_normal_z);
+      // Compute bound vortex (spanwise) direction - this is the twist rotation axis
+      Vec3 bound_dir = (vor.bound_vortex_right - vor.bound_vortex_left).normalized();
 
-      // Cross product gives rotation direction
-      Vec3 dn_dtwist = trefftz_norm.cross(n_vec);
+      Vec3 n_vec = vor.normal_at_control_point;
+
+      // Twist rotates the normal about the spanwise axis
+      // ∂n/∂twist = spanwise × n
+      Vec3 dn_dtwist = bound_dir.cross(n_vec);
 
       // Convert from radians to degrees (twist is stored in degrees)
       dn_dtwist *= kDegreesToRadians;
@@ -639,53 +639,23 @@ VecX ComputeRHSGeometrySensitivity(
 /// - Column contributions (bound vortex changes): enzyme_aic_column_gradient_rv with λ as weights
 ///
 /// Chain rule: λᵀ·(∂A/∂θ)·Γ = Σ_mesh_vars (∂(λᵀ·A·Γ)/∂mesh_var) · (∂mesh_var/∂θ)
-Scalar ComputeAICGeometrySensitivity(
+/// Helper function to compute AIC sensitivity for one interval
+Scalar ComputeAICGeometrySensitivityForInterval(
     const VortexLattice& mesh,
-    const Aircraft& aircraft,
+    const MeshArrays& arrays,
     const VecX& lambda,
     const VecX& gamma,
-    const FlightCondition& condition,
-    Index surface_idx,
-    Index section_idx,
-    GeometryVariable variable) {
+    Index first_strip,
+    Index num_strips,
+    Index num_chordwise,
+    double core_chord_frac,
+    double core_width_frac,
+    double beta,
+    GeometryVariable variable,
+    bool is_left_section) {  // true if section is left of interval, false if right
 
-  const Index n = mesh.GetNumVortices();
-  if (n == 0) return 0.0;
-
-  // Build section-strip mapping
-  SectionStripMapping mapping = BuildSectionStripMapping(aircraft, mesh, surface_idx);
-  if (mapping.num_sections == 0 || section_idx >= mapping.num_sections - 1) {
-    return 0.0;  // Section doesn't exist or is the last section (no interval after it)
-  }
-
-  // Get affected strip range for this section interval
-  auto [first_strip, num_strips] = mapping.GetStripRange(section_idx);
-  if (num_strips == 0) return 0.0;
-
-  const auto& surface_info = mesh.GetSurfaceInfo(surface_idx);
-  Index num_chordwise = surface_info.num_chordwise;
-
-  // Extract mesh arrays for enzyme functions
-  MeshArrays arrays = ExtractMeshArrays(mesh);
-
-  // Compressibility factor
-  double beta = std::sqrt(std::max(0.01, 1.0 - condition.mach * condition.mach));
-
-  // Core radius fractions
-  double core_chord_frac = mesh.GetVortexCoreRadiusChordFraction();
-  double core_width_frac = mesh.GetVortexCoreRadiusWidthFraction();
-
-  // Result accumulator
   Scalar result = 0.0;
-
-  // For twist changes, the primary effect is on the normal vectors
-  // which affects the RHS directly (already handled in ComputeRHSGeometrySensitivity)
-  // and also affects the AIC matrix (since A_ij depends on normal_i)
-  //
-  // For position changes (LE_x, LE_y, LE_z), both control points and
-  // bound vortices move
-  //
-  // For chord changes, the x-positions of control points and bound vortices change
+  const Index n = arrays.num_vortices;
 
   // Loop over strips in this section interval
   for (Index istrip = 0; istrip < num_strips; ++istrip) {
@@ -696,6 +666,13 @@ Scalar ComputeAICGeometrySensitivity(
     double f1, f2;
     ComputeStripEdgeFractions(istrip, num_strips, &f1, &f2);
     double fc = ComputeStripInterpolationFraction(istrip, num_strips);
+
+    // Section contribution factors:
+    // - Left section uses (1-f) factors
+    // - Right section uses f factors
+    double w1 = is_left_section ? (1.0 - f1) : f1;
+    double w2 = is_left_section ? (1.0 - f2) : f2;
+    double wc = is_left_section ? (1.0 - fc) : fc;
 
     // Loop over vortex elements in this strip
     for (Index ichord = 0; ichord < num_chordwise; ++ichord) {
@@ -718,32 +695,30 @@ Scalar ComputeAICGeometrySensitivity(
       switch (variable) {
         case GeometryVariable::kChord:
           // Chord affects x-positions: RV1.x = RLE1.x + XVR*CHORD1
-          // d(RV1.x)/d(chord_left) = (1-f1)*XVR, d(RV1.x)/d(chord_right) = f1*XVR
-          // For this section, we're computing d/d(chord_left) where "left" is section_idx
-          d_rv1[0] = (1.0 - f1) * xvr;
-          d_rv2[0] = (1.0 - f2) * xvr;
-          d_rc[0] = (1.0 - fc) * xcp;
+          d_rv1[0] = w1 * xvr;
+          d_rv2[0] = w2 * xvr;
+          d_rc[0] = wc * xcp;
           break;
 
         case GeometryVariable::kXle:
           // LE.x affects x-positions directly
-          d_rv1[0] = (1.0 - f1);
-          d_rv2[0] = (1.0 - f2);
-          d_rc[0] = (1.0 - fc);
+          d_rv1[0] = w1;
+          d_rv2[0] = w2;
+          d_rc[0] = wc;
           break;
 
         case GeometryVariable::kYle:
           // LE.y affects y-positions
-          d_rv1[1] = (1.0 - f1);
-          d_rv2[1] = (1.0 - f2);
-          d_rc[1] = (1.0 - fc);
+          d_rv1[1] = w1;
+          d_rv2[1] = w2;
+          d_rc[1] = wc;
           break;
 
         case GeometryVariable::kZle:
           // LE.z affects z-positions
-          d_rv1[2] = (1.0 - f1);
-          d_rv2[2] = (1.0 - f2);
-          d_rc[2] = (1.0 - fc);
+          d_rv1[2] = w1;
+          d_rv2[2] = w2;
+          d_rc[2] = wc;
           break;
 
         case GeometryVariable::kTwist: {
@@ -796,9 +771,9 @@ Scalar ComputeAICGeometrySensitivity(
             double normal[3] = {ecxb[0]/emag, ecxb[1]/emag, ecxb[2]/emag};
             double demag = normal[0]*decxb[0] + normal[1]*decxb[1] + normal[2]*decxb[2];
 
-            d_normal[0] = (1.0 - fc) * (decxb[0] - normal[0]*demag) / emag;
-            d_normal[1] = (1.0 - fc) * (decxb[1] - normal[1]*demag) / emag;
-            d_normal[2] = (1.0 - fc) * (decxb[2] - normal[2]*demag) / emag;
+            d_normal[0] = wc * (decxb[0] - normal[0]*demag) / emag;
+            d_normal[1] = wc * (decxb[1] - normal[1]*demag) / emag;
+            d_normal[2] = wc * (decxb[2] - normal[2]*demag) / emag;
           }
           break;
         }
@@ -828,7 +803,7 @@ Scalar ComputeAICGeometrySensitivity(
             arrays.chord.data(),
             arrays.surface_idx.data(),
             static_cast<int>(n),
-            static_cast<int>(vor_idx),
+            arrays.surface_idx[vor_idx],  // Surface index of this control point
             core_chord_frac,
             core_width_frac,
             beta,
@@ -883,6 +858,70 @@ Scalar ComputeAICGeometrySensitivity(
 
         result += gamma(vor_idx) * col_contrib;
       }
+    }
+  }
+
+  return result;
+}
+
+/// Compute AIC sensitivity for a section, considering both adjacent intervals.
+/// A section contributes to:
+/// - Interval [section_idx, section_idx+1] as the "left" section (if exists)
+/// - Interval [section_idx-1, section_idx] as the "right" section (if exists)
+/// This matches OptVL's approach where each section gets contributions from both sides.
+Scalar ComputeAICGeometrySensitivity(
+    const VortexLattice& mesh,
+    const Aircraft& aircraft,
+    const VecX& lambda,
+    const VecX& gamma,
+    const FlightCondition& condition,
+    Index surface_idx,
+    Index section_idx,
+    GeometryVariable variable) {
+
+  const Index n = mesh.GetNumVortices();
+  if (n == 0) return 0.0;
+
+  // Build section-strip mapping
+  SectionStripMapping mapping = BuildSectionStripMapping(aircraft, mesh, surface_idx);
+  if (mapping.num_sections == 0) return 0.0;
+
+  const auto& surface_info = mesh.GetSurfaceInfo(surface_idx);
+  Index num_chordwise = surface_info.num_chordwise;
+
+  // Extract mesh arrays for enzyme functions
+  MeshArrays arrays = ExtractMeshArrays(mesh);
+
+  // Compressibility factor
+  double beta = std::sqrt(std::max(0.01, 1.0 - condition.mach * condition.mach));
+
+  // Core radius fractions
+  double core_chord_frac = mesh.GetVortexCoreRadiusChordFraction();
+  double core_width_frac = mesh.GetVortexCoreRadiusWidthFraction();
+
+  Scalar result = 0.0;
+
+  // Contribution as "left" section of interval [section_idx, section_idx+1]
+  if (section_idx < mapping.num_sections - 1) {
+    auto [first_strip, num_strips] = mapping.GetStripRange(section_idx);
+    if (num_strips > 0) {
+      result += ComputeAICGeometrySensitivityForInterval(
+          mesh, arrays, lambda, gamma,
+          first_strip, num_strips, num_chordwise,
+          core_chord_frac, core_width_frac, beta,
+          variable, true);  // is_left_section = true
+    }
+  }
+
+  // Contribution as "right" section of interval [section_idx-1, section_idx]
+  if (section_idx > 0) {
+    auto [first_strip, num_strips] = mapping.GetStripRange(section_idx - 1);
+    if (num_strips > 0) {
+      result += ComputeAICGeometrySensitivityForInterval(
+          mesh, arrays, lambda, gamma,
+          first_strip, num_strips, num_chordwise,
+          core_chord_frac, core_width_frac, beta,
+          variable, false);  // is_left_section = false
     }
   }
 
