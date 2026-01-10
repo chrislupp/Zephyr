@@ -171,7 +171,7 @@ inline void compute_force_coefficients_kernel(
     const double* induced_velocity,
     const double* bound_left,
     const double* bound_right,
-    const double* control_points,
+    [[maybe_unused]] const double* control_points,  // Reserved for future use
     const double* moment_arm,  // control_point - moment_ref for each vortex [3*N]
     int num_vortices,
     double reference_area,

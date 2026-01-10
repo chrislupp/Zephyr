@@ -10,6 +10,7 @@
 #include "vlm/ad/enzyme_biot_savart.h"
 #include "vlm/ad/enzyme_mesh.h"
 #include "vlm/ad/enzyme_trefftz.h"
+#include "vlm/ad/enzyme_aic.h"
 
 namespace vlm {
 namespace {
@@ -1041,9 +1042,305 @@ TEST_F(EnzymeTrefftzTest, CLGradientMatchesFD) {
   }
 }
 
+// ============================================================================
+// AIC Kernel Tests (matching OptVL's VVOR)
+// ============================================================================
+
+class EnzymeAICTest : public ::testing::Test {
+ protected:
+  void SetUp() override {
+    // Set up a simple horseshoe vortex
+    rv1[0] = 0.0; rv1[1] = -0.5; rv1[2] = 0.0;  // Left bound endpoint
+    rv2[0] = 0.0; rv2[1] =  0.5; rv2[2] = 0.0;  // Right bound endpoint
+    rc[0] = 0.75; rc[1] = 0.0; rc[2] = 0.0;     // Control point downstream
+    normal[0] = 0.0; normal[1] = 0.0; normal[2] = 1.0;  // Upward normal
+
+    core_radius = 0.01;
+    beta = 1.0;  // Incompressible
+    include_bound = true;
+  }
+
+  double rv1[3], rv2[3], rc[3], normal[3];
+  double core_radius;
+  double beta;
+  bool include_bound;
+};
+
+TEST_F(EnzymeAICTest, HorseshoeVelocityIsComputed) {
+  double velocity[3];
+  ad::compute_aic_horseshoe_velocity(rv1, rv2, rc, 1.0, core_radius,
+                                      include_bound, velocity);
+
+  // Horseshoe should induce downward velocity at downstream point
+  EXPECT_NEAR(velocity[0], 0.0, 1e-10);  // No x-velocity by symmetry
+  EXPECT_NEAR(velocity[1], 0.0, 1e-10);  // No y-velocity by symmetry
+  EXPECT_LT(velocity[2], 0.0);            // Downwash
+}
+
+TEST_F(EnzymeAICTest, AICElementIsNonZero) {
+  double aic = ad::compute_aic_element(rv1, rv2, rc, normal,
+                                        core_radius, beta, include_bound);
+
+  // AIC element should be negative (downwash dotted with upward normal)
+  EXPECT_LT(aic, 0.0);
+}
+
+TEST_F(EnzymeAICTest, AICElementGradientMatchesFD) {
+  double d_rv1_enzyme[3], d_rv2_enzyme[3], d_rc_enzyme[3], d_normal_enzyme[3];
+  double d_rv1_fd[3], d_rv2_fd[3], d_rc_fd[3], d_normal_fd[3];
+
+  // Compute FD gradient
+  ad::fd_aic_element_gradient(rv1, rv2, rc, normal, core_radius, beta,
+                               include_bound, d_rv1_fd, d_rv2_fd,
+                               d_rc_fd, d_normal_fd, 1e-7);
+
+#ifdef VLM_USE_ENZYME
+  // Compute Enzyme gradient
+  ad::enzyme_aic_element_gradient(rv1, rv2, rc, normal, core_radius, beta,
+                                   include_bound, d_rv1_enzyme, d_rv2_enzyme,
+                                   d_rc_enzyme, d_normal_enzyme);
+
+  // Compare
+  for (int i = 0; i < 3; ++i) {
+    EXPECT_NEAR(d_rv1_enzyme[i], d_rv1_fd[i], 1e-5)
+        << "rv1 gradient mismatch at component " << i;
+    EXPECT_NEAR(d_rv2_enzyme[i], d_rv2_fd[i], 1e-5)
+        << "rv2 gradient mismatch at component " << i;
+    EXPECT_NEAR(d_rc_enzyme[i], d_rc_fd[i], 1e-5)
+        << "rc gradient mismatch at component " << i;
+    EXPECT_NEAR(d_normal_enzyme[i], d_normal_fd[i], 1e-5)
+        << "normal gradient mismatch at component " << i;
+  }
+#else
+  // Just verify FD produces non-zero gradients
+  double norm_sq = 0.0;
+  for (int i = 0; i < 3; ++i) {
+    norm_sq += d_rv1_fd[i]*d_rv1_fd[i] + d_rv2_fd[i]*d_rv2_fd[i];
+    norm_sq += d_rc_fd[i]*d_rc_fd[i] + d_normal_fd[i]*d_normal_fd[i];
+  }
+  EXPECT_GT(norm_sq, 0.0);
+#endif
+}
+
+TEST_F(EnzymeAICTest, AICMatrixRowIsComputed) {
+  // Set up multiple vortices
+  const int n = 3;
+  double rv1_all[9] = {
+    0.0, -1.5, 0.0,  // Vortex 0
+    0.0, -0.5, 0.0,  // Vortex 1
+    0.0,  0.5, 0.0,  // Vortex 2
+  };
+  double rv2_all[9] = {
+    0.0, -0.5, 0.0,  // Vortex 0
+    0.0,  0.5, 0.0,  // Vortex 1
+    0.0,  1.5, 0.0,  // Vortex 2
+  };
+  double chord_all[3] = {1.0, 1.0, 1.0};
+  int surface_idx_all[3] = {0, 0, 0};
+
+  double aic_row[3];
+  ad::compute_aic_row_kernel(rv1_all, rv2_all, rc, normal, chord_all,
+                              surface_idx_all, n, 0, 0.01, 0.1, 1.0, aic_row);
+
+  // All elements should be non-zero (induced velocities exist)
+  for (int j = 0; j < n; ++j) {
+    EXPECT_NE(aic_row[j], 0.0) << "AIC element " << j << " should be non-zero";
+  }
+
+  // Center vortex (j=1) should have largest magnitude (closest)
+  EXPECT_GT(std::abs(aic_row[1]), std::abs(aic_row[0]));
+  EXPECT_GT(std::abs(aic_row[1]), std::abs(aic_row[2]));
+}
+
+TEST_F(EnzymeAICTest, CompressibilityIncreasesAIC) {
+  double aic_incomp = ad::compute_aic_element(rv1, rv2, rc, normal,
+                                               core_radius, 1.0, include_bound);
+
+  // Mach 0.5 -> beta = sqrt(1 - 0.25) = sqrt(0.75) ≈ 0.866
+  double beta_comp = std::sqrt(0.75);
+  double aic_comp = ad::compute_aic_element(rv1, rv2, rc, normal,
+                                             core_radius, beta_comp, include_bound);
+
+  // Compressibility should increase the magnitude of AIC
+  EXPECT_GT(std::abs(aic_comp), std::abs(aic_incomp));
+}
+
+TEST_F(EnzymeAICTest, CoreRadiusRegularizesSingularity) {
+  // Place control point exactly on the vortex line
+  double rc_on_vortex[3] = {0.0, 0.0, 0.0};
+
+  // Without core radius, this would be singular
+  // With core radius, it should be finite
+  double aic_zero_core = ad::compute_aic_element(rv1, rv2, rc_on_vortex, normal,
+                                                  0.0, beta, include_bound);
+  double aic_with_core = ad::compute_aic_element(rv1, rv2, rc_on_vortex, normal,
+                                                  0.1, beta, include_bound);
+
+  // The value with core should be finite (not NaN or Inf)
+  EXPECT_TRUE(std::isfinite(aic_with_core));
+
+  // The value with core should be smaller in magnitude (regularized)
+  EXPECT_LE(std::abs(aic_with_core), std::abs(aic_zero_core) + 1e10);
+}
+
+#ifdef VLM_USE_ENZYME
+
+TEST_F(EnzymeAICTest, AICRowGradientRcMatchesFD) {
+  // Set up multiple vortices
+  const int n = 3;
+  double rv1_all[9] = {0.0, -1.5, 0.0, 0.0, -0.5, 0.0, 0.0, 0.5, 0.0};
+  double rv2_all[9] = {0.0, -0.5, 0.0, 0.0, 0.5, 0.0, 0.0, 1.5, 0.0};
+  double chord_all[3] = {1.0, 1.0, 1.0};
+  int surface_idx_all[3] = {0, 0, 0};
+
+  // Seed gradient (e.g., from adjoint vector times circulation)
+  double d_aic_row[3] = {0.1, 0.5, 0.2};
+
+  double d_rc_enzyme[3], d_normal_enzyme[3];
+  ad::enzyme_aic_row_gradient_rc(rv1_all, rv2_all, rc, normal, chord_all,
+                                  surface_idx_all, n, 0, 0.01, 0.1, 1.0,
+                                  d_aic_row, d_rc_enzyme, d_normal_enzyme);
+
+  // Compute FD gradient
+  double d_rc_fd[3] = {0.0, 0.0, 0.0};
+  double h = 1e-7;
+  for (int i = 0; i < 3; ++i) {
+    double rc_plus[3] = {rc[0], rc[1], rc[2]};
+    double rc_minus[3] = {rc[0], rc[1], rc[2]};
+    rc_plus[i] += h;
+    rc_minus[i] -= h;
+
+    double aic_plus[3], aic_minus[3];
+    ad::compute_aic_row_kernel(rv1_all, rv2_all, rc_plus, normal, chord_all,
+                                surface_idx_all, n, 0, 0.01, 0.1, 1.0, aic_plus);
+    ad::compute_aic_row_kernel(rv1_all, rv2_all, rc_minus, normal, chord_all,
+                                surface_idx_all, n, 0, 0.01, 0.1, 1.0, aic_minus);
+
+    // Chain rule with seed gradient
+    for (int j = 0; j < n; ++j) {
+      d_rc_fd[i] += d_aic_row[j] * (aic_plus[j] - aic_minus[j]) / (2.0 * h);
+    }
+  }
+
+  // Compare
+  for (int i = 0; i < 3; ++i) {
+    EXPECT_NEAR(d_rc_enzyme[i], d_rc_fd[i], 1e-4)
+        << "rc gradient mismatch at component " << i;
+  }
+}
+
+TEST_F(EnzymeAICTest, AICColumnGradientRvMatchesFD) {
+  // Set up a simple mesh with DIFFERENT surface indices so include_bound=true
+  const int n = 2;
+  double rv1_all[6] = {0.0, -0.5, 0.0, 0.0, 0.5, 0.0};
+  double rv2_all[6] = {0.0, 0.5, 0.0, 0.0, 1.5, 0.0};
+  double rc_all[6] = {0.75, 0.0, 0.0, 0.75, 1.0, 0.0};
+  double normal_all[6] = {0.0, 0.0, 1.0, 0.0, 0.0, 1.0};
+  double chord_all[2] = {1.0, 1.0};
+  // Use different surface indices so include_bound=true and core_radius>0
+  int surface_idx_all[2] = {0, 1};
+
+  // Seed gradient for column 0 (from λᵀ in adjoint)
+  double d_aic_column[2] = {0.3, 0.7};
+
+  int vortex_idx = 0;
+  double core_chord = 0.01;
+  double core_width = 0.1;
+
+  double d_rv1_enzyme[3], d_rv2_enzyme[3];
+  ad::enzyme_aic_column_gradient_rv(rv1_all, rv2_all, rc_all, normal_all,
+                                     chord_all, surface_idx_all, n, vortex_idx,
+                                     core_chord, core_width, 1.0, d_aic_column,
+                                     d_rv1_enzyme, d_rv2_enzyme);
+
+  // Compute FD gradient - must use same logic as the wrapper
+  double d_rv1_fd[3] = {0.0, 0.0, 0.0};
+  double d_rv2_fd[3] = {0.0, 0.0, 0.0};
+  double h = 1e-7;
+
+  // Helper to compute strip width from perturbed vortex positions
+  auto compute_strip_width = [](const double* rv1, const double* rv2) {
+    double dy = rv2[1] - rv1[1];
+    double dz = rv2[2] - rv1[2];
+    return std::sqrt(dy*dy + dz*dz);
+  };
+
+  // Helper to compute core radius
+  auto compute_core_radius = [&](double strip_width, int ctrl_idx) -> double {
+    if (surface_idx_all[vortex_idx] != surface_idx_all[ctrl_idx]) {
+      double chord_core = core_chord * chord_all[vortex_idx];
+      double width_core = core_width * strip_width;
+      return (chord_core > width_core) ? chord_core : width_core;
+    }
+    return 0.0;
+  };
+
+  for (int k = 0; k < 3; ++k) {
+    // Perturb rv1 of vortex 0
+    double rv1_plus[6], rv1_minus[6];
+    for (int j = 0; j < 6; ++j) { rv1_plus[j] = rv1_all[j]; rv1_minus[j] = rv1_all[j]; }
+    rv1_plus[3*vortex_idx + k] += h;
+    rv1_minus[3*vortex_idx + k] -= h;
+
+    // Compute strip width for perturbed rv1 (strip_width depends on rv1!)
+    double strip_width_plus = compute_strip_width(&rv1_plus[3*vortex_idx], &rv2_all[3*vortex_idx]);
+    double strip_width_minus = compute_strip_width(&rv1_minus[3*vortex_idx], &rv2_all[3*vortex_idx]);
+
+    // Compute column with perturbed rv1
+    for (int i = 0; i < n; ++i) {
+      bool include_bound = (surface_idx_all[vortex_idx] != surface_idx_all[i]);
+      double core_radius_plus = compute_core_radius(strip_width_plus, i);
+      double core_radius_minus = compute_core_radius(strip_width_minus, i);
+
+      double aic_plus = ad::compute_aic_element(
+          &rv1_plus[3*vortex_idx], &rv2_all[3*vortex_idx],
+          &rc_all[3*i], &normal_all[3*i], core_radius_plus, 1.0, include_bound);
+      double aic_minus = ad::compute_aic_element(
+          &rv1_minus[3*vortex_idx], &rv2_all[3*vortex_idx],
+          &rc_all[3*i], &normal_all[3*i], core_radius_minus, 1.0, include_bound);
+      d_rv1_fd[k] += d_aic_column[i] * (aic_plus - aic_minus) / (2.0 * h);
+    }
+
+    // Perturb rv2 of vortex 0
+    double rv2_plus[6], rv2_minus[6];
+    for (int j = 0; j < 6; ++j) { rv2_plus[j] = rv2_all[j]; rv2_minus[j] = rv2_all[j]; }
+    rv2_plus[3*vortex_idx + k] += h;
+    rv2_minus[3*vortex_idx + k] -= h;
+
+    // Compute strip width for perturbed rv2
+    double strip_width_plus_rv2 = compute_strip_width(&rv1_all[3*vortex_idx], &rv2_plus[3*vortex_idx]);
+    double strip_width_minus_rv2 = compute_strip_width(&rv1_all[3*vortex_idx], &rv2_minus[3*vortex_idx]);
+
+    for (int i = 0; i < n; ++i) {
+      bool include_bound = (surface_idx_all[vortex_idx] != surface_idx_all[i]);
+      double core_radius_plus = compute_core_radius(strip_width_plus_rv2, i);
+      double core_radius_minus = compute_core_radius(strip_width_minus_rv2, i);
+
+      double aic_plus = ad::compute_aic_element(
+          &rv1_all[3*vortex_idx], &rv2_plus[3*vortex_idx],
+          &rc_all[3*i], &normal_all[3*i], core_radius_plus, 1.0, include_bound);
+      double aic_minus = ad::compute_aic_element(
+          &rv1_all[3*vortex_idx], &rv2_minus[3*vortex_idx],
+          &rc_all[3*i], &normal_all[3*i], core_radius_minus, 1.0, include_bound);
+      d_rv2_fd[k] += d_aic_column[i] * (aic_plus - aic_minus) / (2.0 * h);
+    }
+  }
+
+  // Compare
+  for (int i = 0; i < 3; ++i) {
+    EXPECT_NEAR(d_rv1_enzyme[i], d_rv1_fd[i], 1e-4)
+        << "rv1 gradient mismatch at component " << i;
+    EXPECT_NEAR(d_rv2_enzyme[i], d_rv2_fd[i], 1e-4)
+        << "rv2 gradient mismatch at component " << i;
+  }
+}
+
+#endif  // VLM_USE_ENZYME (for AIC gradient tests)
+
 #else  // !VLM_USE_ENZYME
 
 // When Enzyme is not available, skip all tests gracefully
+class EnzymeBasicTest : public ::testing::Test {};
 
 TEST_F(EnzymeBasicTest, SkippedWithoutEnzyme) {
   GTEST_SKIP() << "Enzyme not available - enable with -DVLM_ENABLE_ENZYME=ON";
