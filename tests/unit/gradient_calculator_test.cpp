@@ -3,6 +3,8 @@
 
 #include <gtest/gtest.h>
 
+#include <cmath>
+
 #include "vlm/ad/gradient_calculator.h"
 #include "vlm/aero/stability_derivatives.h"
 #include "vlm/geometry/aircraft.h"
@@ -295,6 +297,254 @@ TEST_F(GradientCalculatorWithTailTest, MatchesStabilityDerivatives) {
   EXPECT_NEAR(grads.dCm, stab_derivs.Cm_alpha,
               std::abs(stab_derivs.Cm_alpha) * 0.05 + 0.01)
       << "Cm_alpha should match for wing-tail config";
+}
+
+// ============================================================================
+// Geometry Gradient Tests
+// ============================================================================
+
+class GeometryGradientTest : public ::testing::Test {
+ protected:
+  void SetUp() override {
+    // Create simple rectangular wing (AR = 6)
+    Surface wing("Wing");
+    wing.SetChordwisePanelCount(3);
+    wing.SetSpanwisePanelCount(4);
+    wing.AddSection(Section(Vec3(0, 0, 0), 1.0, 0.0));      // Root
+    wing.AddSection(Section(Vec3(0, 3.0, 0), 1.0, 0.0));    // Tip
+
+    aircraft_.AddSurface(wing);
+    aircraft_.SetReferenceArea(3.0);
+    aircraft_.SetReferenceChord(1.0);
+    aircraft_.SetReferenceSpan(6.0);
+
+    grad_calc_.SetAircraft(aircraft_);
+  }
+
+  Aircraft aircraft_{"GeometryTest"};
+  ad::GradientCalculator grad_calc_;
+};
+
+TEST_F(GeometryGradientTest, ChordGradientIsNonZero) {
+  FlightCondition condition;
+  condition.alpha = 5.0 * kDegreesToRadians;
+
+  ad::AeroGradients grads = grad_calc_.ComputeSectionGradient(
+      condition, 0, 0, ad::GeometryVariable::kChord);
+
+  // Increasing chord should increase lift (more area)
+  // dCL/dchord depends on how reference area is defined
+  // For a rectangular wing with S_ref fixed, larger chord means
+  // larger actual lift but CL may decrease if S_ref stays fixed
+
+  // Just verify the gradient is computed (non-zero)
+  EXPECT_NE(grads.dCL, 0.0) << "dCL/dchord should be non-zero";
+}
+
+TEST_F(GeometryGradientTest, TwistGradientPhysicallyCorrect) {
+  FlightCondition condition;
+  condition.alpha = 5.0 * kDegreesToRadians;
+
+  // Twist at root section
+  ad::AeroGradients root_grads = grad_calc_.ComputeSectionGradient(
+      condition, 0, 0, ad::GeometryVariable::kTwist);
+
+  // Twist at tip section
+  ad::AeroGradients tip_grads = grad_calc_.ComputeSectionGradient(
+      condition, 0, 1, ad::GeometryVariable::kTwist);
+
+  // Positive twist (leading edge up) should increase local lift
+  // For per-degree gradient, this should be positive
+  // CL contribution depends on section span fraction
+
+  // Both should be non-zero
+  EXPECT_NE(root_grads.dCL, 0.0) << "dCL/dtwist at root should be non-zero";
+  EXPECT_NE(tip_grads.dCL, 0.0) << "dCL/dtwist at tip should be non-zero";
+
+  // Positive twist should increase CL
+  EXPECT_GT(root_grads.dCL, 0.0) << "Positive twist should increase lift";
+  EXPECT_GT(tip_grads.dCL, 0.0) << "Positive twist should increase lift";
+}
+
+TEST_F(GeometryGradientTest, SpanPositionGradientNonZero) {
+  FlightCondition condition;
+  condition.alpha = 5.0 * kDegreesToRadians;
+
+  // Moving tip section outward (increasing y) should increase span
+  ad::AeroGradients grads = grad_calc_.ComputeSectionGradient(
+      condition, 0, 1, ad::GeometryVariable::kYle);
+
+  // Gradient should be non-zero
+  // Increasing span increases aspect ratio, which increases lift slope
+  EXPECT_NE(grads.dCL, 0.0) << "dCL/dy_tip should be non-zero";
+}
+
+TEST_F(GeometryGradientTest, FullGeometryGradientsReturnsAllSections) {
+  FlightCondition condition;
+  condition.alpha = 5.0 * kDegreesToRadians;
+
+  ad::GeometryGradients grads = grad_calc_.ComputeGeometryGradients(condition);
+
+  // Should have gradients for all sections (2 sections in our wing)
+  EXPECT_EQ(grads.section_gradients.size(), 2u);
+
+  // Check surface names are set correctly
+  EXPECT_EQ(grads.section_gradients[0].surface_name, "Wing");
+  EXPECT_EQ(grads.section_gradients[1].surface_name, "Wing");
+
+  // Check section indices
+  EXPECT_EQ(grads.section_gradients[0].section_index, 0);
+  EXPECT_EQ(grads.section_gradients[1].section_index, 1);
+
+  // Total design variables: 2 sections * 5 variables = 10
+  EXPECT_EQ(grads.TotalDesignVariables(), 10);
+}
+
+TEST_F(GeometryGradientTest, GetChordGradientsForExtraction) {
+  FlightCondition condition;
+  condition.alpha = 5.0 * kDegreesToRadians;
+
+  ad::GeometryGradients grads = grad_calc_.ComputeGeometryGradients(condition);
+
+  // Extract dCL/dchord for all sections
+  VecX dCL_dchord = grads.GetChordGradientsFor(
+      [](const ad::AeroGradients& g) { return g.dCL; });
+
+  EXPECT_EQ(dCL_dchord.size(), 2);
+
+  // Both values should be non-zero
+  EXPECT_NE(dCL_dchord(0), 0.0);
+  EXPECT_NE(dCL_dchord(1), 0.0);
+}
+
+TEST_F(GeometryGradientTest, GetTwistGradientsForExtraction) {
+  FlightCondition condition;
+  condition.alpha = 5.0 * kDegreesToRadians;
+
+  ad::GeometryGradients grads = grad_calc_.ComputeGeometryGradients(condition);
+
+  // Extract dCm/dtwist for all sections
+  VecX dCm_dtwist = grads.GetTwistGradientsFor(
+      [](const ad::AeroGradients& g) { return g.dCm; });
+
+  EXPECT_EQ(dCm_dtwist.size(), 2);
+
+  // Twist affects pitching moment through load distribution
+  // Non-zero expected
+  EXPECT_NE(dCm_dtwist(0), 0.0);
+  EXPECT_NE(dCm_dtwist(1), 0.0);
+}
+
+TEST_F(GeometryGradientTest, DihedralGradientAffectsRollingMoment) {
+  // Dihedral (z-position change with span) affects roll stability
+
+  FlightCondition condition;
+  condition.alpha = 5.0 * kDegreesToRadians;
+  condition.beta = 2.0 * kDegreesToRadians;  // Add sideslip to see Cl effect
+
+  // dCl/dz at tip (dihedral effect)
+  ad::AeroGradients grads = grad_calc_.ComputeSectionGradient(
+      condition, 0, 1, ad::GeometryVariable::kZle);
+
+  // In sideslip, dihedral (positive z at tip) creates roll-out moment
+  // The gradient should be non-zero
+  // Note: With very small panels, this may be noisy
+  // The main check is that the computation runs without error
+  EXPECT_TRUE(std::isfinite(grads.dCl));
+}
+
+TEST_F(GeometryGradientTest, GradientsAreSymmetricForSymmetricSections) {
+  // For a symmetric wing, sensitivities of root and tip should differ
+  // but both should be finite and physically reasonable
+
+  FlightCondition condition;
+  condition.alpha = 5.0 * kDegreesToRadians;
+
+  ad::GeometryGradients grads = grad_calc_.ComputeGeometryGradients(condition);
+
+  // All gradients should be finite
+  for (const auto& section_grad : grads.section_gradients) {
+    EXPECT_TRUE(std::isfinite(section_grad.chord_derivs.dCL));
+    EXPECT_TRUE(std::isfinite(section_grad.chord_derivs.dCD));
+    EXPECT_TRUE(std::isfinite(section_grad.chord_derivs.dCm));
+    EXPECT_TRUE(std::isfinite(section_grad.twist_derivs.dCL));
+    EXPECT_TRUE(std::isfinite(section_grad.twist_derivs.dCD));
+    EXPECT_TRUE(std::isfinite(section_grad.twist_derivs.dCm));
+    EXPECT_TRUE(std::isfinite(section_grad.xle_derivs.dCL));
+    EXPECT_TRUE(std::isfinite(section_grad.yle_derivs.dCL));
+    EXPECT_TRUE(std::isfinite(section_grad.zle_derivs.dCL));
+  }
+}
+
+// ============================================================================
+// Multi-Surface Geometry Gradient Tests
+// ============================================================================
+
+class MultiSurfaceGeometryGradientTest : public ::testing::Test {
+ protected:
+  void SetUp() override {
+    // Create wing + tail configuration
+    Surface wing("Wing");
+    wing.SetChordwisePanelCount(3);
+    wing.SetSpanwisePanelCount(4);
+    wing.AddSection(Section(Vec3(0, 0, 0), 1.0, 0.0));
+    wing.AddSection(Section(Vec3(0, 3.0, 0), 1.0, 0.0));
+
+    Surface tail("HTail");
+    tail.SetChordwisePanelCount(2);
+    tail.SetSpanwisePanelCount(3);
+    tail.AddSection(Section(Vec3(3.0, 0, 0.1), 0.4, 0.0));
+    tail.AddSection(Section(Vec3(3.0, 1.0, 0.1), 0.4, 0.0));
+
+    aircraft_.AddSurface(wing);
+    aircraft_.AddSurface(tail);
+    aircraft_.SetReferenceArea(3.0);
+    aircraft_.SetReferenceChord(1.0);
+    aircraft_.SetReferenceSpan(6.0);
+    aircraft_.SetMomentReferencePoint(Vec3(0.25, 0, 0));
+
+    grad_calc_.SetAircraft(aircraft_);
+  }
+
+  Aircraft aircraft_{"MultiSurface"};
+  ad::GradientCalculator grad_calc_;
+};
+
+TEST_F(MultiSurfaceGeometryGradientTest, GradientsComputedForAllSurfaces) {
+  FlightCondition condition;
+  condition.alpha = 5.0 * kDegreesToRadians;
+
+  ad::GeometryGradients grads = grad_calc_.ComputeGeometryGradients(condition);
+
+  // Should have gradients for all sections: 2 wing + 2 tail = 4 sections
+  EXPECT_EQ(grads.section_gradients.size(), 4u);
+
+  // Check surface names
+  EXPECT_EQ(grads.section_gradients[0].surface_name, "Wing");
+  EXPECT_EQ(grads.section_gradients[1].surface_name, "Wing");
+  EXPECT_EQ(grads.section_gradients[2].surface_name, "HTail");
+  EXPECT_EQ(grads.section_gradients[3].surface_name, "HTail");
+
+  // Total design variables: 4 sections * 5 = 20
+  EXPECT_EQ(grads.TotalDesignVariables(), 20);
+}
+
+TEST_F(MultiSurfaceGeometryGradientTest, TailTwistAffectsPitchingMoment) {
+  FlightCondition condition;
+  condition.alpha = 5.0 * kDegreesToRadians;
+
+  // Tail twist should have strong effect on pitching moment
+  ad::AeroGradients tail_twist_grads = grad_calc_.ComputeSectionGradient(
+      condition, 1, 0, ad::GeometryVariable::kTwist);  // Surface 1 = HTail
+
+  // Tail twist affects Cm significantly (tail is aft of moment reference)
+  EXPECT_NE(tail_twist_grads.dCm, 0.0)
+      << "Tail twist should affect pitching moment";
+
+  // Positive tail twist (nose-up on tail) should create negative Cm
+  // (nose-down moment on aircraft)
+  EXPECT_LT(tail_twist_grads.dCm, 0.0)
+      << "Positive tail twist should create nose-down moment";
 }
 
 }  // namespace

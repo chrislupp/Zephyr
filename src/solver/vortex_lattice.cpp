@@ -633,12 +633,14 @@ void VortexLattice::RecalculateNormals() {
 
       // Direction along chord at control point
       // Normal vector comes from incidence angle minus camber slope
+      // Use Trefftz plane normal (perpendicular to span in YZ plane) for rotation
+      // This matches OptVL's approach: EC = (cos, -sin*ES_y, -sin*ES_z)
       Scalar ang_cp =
           strip.twist_angle - std::atan(vor.camber_slope_at_control_point);
       Vec3 chord_dir_cp;
       chord_dir_cp.x() = std::cos(ang_cp);
-      chord_dir_cp.y() = -std::sin(ang_cp) * strip.spanwise_unit_vector.y();
-      chord_dir_cp.z() = -std::sin(ang_cp) * strip.spanwise_unit_vector.z();
+      chord_dir_cp.y() = -std::sin(ang_cp) * strip.trefftz_normal_y;
+      chord_dir_cp.z() = -std::sin(ang_cp) * strip.trefftz_normal_z;
 
       // Normal at control point = chord_dir x bound_dir
       Vec3 normal_cp = chord_dir_cp.cross(bound_dir);
@@ -653,12 +655,13 @@ void VortexLattice::RecalculateNormals() {
       }
 
       // Direction along chord at vortex
+      // Use Trefftz plane normal for twist rotation (same as OptVL)
       Scalar ang_vr =
           strip.twist_angle - std::atan(vor.camber_slope_at_vortex);
       Vec3 chord_dir_vr;
       chord_dir_vr.x() = std::cos(ang_vr);
-      chord_dir_vr.y() = -std::sin(ang_vr) * strip.spanwise_unit_vector.y();
-      chord_dir_vr.z() = -std::sin(ang_vr) * strip.spanwise_unit_vector.z();
+      chord_dir_vr.y() = -std::sin(ang_vr) * strip.trefftz_normal_y;
+      chord_dir_vr.z() = -std::sin(ang_vr) * strip.trefftz_normal_z;
 
       // Normal at vortex = chord_dir x bound_dir
       Vec3 normal_vr = chord_dir_vr.cross(bound_dir);

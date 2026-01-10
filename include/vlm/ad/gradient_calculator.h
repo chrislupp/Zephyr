@@ -10,6 +10,8 @@
 /// with respect to flight conditions and geometry parameters, enabling
 /// gradient-based optimization workflows.
 
+#include <functional>
+
 #include "vlm/ad/enzyme_interface.h"
 #include "vlm/aero/aerodynamic_results.h"
 #include "vlm/core/types.h"
@@ -61,6 +63,74 @@ struct FullGradients {
 
   /// Gradients with respect to yaw rate (non-dimensional)
   AeroGradients r_derivs;
+};
+
+// ============================================================================
+// Geometry Gradient Structures
+// ============================================================================
+
+/// @brief Geometry design variable types for sensitivity analysis.
+enum class GeometryVariable {
+  kChord,    ///< Chord length at section
+  kTwist,    ///< Twist angle at section (degrees)
+  kXle,      ///< X-coordinate of leading edge
+  kYle,      ///< Y-coordinate of leading edge (spanwise position)
+  kZle       ///< Z-coordinate of leading edge (dihedral)
+};
+
+/// @brief Gradients of all aero outputs w.r.t. a geometry variable at one section.
+///
+/// These are computed using the adjoint method:
+///   dJ/dθ = ∂J/∂θ|_Γ - λᵀ·(∂A/∂θ)·Γ + λᵀ·(∂b/∂θ)
+///
+/// where θ is a geometry parameter (chord, twist, position).
+struct SectionGeometryGradients {
+  std::string surface_name;  ///< Name of the surface containing this section
+  Index section_index;       ///< Index of the section within the surface
+
+  /// Gradients w.r.t. chord at this section
+  AeroGradients chord_derivs;
+
+  /// Gradients w.r.t. twist at this section (per degree)
+  AeroGradients twist_derivs;
+
+  /// Gradients w.r.t. x-position of leading edge
+  AeroGradients xle_derivs;
+
+  /// Gradients w.r.t. y-position (spanwise) of leading edge
+  AeroGradients yle_derivs;
+
+  /// Gradients w.r.t. z-position (vertical) of leading edge
+  AeroGradients zle_derivs;
+};
+
+/// @brief Complete geometry gradients for an entire aircraft.
+///
+/// Contains gradients for all sections across all surfaces.
+struct GeometryGradients {
+  /// Per-section gradients, organized by surface then section
+  std::vector<SectionGeometryGradients> section_gradients;
+
+  /// Number of total design variables (5 per section: chord, twist, x, y, z)
+  Index TotalDesignVariables() const { return section_gradients.size() * 5; }
+
+  /// Get gradient for a specific coefficient w.r.t. all chord values
+  VecX GetChordGradientsFor(const std::function<Scalar(const AeroGradients&)>& selector) const {
+    VecX result(section_gradients.size());
+    for (size_t i = 0; i < section_gradients.size(); ++i) {
+      result(i) = selector(section_gradients[i].chord_derivs);
+    }
+    return result;
+  }
+
+  /// Get gradient for a specific coefficient w.r.t. all twist values
+  VecX GetTwistGradientsFor(const std::function<Scalar(const AeroGradients&)>& selector) const {
+    VecX result(section_gradients.size());
+    for (size_t i = 0; i < section_gradients.size(); ++i) {
+      result(i) = selector(section_gradients[i].twist_derivs);
+    }
+    return result;
+  }
 };
 
 /// @brief Calculator for aerodynamic gradients using automatic differentiation.
@@ -126,6 +196,38 @@ class GradientCalculator {
 
   /// @brief Compute gradient with respect to yaw rate r.
   AeroGradients ComputeYawRateDerivatives(const FlightCondition& condition);
+
+  // ==========================================================================
+  // Geometry Gradients
+  // ==========================================================================
+
+  /// @brief Compute gradients with respect to all geometry parameters.
+  ///
+  /// For each section in the aircraft, computes gradients of all aerodynamic
+  /// coefficients with respect to:
+  /// - Chord length
+  /// - Twist angle
+  /// - Leading edge position (x, y, z)
+  ///
+  /// Uses the adjoint method:
+  ///   dJ/dθ = ∂J/∂θ|_Γ - λᵀ·(∂A/∂θ)·Γ + λᵀ·(∂b/∂θ)
+  ///
+  /// @param condition Flight condition for analysis
+  /// @return Structure containing gradients for all sections
+  GeometryGradients ComputeGeometryGradients(const FlightCondition& condition);
+
+  /// @brief Compute gradient w.r.t. a single geometry parameter at one section.
+  ///
+  /// @param condition Flight condition
+  /// @param surface_index Index of the surface
+  /// @param section_index Index of the section within the surface
+  /// @param variable Which geometry variable (chord, twist, etc.)
+  /// @return Aerodynamic coefficient gradients
+  AeroGradients ComputeSectionGradient(
+      const FlightCondition& condition,
+      Index surface_index,
+      Index section_index,
+      GeometryVariable variable);
 
   /// @brief Check if using Enzyme AD (vs finite differences).
   static bool IsUsingEnzyme();

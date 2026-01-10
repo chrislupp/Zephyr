@@ -372,5 +372,167 @@ FullGradients GradientCalculator::ComputeFlightConditionDerivatives(
   return grads;
 }
 
+// ============================================================================
+// Geometry Gradient Computation
+// ============================================================================
+
+namespace {
+
+/// Create a perturbed copy of an aircraft with one geometry parameter changed
+Aircraft PerturbAircraft(const Aircraft& base, Index surface_idx,
+                         Index section_idx, GeometryVariable variable,
+                         Scalar perturbation) {
+  Aircraft perturbed = base;  // Deep copy
+
+  if (surface_idx >= static_cast<Index>(perturbed.GetNumSurfaces())) {
+    return perturbed;
+  }
+
+  Surface& surface = perturbed.GetSurfacesMutable()[surface_idx];
+  if (section_idx >= static_cast<Index>(surface.GetNumSections())) {
+    return perturbed;
+  }
+
+  Section& section = surface.GetSectionMutable(section_idx);
+
+  switch (variable) {
+    case GeometryVariable::kChord:
+      section.SetChord(section.GetChord() + perturbation);
+      break;
+    case GeometryVariable::kTwist:
+      section.SetTwistAngle(section.GetTwistAngle() + perturbation);
+      break;
+    case GeometryVariable::kXle: {
+      Vec3 pos = section.GetLeadingEdgePosition();
+      pos.x() += perturbation;
+      section.SetLeadingEdgePosition(pos);
+      break;
+    }
+    case GeometryVariable::kYle: {
+      Vec3 pos = section.GetLeadingEdgePosition();
+      pos.y() += perturbation;
+      section.SetLeadingEdgePosition(pos);
+      break;
+    }
+    case GeometryVariable::kZle: {
+      Vec3 pos = section.GetLeadingEdgePosition();
+      pos.z() += perturbation;
+      section.SetLeadingEdgePosition(pos);
+      break;
+    }
+  }
+
+  return perturbed;
+}
+
+/// Compute forces for a perturbed aircraft configuration
+AerodynamicResults ComputeResultsForAircraft(const Aircraft& aircraft,
+                                              const FlightCondition& condition) {
+  VortexLatticeSolver solver;
+  ForceCalculator force_calc;
+  solver.SetAircraft(aircraft);
+  SolutionState solution = solver.Solve(condition);
+  return force_calc.ComputeForces(aircraft, solver.GetMesh(), solution, condition);
+}
+
+/// Compute gradients for one geometry variable at one section using FD
+AeroGradients ComputeSectionGradientFD(const Aircraft& aircraft,
+                                       const FlightCondition& condition,
+                                       Index surface_idx,
+                                       Index section_idx,
+                                       GeometryVariable variable,
+                                       Scalar fd_step) {
+  // Step size depends on variable type
+  Scalar h = fd_step;
+  if (variable == GeometryVariable::kTwist) {
+    // Twist is stored in degrees. Use 0.1 degree step.
+    // Note: For wings in the XY plane, twist currently only affects
+    // stored values, not actual panel geometry (known limitation).
+    h = 0.1;  // degrees
+  }
+
+  // Forward and backward perturbations
+  Aircraft aircraft_plus = PerturbAircraft(aircraft, surface_idx, section_idx,
+                                           variable, h);
+  Aircraft aircraft_minus = PerturbAircraft(aircraft, surface_idx, section_idx,
+                                            variable, -h);
+
+  // Compute forces at perturbed configurations
+  AerodynamicResults res_plus = ComputeResultsForAircraft(aircraft_plus, condition);
+  AerodynamicResults res_minus = ComputeResultsForAircraft(aircraft_minus, condition);
+
+  // Central difference
+  Scalar inv_2h = 0.5 / h;
+
+  AeroGradients grads;
+  grads.dCL = (res_plus.CL - res_minus.CL) * inv_2h;
+  grads.dCD = (res_plus.CD - res_minus.CD) * inv_2h;
+  grads.dCY = (res_plus.CY - res_minus.CY) * inv_2h;
+  grads.dCl = (res_plus.Cl - res_minus.Cl) * inv_2h;
+  grads.dCm = (res_plus.Cm - res_minus.Cm) * inv_2h;
+  grads.dCn = (res_plus.Cn - res_minus.Cn) * inv_2h;
+  grads.dCDi = (res_plus.CDi_ff - res_minus.CDi_ff) * inv_2h;
+
+  return grads;
+}
+
+}  // namespace
+
+AeroGradients GradientCalculator::ComputeSectionGradient(
+    const FlightCondition& condition,
+    Index surface_index,
+    Index section_index,
+    GeometryVariable variable) {
+  if (!impl_->aircraft_set_) {
+    return AeroGradients{};
+  }
+
+  return ComputeSectionGradientFD(impl_->aircraft_, condition,
+                                  surface_index, section_index,
+                                  variable, fd_step_);
+}
+
+GeometryGradients GradientCalculator::ComputeGeometryGradients(
+    const FlightCondition& condition) {
+  GeometryGradients grads;
+
+  if (!impl_->aircraft_set_) {
+    return grads;
+  }
+
+  const Aircraft& aircraft = impl_->aircraft_;
+
+  // Iterate over all surfaces and sections
+  for (Index surf_idx = 0;
+       surf_idx < static_cast<Index>(aircraft.GetNumSurfaces());
+       ++surf_idx) {
+    const Surface& surface = aircraft.GetSurface(surf_idx);
+
+    for (Index sect_idx = 0;
+         sect_idx < static_cast<Index>(surface.GetNumSections());
+         ++sect_idx) {
+      SectionGeometryGradients section_grads;
+      section_grads.surface_name = surface.GetName();
+      section_grads.section_index = sect_idx;
+
+      // Compute gradients for each geometry variable
+      section_grads.chord_derivs = ComputeSectionGradient(
+          condition, surf_idx, sect_idx, GeometryVariable::kChord);
+      section_grads.twist_derivs = ComputeSectionGradient(
+          condition, surf_idx, sect_idx, GeometryVariable::kTwist);
+      section_grads.xle_derivs = ComputeSectionGradient(
+          condition, surf_idx, sect_idx, GeometryVariable::kXle);
+      section_grads.yle_derivs = ComputeSectionGradient(
+          condition, surf_idx, sect_idx, GeometryVariable::kYle);
+      section_grads.zle_derivs = ComputeSectionGradient(
+          condition, surf_idx, sect_idx, GeometryVariable::kZle);
+
+      grads.section_gradients.push_back(section_grads);
+    }
+  }
+
+  return grads;
+}
+
 }  // namespace ad
 }  // namespace vlm
