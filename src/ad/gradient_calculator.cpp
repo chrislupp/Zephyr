@@ -4,8 +4,10 @@
 #include "vlm/ad/gradient_calculator.h"
 
 #include <cmath>
+#include <vector>
 
 #include "vlm/ad/adjoint_solver.h"
+#include "vlm/ad/enzyme_forces.h"
 #include "vlm/aero/force_calculator.h"
 
 namespace vlm {
@@ -59,39 +61,28 @@ class GradientCalculator::Impl {
     const Index n = cached_solution_.circulation.size();
     VecX db_dparam(n);
 
-    const Scalar h = 1e-7;
-
-    // Perturbed conditions
-    FlightCondition cond_plus = condition;
-    FlightCondition cond_minus = condition;
+    // Compute freestream direction gradient analytically
+    Vec3 dV_dparam = Vec3::Zero();
 
     switch (param_index) {
-      case 0:  // alpha
-        cond_plus.alpha += h;
-        cond_minus.alpha -= h;
+      case 0: {  // alpha - analytical gradient
+        double dv_dalpha[3];
+        compute_freestream_alpha_gradient(condition.alpha, condition.beta, dv_dalpha);
+        dV_dparam = Vec3(dv_dalpha[0], dv_dalpha[1], dv_dalpha[2]);
         break;
-      case 1:  // beta
-        cond_plus.beta += h;
-        cond_minus.beta -= h;
+      }
+      case 1: {  // beta - analytical gradient
+        double dv_dbeta[3];
+        compute_freestream_beta_gradient(condition.alpha, condition.beta, dv_dbeta);
+        dV_dparam = Vec3(dv_dbeta[0], dv_dbeta[1], dv_dbeta[2]);
         break;
-      case 2:  // roll rate
-        cond_plus.roll_rate += h;
-        cond_minus.roll_rate -= h;
-        break;
-      case 3:  // pitch rate
-        cond_plus.pitch_rate += h;
-        cond_minus.pitch_rate -= h;
-        break;
-      case 4:  // yaw rate
-        cond_plus.yaw_rate += h;
-        cond_minus.yaw_rate -= h;
+      }
+      case 2:  // roll rate - freestream direction doesn't depend on p
+      case 3:  // pitch rate - freestream direction doesn't depend on q
+      case 4:  // yaw rate - freestream direction doesn't depend on r
+        // dV_dparam stays zero; the rotation contribution is handled below
         break;
     }
-
-    // Compute freestream directions
-    Vec3 v_plus = VortexLatticeSolver::ComputeFreestreamDirection(cond_plus);
-    Vec3 v_minus = VortexLatticeSolver::ComputeFreestreamDirection(cond_minus);
-    Vec3 dV_dparam = (v_plus - v_minus) / (2 * h);
 
     // RHS sensitivity: ∂b_i/∂param = -n_i · (∂V/∂param)
     for (Index i = 0; i < n; ++i) {
@@ -126,9 +117,57 @@ class GradientCalculator::Impl {
     return db_dparam;
   }
 
-  /// Compute explicit term ∂J/∂param at fixed circulation
-  /// This uses finite diff on forces only (no re-solve)
-  AeroGradients ComputeExplicitDerivatives(int param_index) {
+  /// Extract mesh data into raw arrays for Enzyme kernels
+  void ExtractMeshData(
+      std::vector<double>& bound_left,
+      std::vector<double>& bound_right,
+      std::vector<double>& control_points,
+      std::vector<double>& moment_arm,
+      std::vector<double>& induced_velocity) const {
+
+    const VortexLattice& mesh = solver_.GetMesh();
+    const Index n = mesh.GetNumVortices();
+    bound_left.resize(3 * n);
+    bound_right.resize(3 * n);
+    control_points.resize(3 * n);
+    moment_arm.resize(3 * n);
+    induced_velocity.resize(3 * n);
+
+    Vec3 moment_ref = aircraft_.GetMomentReferencePoint();
+
+    for (Index i = 0; i < n; ++i) {
+      const HorseshoeVortex& vor = mesh.GetVortex(i);
+
+      bound_left[3*i + 0] = vor.bound_vortex_left.x();
+      bound_left[3*i + 1] = vor.bound_vortex_left.y();
+      bound_left[3*i + 2] = vor.bound_vortex_left.z();
+
+      bound_right[3*i + 0] = vor.bound_vortex_right.x();
+      bound_right[3*i + 1] = vor.bound_vortex_right.y();
+      bound_right[3*i + 2] = vor.bound_vortex_right.z();
+
+      control_points[3*i + 0] = vor.control_point.x();
+      control_points[3*i + 1] = vor.control_point.y();
+      control_points[3*i + 2] = vor.control_point.z();
+
+      moment_arm[3*i + 0] = vor.control_point.x() - moment_ref.x();
+      moment_arm[3*i + 1] = vor.control_point.y() - moment_ref.y();
+      moment_arm[3*i + 2] = vor.control_point.z() - moment_ref.z();
+
+      if (cached_solution_.induced_velocity.rows() > i) {
+        induced_velocity[3*i + 0] = cached_solution_.induced_velocity(i, 0);
+        induced_velocity[3*i + 1] = cached_solution_.induced_velocity(i, 1);
+        induced_velocity[3*i + 2] = cached_solution_.induced_velocity(i, 2);
+      } else {
+        induced_velocity[3*i + 0] = 0.0;
+        induced_velocity[3*i + 1] = 0.0;
+        induced_velocity[3*i + 2] = 0.0;
+      }
+    }
+  }
+
+  /// Compute explicit term ∂J/∂param at fixed circulation using FD
+  AeroGradients ComputeExplicitDerivativesFD(int param_index) {
     const Scalar h = fd_step_;
     FlightCondition cond_plus = cached_condition_;
     FlightCondition cond_minus = cached_condition_;
@@ -172,6 +211,78 @@ class GradientCalculator::Impl {
     grads.dCDi = (res_plus.CDi_ff - res_minus.CDi_ff) * inv_2h;
 
     return grads;
+  }
+
+#ifdef VLM_USE_ENZYME
+  /// Compute explicit term ∂J/∂param at fixed circulation using Enzyme
+  AeroGradients ComputeExplicitDerivativesEnzyme(int param_index) {
+    // Enzyme only handles alpha and beta directly
+    // For rotation rates, fall back to FD
+    if (param_index >= 2) {
+      return ComputeExplicitDerivativesFD(param_index);
+    }
+
+    const Index n = cached_solution_.circulation.size();
+    if (n == 0) {
+      return AeroGradients{};
+    }
+
+    // Extract mesh data
+    std::vector<double> bound_left, bound_right, control_points, moment_arm, induced_velocity;
+    ExtractMeshData(bound_left, bound_right, control_points, moment_arm, induced_velocity);
+
+    // Copy circulation to contiguous array
+    std::vector<double> circulation(n);
+    for (Index i = 0; i < n; ++i) {
+      circulation[i] = cached_solution_.circulation(i);
+    }
+
+    double reference_area = aircraft_.GetReferenceArea();
+    double d_result[6];
+
+    AeroGradients grads;
+
+    if (param_index == 0) {
+      // Alpha derivative
+      enzyme_force_alpha_gradient(
+          cached_condition_.alpha, cached_condition_.beta,
+          circulation.data(), induced_velocity.data(),
+          bound_left.data(), bound_right.data(),
+          control_points.data(), moment_arm.data(),
+          static_cast<int>(n), reference_area, d_result);
+    } else {
+      // Beta derivative
+      enzyme_force_beta_gradient(
+          cached_condition_.alpha, cached_condition_.beta,
+          circulation.data(), induced_velocity.data(),
+          bound_left.data(), bound_right.data(),
+          control_points.data(), moment_arm.data(),
+          static_cast<int>(n), reference_area, d_result);
+    }
+
+    grads.dCL = d_result[0];
+    grads.dCD = d_result[1];
+    grads.dCY = d_result[2];
+    grads.dCl = d_result[3];
+    grads.dCm = d_result[4];
+    grads.dCn = d_result[5];
+
+    // CDi_ff (Trefftz plane drag) still needs FD - it's not in the kernel
+    // Fall back to FD for CDi_ff
+    AeroGradients fd_grads = ComputeExplicitDerivativesFD(param_index);
+    grads.dCDi = fd_grads.dCDi;
+
+    return grads;
+  }
+#endif
+
+  /// Compute explicit term ∂J/∂param at fixed circulation
+  AeroGradients ComputeExplicitDerivatives(int param_index) {
+#ifdef VLM_USE_ENZYME
+    return ComputeExplicitDerivativesEnzyme(param_index);
+#else
+    return ComputeExplicitDerivativesFD(param_index);
+#endif
   }
 
   /// Compute derivatives using adjoint method

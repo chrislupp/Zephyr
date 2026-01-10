@@ -4,8 +4,10 @@
 #include "vlm/ad/adjoint_solver.h"
 
 #include <cmath>
+#include <vector>
 
 #include "vlm/aero/force_calculator.h"
+#include "vlm/ad/enzyme_forces.h"
 
 namespace vlm {
 namespace ad {
@@ -95,7 +97,61 @@ AerodynamicResults ComputeForcesWithPerturbedCirculation(
 
 }  // namespace
 
-ForceGradients ComputeForceGradients(
+/// Extract mesh data into raw arrays for Enzyme kernels
+void ExtractMeshData(
+    const VortexLattice& mesh,
+    const SolutionState& solution,
+    const Aircraft& aircraft,
+    std::vector<double>& bound_left,
+    std::vector<double>& bound_right,
+    std::vector<double>& control_points,
+    std::vector<double>& moment_arm,
+    std::vector<double>& induced_velocity) {
+
+  const Index n = mesh.GetNumVortices();
+  bound_left.resize(3 * n);
+  bound_right.resize(3 * n);
+  control_points.resize(3 * n);
+  moment_arm.resize(3 * n);
+  induced_velocity.resize(3 * n);
+
+  Vec3 moment_ref = aircraft.GetMomentReferencePoint();
+
+  for (Index i = 0; i < n; ++i) {
+    const HorseshoeVortex& vor = mesh.GetVortex(i);
+
+    bound_left[3*i + 0] = vor.bound_vortex_left.x();
+    bound_left[3*i + 1] = vor.bound_vortex_left.y();
+    bound_left[3*i + 2] = vor.bound_vortex_left.z();
+
+    bound_right[3*i + 0] = vor.bound_vortex_right.x();
+    bound_right[3*i + 1] = vor.bound_vortex_right.y();
+    bound_right[3*i + 2] = vor.bound_vortex_right.z();
+
+    control_points[3*i + 0] = vor.control_point.x();
+    control_points[3*i + 1] = vor.control_point.y();
+    control_points[3*i + 2] = vor.control_point.z();
+
+    moment_arm[3*i + 0] = vor.control_point.x() - moment_ref.x();
+    moment_arm[3*i + 1] = vor.control_point.y() - moment_ref.y();
+    moment_arm[3*i + 2] = vor.control_point.z() - moment_ref.z();
+
+    if (solution.induced_velocity.rows() > i) {
+      induced_velocity[3*i + 0] = solution.induced_velocity(i, 0);
+      induced_velocity[3*i + 1] = solution.induced_velocity(i, 1);
+      induced_velocity[3*i + 2] = solution.induced_velocity(i, 2);
+    } else {
+      induced_velocity[3*i + 0] = 0.0;
+      induced_velocity[3*i + 1] = 0.0;
+      induced_velocity[3*i + 2] = 0.0;
+    }
+  }
+}
+
+#ifdef VLM_USE_ENZYME
+
+/// Compute force gradients using Enzyme reverse-mode AD
+ForceGradients ComputeForceGradientsEnzyme(
     const VortexLattice& mesh,
     const SolutionState& solution,
     const FlightCondition& condition,
@@ -115,14 +171,116 @@ ForceGradients ComputeForceGradients(
     return grads;
   }
 
-  // Compute base forces
-  ForceCalculator calc;
-  AerodynamicResults base_results =
-      calc.ComputeForces(aircraft, mesh, solution, condition);
+  // Extract mesh data into raw arrays
+  std::vector<double> bound_left, bound_right, control_points, moment_arm, induced_velocity;
+  ExtractMeshData(mesh, solution, aircraft, bound_left, bound_right,
+                  control_points, moment_arm, induced_velocity);
+
+  // Copy circulation to contiguous array
+  std::vector<double> circulation(n);
+  for (Index i = 0; i < n; ++i) {
+    circulation[i] = solution.circulation(i);
+  }
+
+  double reference_area = aircraft.GetReferenceArea();
+
+  // Compute gradients for each output using Enzyme reverse-mode
+  // Output indices: 0=CL, 1=CD, 2=CY, 3=Cl, 4=Cm, 5=Cn
+  std::vector<double> d_circulation(n);
+
+  // CL gradient
+  enzyme_force_circulation_gradient(
+      condition.alpha, condition.beta,
+      circulation.data(), induced_velocity.data(),
+      bound_left.data(), bound_right.data(),
+      control_points.data(), moment_arm.data(),
+      static_cast<int>(n), reference_area, 0, d_circulation.data());
+  for (Index i = 0; i < n; ++i) {
+    grads.dCL_dGamma(i) = d_circulation[i];
+  }
+
+  // CD gradient
+  enzyme_force_circulation_gradient(
+      condition.alpha, condition.beta,
+      circulation.data(), induced_velocity.data(),
+      bound_left.data(), bound_right.data(),
+      control_points.data(), moment_arm.data(),
+      static_cast<int>(n), reference_area, 1, d_circulation.data());
+  for (Index i = 0; i < n; ++i) {
+    grads.dCD_dGamma(i) = d_circulation[i];
+  }
+
+  // CY gradient
+  enzyme_force_circulation_gradient(
+      condition.alpha, condition.beta,
+      circulation.data(), induced_velocity.data(),
+      bound_left.data(), bound_right.data(),
+      control_points.data(), moment_arm.data(),
+      static_cast<int>(n), reference_area, 2, d_circulation.data());
+  for (Index i = 0; i < n; ++i) {
+    grads.dCY_dGamma(i) = d_circulation[i];
+  }
+
+  // Cl gradient
+  enzyme_force_circulation_gradient(
+      condition.alpha, condition.beta,
+      circulation.data(), induced_velocity.data(),
+      bound_left.data(), bound_right.data(),
+      control_points.data(), moment_arm.data(),
+      static_cast<int>(n), reference_area, 3, d_circulation.data());
+  for (Index i = 0; i < n; ++i) {
+    grads.dCl_dGamma(i) = d_circulation[i];
+  }
+
+  // Cm gradient
+  enzyme_force_circulation_gradient(
+      condition.alpha, condition.beta,
+      circulation.data(), induced_velocity.data(),
+      bound_left.data(), bound_right.data(),
+      control_points.data(), moment_arm.data(),
+      static_cast<int>(n), reference_area, 4, d_circulation.data());
+  for (Index i = 0; i < n; ++i) {
+    grads.dCm_dGamma(i) = d_circulation[i];
+  }
+
+  // Cn gradient
+  enzyme_force_circulation_gradient(
+      condition.alpha, condition.beta,
+      circulation.data(), induced_velocity.data(),
+      bound_left.data(), bound_right.data(),
+      control_points.data(), moment_arm.data(),
+      static_cast<int>(n), reference_area, 5, d_circulation.data());
+  for (Index i = 0; i < n; ++i) {
+    grads.dCn_dGamma(i) = d_circulation[i];
+  }
+
+  return grads;
+}
+
+#endif  // VLM_USE_ENZYME
+
+/// Compute force gradients using finite differences (fallback)
+ForceGradients ComputeForceGradientsFD(
+    const VortexLattice& mesh,
+    const SolutionState& solution,
+    const FlightCondition& condition,
+    const Aircraft& aircraft) {
+
+  const Index n = solution.circulation.size();
+
+  ForceGradients grads;
+  grads.dCL_dGamma = VecX::Zero(n);
+  grads.dCD_dGamma = VecX::Zero(n);
+  grads.dCY_dGamma = VecX::Zero(n);
+  grads.dCl_dGamma = VecX::Zero(n);
+  grads.dCm_dGamma = VecX::Zero(n);
+  grads.dCn_dGamma = VecX::Zero(n);
+
+  if (!solution.is_valid || n == 0) {
+    return grads;
+  }
 
   // Compute gradient via finite differences for each circulation element
-  // dJ/dGamma_i = (J(Gamma + e_i*h) - J(Gamma - e_i*h)) / (2h)
-
   const double h = kFiniteDiffStep;
   const double inv_2h = 0.5 / h;
 
@@ -145,6 +303,18 @@ ForceGradients ComputeForceGradients(
   }
 
   return grads;
+}
+
+ForceGradients ComputeForceGradients(
+    const VortexLattice& mesh,
+    const SolutionState& solution,
+    const FlightCondition& condition,
+    const Aircraft& aircraft) {
+#ifdef VLM_USE_ENZYME
+  return ComputeForceGradientsEnzyme(mesh, solution, condition, aircraft);
+#else
+  return ComputeForceGradientsFD(mesh, solution, condition, aircraft);
+#endif
 }
 
 // ============================================================================
