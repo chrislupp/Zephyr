@@ -128,10 +128,7 @@ if(VLM_ENABLE_ENZYME)
         # Define VLM_USE_ENZYME so code can conditionally use AD features
         target_compile_definitions(vlm PUBLIC VLM_USE_ENZYME)
 
-        # Enzyme sometimes needs these for complex code
-        target_compile_options(vlm PUBLIC
-            -fno-exceptions  # Enzyme doesn't handle exceptions well
-        )
+        # Note: -fno-exceptions removed to maintain ABI compatibility with gtest
     else()
         message(WARNING "Enzyme not found - automatic differentiation disabled. "
             "Install with: brew install enzyme (macOS) or set ENZYME_DIR")

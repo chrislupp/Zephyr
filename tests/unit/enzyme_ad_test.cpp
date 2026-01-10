@@ -10,6 +10,10 @@
 namespace vlm {
 namespace {
 
+#ifdef VLM_USE_ENZYME
+using namespace ad;  // Import Enzyme symbols (__enzyme_autodiff, enzyme_dup, etc.)
+#endif
+
 // ============================================================================
 // Test Functions for Differentiation
 // ============================================================================
@@ -141,11 +145,14 @@ TEST_F(EnzymeMultiVariableTest, SumOfSquaresGradient) {
   // f(x,y) = x^2 + y^2
   // At (3,4): df/dx = 6, df/dy = 8
   double x = 3.0, y = 4.0;
-  double dx = 0.0, dy = 0.0;
 
-  __enzyme_autodiff<void>((void*)sum_of_squares,
-                          enzyme_dup, x, &dx,
-                          enzyme_dup, y, &dy);
+  // Use forward mode to compute partial derivatives
+  double dx = __enzyme_fwddiff<double>((void*)sum_of_squares,
+                                        enzyme_dup, x, 1.0,
+                                        enzyme_dup, y, 0.0);
+  double dy = __enzyme_fwddiff<double>((void*)sum_of_squares,
+                                        enzyme_dup, x, 0.0,
+                                        enzyme_dup, y, 1.0);
 
   EXPECT_NEAR(dx, 6.0, kTolerance);
   EXPECT_NEAR(dy, 8.0, kTolerance);
@@ -156,11 +163,13 @@ TEST_F(EnzymeMultiVariableTest, ProductGradient) {
   // df/dx = y, df/dy = x
   // At (3,5): df/dx = 5, df/dy = 3
   double x = 3.0, y = 5.0;
-  double dx = 0.0, dy = 0.0;
 
-  __enzyme_autodiff<void>((void*)product,
-                          enzyme_dup, x, &dx,
-                          enzyme_dup, y, &dy);
+  double dx = __enzyme_fwddiff<double>((void*)product,
+                                        enzyme_dup, x, 1.0,
+                                        enzyme_dup, y, 0.0);
+  double dy = __enzyme_fwddiff<double>((void*)product,
+                                        enzyme_dup, x, 0.0,
+                                        enzyme_dup, y, 1.0);
 
   EXPECT_NEAR(dx, 5.0, kTolerance);
   EXPECT_NEAR(dy, 3.0, kTolerance);
@@ -169,25 +178,33 @@ TEST_F(EnzymeMultiVariableTest, ProductGradient) {
 TEST_F(EnzymeMultiVariableTest, RosenbrockGradient) {
   // Rosenbrock: f(x,y) = (1-x)^2 + 100*(y-x^2)^2
   // At (1,1) which is the minimum: df/dx = 0, df/dy = 0
+  // Use forward mode to compute partial derivatives
   double x = 1.0, y = 1.0;
-  double dx = 0.0, dy = 0.0;
 
-  __enzyme_autodiff<void>((void*)rosenbrock,
-                          enzyme_dup, x, &dx,
-                          enzyme_dup, y, &dy);
+  // Compute df/dx using forward mode (seed x with 1, y with 0)
+  double dx = __enzyme_fwddiff<double>((void*)rosenbrock,
+                                        enzyme_dup, x, 1.0,
+                                        enzyme_dup, y, 0.0);
+
+  double dy = __enzyme_fwddiff<double>((void*)rosenbrock,
+                                        enzyme_dup, x, 0.0,
+                                        enzyme_dup, y, 1.0);
 
   EXPECT_NEAR(dx, 0.0, kTolerance);
   EXPECT_NEAR(dy, 0.0, kTolerance);
 }
 
 TEST_F(EnzymeMultiVariableTest, RosenbrockGradientAwayFromMinimum) {
-  // At (0,0): df/dx = -2 + 0 = -2, df/dy = 0
+  // At (0,0): df/dx = -2, df/dy = 0
   double x = 0.0, y = 0.0;
-  double dx = 0.0, dy = 0.0;
 
-  __enzyme_autodiff<void>((void*)rosenbrock,
-                          enzyme_dup, x, &dx,
-                          enzyme_dup, y, &dy);
+  double dx = __enzyme_fwddiff<double>((void*)rosenbrock,
+                                        enzyme_dup, x, 1.0,
+                                        enzyme_dup, y, 0.0);
+
+  double dy = __enzyme_fwddiff<double>((void*)rosenbrock,
+                                        enzyme_dup, x, 0.0,
+                                        enzyme_dup, y, 1.0);
 
   EXPECT_NEAR(dx, -2.0, kTolerance);
   EXPECT_NEAR(dy, 0.0, kTolerance);
@@ -196,12 +213,11 @@ TEST_F(EnzymeMultiVariableTest, RosenbrockGradientAwayFromMinimum) {
 TEST_F(EnzymeMultiVariableTest, ConstantArgumentNotDifferentiated) {
   // Only differentiate with respect to x, treat y as constant
   double x = 3.0, y = 5.0;
-  double dx = 0.0;
 
   // f(x,y) = x*y, df/dx = y = 5
-  __enzyme_autodiff<void>((void*)product,
-                          enzyme_dup, x, &dx,
-                          enzyme_const, y);
+  double dx = __enzyme_fwddiff<double>((void*)product,
+                                        enzyme_dup, x, 1.0,
+                                        enzyme_const, y);
 
   EXPECT_NEAR(dx, 5.0, kTolerance);
 }

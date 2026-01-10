@@ -63,6 +63,9 @@ struct FullGradients {
 
   /// Gradients with respect to yaw rate (non-dimensional)
   AeroGradients r_derivs;
+
+  /// Gradients with respect to Mach number
+  AeroGradients mach_derivs;
 };
 
 // ============================================================================
@@ -170,8 +173,8 @@ class GradientCalculator {
 
   /// @brief Compute derivatives with respect to all flight conditions.
   ///
-  /// Computes dCL/dalpha, dCm/dalpha, dCL/dbeta, etc. for all six
-  /// flight condition parameters (alpha, beta, p, q, r).
+  /// Computes dCL/dalpha, dCm/dalpha, dCL/dbeta, etc. for all
+  /// flight condition parameters (alpha, beta, p, q, r, Mach).
   ///
   /// @param condition The operating point about which to linearize
   /// @return Structure containing all gradients
@@ -197,6 +200,16 @@ class GradientCalculator {
   /// @brief Compute gradient with respect to yaw rate r.
   AeroGradients ComputeYawRateDerivatives(const FlightCondition& condition);
 
+  /// @brief Compute gradient with respect to Mach number.
+  ///
+  /// Mach affects the Prandtl-Glauert compressibility correction in the
+  /// influence matrix. This requires re-solving the system at perturbed
+  /// Mach numbers.
+  ///
+  /// @param condition Flight condition (including base Mach)
+  /// @return Gradient structure for Mach derivatives
+  AeroGradients ComputeMachDerivatives(const FlightCondition& condition);
+
   // ==========================================================================
   // Geometry Gradients
   // ==========================================================================
@@ -209,8 +222,12 @@ class GradientCalculator {
   /// - Twist angle
   /// - Leading edge position (x, y, z)
   ///
-  /// Uses the adjoint method:
-  ///   dJ/dθ = ∂J/∂θ|_Γ - λᵀ·(∂A/∂θ)·Γ + λᵀ·(∂b/∂θ)
+  /// Implementation notes:
+  /// - Currently uses finite differences for robustness
+  /// - Enzyme-differentiable geometry kernels are available in enzyme_geometry.h
+  ///   for computing ∂(positions, normals)/∂θ
+  /// - Full adjoint method (dJ/dθ = ∂J/∂θ|_Γ - λᵀ·(∂A/∂θ)·Γ + λᵀ·(∂b/∂θ))
+  ///   requires differentiating the influence matrix computation
   ///
   /// @param condition Flight condition for analysis
   /// @return Structure containing gradients for all sections

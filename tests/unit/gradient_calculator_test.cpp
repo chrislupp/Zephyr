@@ -191,9 +191,56 @@ TEST_F(GradientCalculatorTest, YawRateDerivativesMatchStabilityDerivatives) {
       << "Cl_r mismatch";
 }
 
+TEST_F(GradientCalculatorTest, MachDerivativesComputed) {
+  FlightCondition condition;
+  condition.alpha = 5.0 * kDegreesToRadians;
+  condition.mach = 0.5;  // Moderate subsonic Mach
+
+  ad::AeroGradients grads = grad_calc_.ComputeMachDerivatives(condition);
+
+  // Prandtl-Glauert: CL increases with Mach (positive dCL/dM for subsonic)
+  // CL ≈ CL0 / sqrt(1 - M²)
+  // d/dM[CL] = CL0 * M / (1-M²)^1.5 > 0 for M > 0
+  EXPECT_GT(grads.dCL, 0.0) << "dCL/dMach should be positive for subsonic flow";
+
+  // Similarly for induced drag
+  EXPECT_GT(grads.dCDi, 0.0) << "dCDi/dMach should be positive";
+}
+
+TEST_F(GradientCalculatorTest, MachDerivativesAtLowMach) {
+  FlightCondition condition;
+  condition.alpha = 5.0 * kDegreesToRadians;
+  condition.mach = 0.1;  // Low Mach - small compressibility effect
+
+  ad::AeroGradients grads = grad_calc_.ComputeMachDerivatives(condition);
+
+  // At low Mach, derivatives should be small but positive
+  EXPECT_GT(grads.dCL, 0.0);
+
+  // The magnitude should be small at low Mach
+  // (derivative of 1/sqrt(1-M²) at M=0.1 is about 0.1)
+  EXPECT_LT(std::abs(grads.dCL), 1.0) << "dCL/dMach should be small at low Mach";
+}
+
+TEST_F(GradientCalculatorTest, MachDerivativesAtHighMach) {
+  FlightCondition condition;
+  condition.alpha = 5.0 * kDegreesToRadians;
+  condition.mach = 0.8;  // High subsonic Mach
+
+  ad::AeroGradients grads_high = grad_calc_.ComputeMachDerivatives(condition);
+
+  condition.mach = 0.3;
+  ad::AeroGradients grads_low = grad_calc_.ComputeMachDerivatives(condition);
+
+  // Derivative should be larger at higher Mach (more sensitive)
+  EXPECT_GT(grads_high.dCL, grads_low.dCL)
+      << "dCL/dMach should increase with Mach number";
+}
+
 TEST_F(GradientCalculatorTest, FullGradientsComputation) {
   FlightCondition condition;
   condition.alpha = 5.0 * kDegreesToRadians;
+  condition.mach = 0.3;
 
   ad::FullGradients grads = grad_calc_.ComputeFlightConditionDerivatives(condition);
 
@@ -209,6 +256,9 @@ TEST_F(GradientCalculatorTest, FullGradientsComputation) {
   // Pitch damping primarily comes from the horizontal tail
   // Just verify it's computed (non-zero)
   EXPECT_NE(grads.q_derivs.dCm, 0.0);
+
+  // Mach derivative should be positive (compressibility increases lift)
+  EXPECT_GT(grads.mach_derivs.dCL, 0.0);
 }
 
 TEST_F(GradientCalculatorTest, IsUsingEnzymeReturnsCorrectValue) {

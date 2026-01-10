@@ -359,6 +359,42 @@ AeroGradients GradientCalculator::ComputeYawRateDerivatives(
   return impl_->FiniteDiffDerivatives(condition, 4);
 }
 
+AeroGradients GradientCalculator::ComputeMachDerivatives(
+    const FlightCondition& condition) {
+  // Mach changes the Prandtl-Glauert factor, which affects the AIC matrix.
+  // We must re-solve at perturbed Mach numbers (can't use adjoint shortcut).
+  const Scalar h = 0.001;  // Small Mach perturbation
+
+  FlightCondition cond_plus = condition;
+  FlightCondition cond_minus = condition;
+  cond_plus.mach = condition.mach + h;
+  cond_minus.mach = condition.mach - h;
+
+  // Clamp Mach to valid range
+  if (cond_plus.mach >= 1.0) {
+    cond_plus.mach = 0.999;
+  }
+  if (cond_minus.mach < 0.0) {
+    cond_minus.mach = 0.0;
+  }
+
+  AerodynamicResults res_plus = impl_->ComputeResults(cond_plus);
+  AerodynamicResults res_minus = impl_->ComputeResults(cond_minus);
+
+  Scalar inv_2h = 0.5 / h;
+
+  AeroGradients grads;
+  grads.dCL = (res_plus.CL - res_minus.CL) * inv_2h;
+  grads.dCD = (res_plus.CD - res_minus.CD) * inv_2h;
+  grads.dCY = (res_plus.CY - res_minus.CY) * inv_2h;
+  grads.dCl = (res_plus.Cl - res_minus.Cl) * inv_2h;
+  grads.dCm = (res_plus.Cm - res_minus.Cm) * inv_2h;
+  grads.dCn = (res_plus.Cn - res_minus.Cn) * inv_2h;
+  grads.dCDi = (res_plus.CDi_ff - res_minus.CDi_ff) * inv_2h;
+
+  return grads;
+}
+
 FullGradients GradientCalculator::ComputeFlightConditionDerivatives(
     const FlightCondition& condition) {
   FullGradients grads;
@@ -368,6 +404,7 @@ FullGradients GradientCalculator::ComputeFlightConditionDerivatives(
   grads.p_derivs = ComputeRollRateDerivatives(condition);
   grads.q_derivs = ComputePitchRateDerivatives(condition);
   grads.r_derivs = ComputeYawRateDerivatives(condition);
+  grads.mach_derivs = ComputeMachDerivatives(condition);
 
   return grads;
 }

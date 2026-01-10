@@ -16,8 +16,10 @@ add_executable(vlm_unit_tests
     unit/vtk_export_test.cpp
     unit/control_surface_test.cpp
     unit/enzyme_ad_test.cpp
+    unit/enzyme_geometry_test.cpp
     unit/gradient_calculator_test.cpp
     unit/adjoint_solver_test.cpp
+    unit/optvl_gradient_validation_test.cpp
 )
 
 target_link_libraries(vlm_unit_tests
