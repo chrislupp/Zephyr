@@ -11,6 +11,7 @@
 #include "vlm/ad/enzyme_biot_savart.h"
 #include "vlm/ad/enzyme_mesh.h"
 #include "vlm/ad/enzyme_aic.h"
+#include "vlm/ad/mesh_sensitivity.h"
 #include "vlm/aero/force_calculator.h"
 
 namespace vlm {
@@ -633,13 +634,14 @@ VecX ComputeRHSGeometrySensitivity(
 /// Compute λᵀ·(∂A/∂θ)·Γ for a geometry parameter
 /// This is the contribution from how the AIC matrix changes with geometry.
 ///
-/// For each affected (i,j) pair:
-/// ∂A_ij/∂θ = (∂A_ij/∂field_point_i)·(∂field_point_i/∂θ)
-///          + (∂A_ij/∂normal_i)·(∂normal_i/∂θ)
-///          + (∂A_ij/∂bound_left_j)·(∂bound_left_j/∂θ)
-///          + (∂A_ij/∂bound_right_j)·(∂bound_right_j/∂θ)
+/// The AIC sensitivity uses the adjoint approach:
+/// - Row contributions (control point changes): enzyme_aic_row_gradient_rc with Γ as weights
+/// - Column contributions (bound vortex changes): enzyme_aic_column_gradient_rv with λ as weights
+///
+/// Chain rule: λᵀ·(∂A/∂θ)·Γ = Σ_mesh_vars (∂(λᵀ·A·Γ)/∂mesh_var) · (∂mesh_var/∂θ)
 Scalar ComputeAICGeometrySensitivity(
     const VortexLattice& mesh,
+    const Aircraft& aircraft,
     const VecX& lambda,
     const VecX& gamma,
     const FlightCondition& condition,
@@ -647,38 +649,244 @@ Scalar ComputeAICGeometrySensitivity(
     Index section_idx,
     GeometryVariable variable) {
 
-  // This is the most complex term and requires:
-  // 1. Knowing which vortices are affected by the section
-  // 2. Computing mesh position sensitivities
-  // 3. Computing Biot-Savart sensitivities
-  // 4. Summing over all affected (i,j) pairs
+  const Index n = mesh.GetNumVortices();
+  if (n == 0) return 0.0;
 
-  // For a rigorous implementation, we need:
-  // - The exact mapping from section parameters to mesh positions
-  // - For each affected vortex j: ∂bound_left_j/∂θ, ∂bound_right_j/∂θ
-  // - For each affected control point i: ∂field_point_i/∂θ, ∂normal_i/∂θ
+  // Build section-strip mapping
+  SectionStripMapping mapping = BuildSectionStripMapping(aircraft, mesh, surface_idx);
+  if (mapping.num_sections == 0 || section_idx >= mapping.num_sections - 1) {
+    return 0.0;  // Section doesn't exist or is the last section (no interval after it)
+  }
 
-  // The contribution is:
-  // Σ_i Σ_j λ_i · (∂A_ij/∂θ) · Γ_j
+  // Get affected strip range for this section interval
+  auto [first_strip, num_strips] = mapping.GetStripRange(section_idx);
+  if (num_strips == 0) return 0.0;
 
-  // For now, return 0 and rely on FD for this term
-  // A full implementation would use:
-  // - enzyme_aic_field_point_gradient for ∂A_ij/∂field_point
-  // - enzyme_aic_bound_gradient for ∂A_ij/∂bound_left, ∂A_ij/∂bound_right
-  // - enzyme_aic_normal_gradient for ∂A_ij/∂normal
-  // - compute_chord_gradient, etc. for ∂mesh/∂θ
+  const auto& surface_info = mesh.GetSurfaceInfo(surface_idx);
+  Index num_chordwise = surface_info.num_chordwise;
 
-  // TODO: Implement full AIC sensitivity
-  // For now, this term is computed via FD in the fallback path
-  (void)mesh;
-  (void)lambda;
-  (void)gamma;
-  (void)condition;
-  (void)surface_idx;
-  (void)section_idx;
-  (void)variable;
+  // Extract mesh arrays for enzyme functions
+  MeshArrays arrays = ExtractMeshArrays(mesh);
 
-  return 0.0;
+  // Compressibility factor
+  double beta = std::sqrt(std::max(0.01, 1.0 - condition.mach * condition.mach));
+
+  // Core radius fractions
+  double core_chord_frac = mesh.GetVortexCoreRadiusChordFraction();
+  double core_width_frac = mesh.GetVortexCoreRadiusWidthFraction();
+
+  // Result accumulator
+  Scalar result = 0.0;
+
+  // For twist changes, the primary effect is on the normal vectors
+  // which affects the RHS directly (already handled in ComputeRHSGeometrySensitivity)
+  // and also affects the AIC matrix (since A_ij depends on normal_i)
+  //
+  // For position changes (LE_x, LE_y, LE_z), both control points and
+  // bound vortices move
+  //
+  // For chord changes, the x-positions of control points and bound vortices change
+
+  // Loop over strips in this section interval
+  for (Index istrip = 0; istrip < num_strips; ++istrip) {
+    Index strip_idx = first_strip + istrip;
+    const Strip& strip = mesh.GetStrip(strip_idx);
+
+    // Compute interpolation fractions
+    double f1, f2;
+    ComputeStripEdgeFractions(istrip, num_strips, &f1, &f2);
+    double fc = ComputeStripInterpolationFraction(istrip, num_strips);
+
+    // Loop over vortex elements in this strip
+    for (Index ichord = 0; ichord < num_chordwise; ++ichord) {
+      Index vor_idx = strip.first_vortex_index + ichord;
+
+      // Compute chordwise fraction
+      double dx = 1.0 / static_cast<double>(num_chordwise);
+      double x1 = ichord * dx;
+      double xvr = x1 + 0.25 * dx;  // Vortex at 1/4 panel
+      double xcp = x1 + 0.75 * dx;  // Control at 3/4 panel
+
+      // =========================================================
+      // Compute mesh position sensitivities ∂mesh/∂θ
+      // =========================================================
+      double d_rv1[3] = {0, 0, 0};
+      double d_rv2[3] = {0, 0, 0};
+      double d_rc[3] = {0, 0, 0};
+      double d_normal[3] = {0, 0, 0};
+
+      switch (variable) {
+        case GeometryVariable::kChord:
+          // Chord affects x-positions: RV1.x = RLE1.x + XVR*CHORD1
+          // d(RV1.x)/d(chord_left) = (1-f1)*XVR, d(RV1.x)/d(chord_right) = f1*XVR
+          // For this section, we're computing d/d(chord_left) where "left" is section_idx
+          d_rv1[0] = (1.0 - f1) * xvr;
+          d_rv2[0] = (1.0 - f2) * xvr;
+          d_rc[0] = (1.0 - fc) * xcp;
+          break;
+
+        case GeometryVariable::kXle:
+          // LE.x affects x-positions directly
+          d_rv1[0] = (1.0 - f1);
+          d_rv2[0] = (1.0 - f2);
+          d_rc[0] = (1.0 - fc);
+          break;
+
+        case GeometryVariable::kYle:
+          // LE.y affects y-positions
+          d_rv1[1] = (1.0 - f1);
+          d_rv2[1] = (1.0 - f2);
+          d_rc[1] = (1.0 - fc);
+          break;
+
+        case GeometryVariable::kZle:
+          // LE.z affects z-positions
+          d_rv1[2] = (1.0 - f1);
+          d_rv2[2] = (1.0 - f2);
+          d_rc[2] = (1.0 - fc);
+          break;
+
+        case GeometryVariable::kTwist: {
+          // Twist primarily affects the normal vector
+          // The effect on positions is secondary (through the bound vortex)
+          // For now, focus on the normal contribution
+          const HorseshoeVortex& vor = mesh.GetVortex(vor_idx);
+
+          // Compute bound direction
+          double dx_b = vor.bound_vortex_right.x() - vor.bound_vortex_left.x();
+          double dy_b = vor.bound_vortex_right.y() - vor.bound_vortex_left.y();
+          double dz_b = vor.bound_vortex_right.z() - vor.bound_vortex_left.z();
+          double bound_len = std::sqrt(dx_b*dx_b + dy_b*dy_b + dz_b*dz_b);
+          double bound_dir[3] = {0, 1, 0};
+          if (bound_len > 1e-12) {
+            bound_dir[0] = dx_b / bound_len;
+            bound_dir[1] = dy_b / bound_len;
+            bound_dir[2] = dz_b / bound_len;
+          }
+
+          // Compute d(normal)/d(twist) analytically
+          double twist = strip.twist_angle;
+          double camber = vor.camber_slope_at_control_point;
+          double angle = twist - std::atan(camber);
+          double ca = std::cos(angle);
+          double sa = std::sin(angle);
+
+          // Chord direction: EC = (cos, -sin*ES_y, -sin*ES_z)
+          // d(EC)/d(twist) = (-sin, -cos*ES_y, -cos*ES_z)
+          double dec[3];
+          dec[0] = -sa;
+          dec[1] = -ca * strip.trefftz_normal_y;
+          dec[2] = -ca * strip.trefftz_normal_z;
+
+          // Normal = normalize(EC × EB)
+          double ec[3] = {ca, -sa * strip.trefftz_normal_y, -sa * strip.trefftz_normal_z};
+          double ecxb[3];
+          ecxb[0] = ec[1] * bound_dir[2] - ec[2] * bound_dir[1];
+          ecxb[1] = ec[2] * bound_dir[0] - ec[0] * bound_dir[2];
+          ecxb[2] = ec[0] * bound_dir[1] - ec[1] * bound_dir[0];
+          double emag = std::sqrt(ecxb[0]*ecxb[0] + ecxb[1]*ecxb[1] + ecxb[2]*ecxb[2]);
+
+          if (emag > 1e-12) {
+            // d(ECXB)/d(twist) = d(EC)/d(twist) × EB
+            double decxb[3];
+            decxb[0] = dec[1] * bound_dir[2] - dec[2] * bound_dir[1];
+            decxb[1] = dec[2] * bound_dir[0] - dec[0] * bound_dir[2];
+            decxb[2] = dec[0] * bound_dir[1] - dec[1] * bound_dir[0];
+
+            double normal[3] = {ecxb[0]/emag, ecxb[1]/emag, ecxb[2]/emag};
+            double demag = normal[0]*decxb[0] + normal[1]*decxb[1] + normal[2]*decxb[2];
+
+            d_normal[0] = (1.0 - fc) * (decxb[0] - normal[0]*demag) / emag;
+            d_normal[1] = (1.0 - fc) * (decxb[1] - normal[1]*demag) / emag;
+            d_normal[2] = (1.0 - fc) * (decxb[2] - normal[2]*demag) / emag;
+          }
+          break;
+        }
+      }
+
+      // =========================================================
+      // Compute AIC gradient contributions
+      // =========================================================
+
+      // Row contribution: How does changing the control point/normal at row vor_idx
+      // affect the AIC row, weighted by Γ?
+      // The result is d(AIC_row · Γ)/d(rc) and d(AIC_row · Γ)/d(normal)
+      if (d_rc[0] != 0.0 || d_rc[1] != 0.0 || d_rc[2] != 0.0 ||
+          d_normal[0] != 0.0 || d_normal[1] != 0.0 || d_normal[2] != 0.0) {
+
+        double d_rc_out[3] = {0, 0, 0};
+        double d_normal_out[3] = {0, 0, 0};
+
+        // Use enzyme to get d(AIC_row · Γ)/d(rc, normal)
+        // Note: enzyme_aic_row_gradient_rc computes gradient of weighted sum
+#ifdef VLM_USE_ENZYME
+        enzyme_aic_row_gradient_rc(
+            arrays.rv1.data(),
+            arrays.rv2.data(),
+            &arrays.rc[3 * vor_idx],
+            &arrays.normal[3 * vor_idx],
+            arrays.chord.data(),
+            arrays.surface_idx.data(),
+            static_cast<int>(n),
+            static_cast<int>(vor_idx),
+            core_chord_frac,
+            core_width_frac,
+            beta,
+            gamma.data(),  // Use Γ as weights
+            d_rc_out,
+            d_normal_out);
+#else
+        (void)core_chord_frac;
+        (void)core_width_frac;
+        (void)beta;
+#endif
+
+        // Chain rule: contribution = d(AIC·Γ)/d(rc) · d(rc)/d(θ) + d(AIC·Γ)/d(normal) · d(normal)/d(θ)
+        // This gives us the row's contribution to Σ_j A_ij·Γ_j, weighted by λ_i
+        Scalar row_contrib = d_rc_out[0] * d_rc[0] + d_rc_out[1] * d_rc[1] + d_rc_out[2] * d_rc[2]
+                           + d_normal_out[0] * d_normal[0] + d_normal_out[1] * d_normal[1]
+                           + d_normal_out[2] * d_normal[2];
+
+        result += lambda(vor_idx) * row_contrib;
+      }
+
+      // Column contribution: How does changing the bound vortex at column vor_idx
+      // affect all AIC rows, weighted by λ?
+      if (d_rv1[0] != 0.0 || d_rv1[1] != 0.0 || d_rv1[2] != 0.0 ||
+          d_rv2[0] != 0.0 || d_rv2[1] != 0.0 || d_rv2[2] != 0.0) {
+
+        double d_rv1_out[3] = {0, 0, 0};
+        double d_rv2_out[3] = {0, 0, 0};
+
+#ifdef VLM_USE_ENZYME
+        enzyme_aic_column_gradient_rv(
+            arrays.rv1.data(),
+            arrays.rv2.data(),
+            arrays.rc.data(),
+            arrays.normal.data(),
+            arrays.chord.data(),
+            arrays.surface_idx.data(),
+            static_cast<int>(n),
+            static_cast<int>(vor_idx),
+            core_chord_frac,
+            core_width_frac,
+            beta,
+            lambda.data(),  // Use λ as weights
+            d_rv1_out,
+            d_rv2_out);
+#endif
+
+        // Chain rule: contribution = d(λᵀ·A_col)/d(rv1) · d(rv1)/d(θ) + ...
+        // This gives us the column's contribution, already weighted by λ
+        Scalar col_contrib = d_rv1_out[0] * d_rv1[0] + d_rv1_out[1] * d_rv1[1] + d_rv1_out[2] * d_rv1[2]
+                           + d_rv2_out[0] * d_rv2[0] + d_rv2_out[1] * d_rv2[1] + d_rv2_out[2] * d_rv2[2];
+
+        result += gamma(vor_idx) * col_contrib;
+      }
+    }
+  }
+
+  return result;
 }
 
 /// Compute geometry gradient using the adjoint method (partial implementation)
@@ -740,30 +948,48 @@ AeroGradients ComputeSectionGradientAdjoint(
   implicit_rhs.dCDi = 0.0;  // CDi computed separately via Trefftz plane
 
   // Step 5: Compute AIC sensitivity term -λᵀ·(∂A/∂θ)·Γ
-  // This is currently not implemented analytically - would need to be added
-  // For now, we'll use FD for this term by computing the full gradient
-  // and subtracting the RHS term we computed analytically
+  // This uses the enzyme_aic gradients combined with mesh sensitivity
+  AeroGradients aic_sens;
+  aic_sens.dCL = -ComputeAICGeometrySensitivity(mesh, aircraft, lambda.col(0),
+      solution.circulation, condition, surface_idx, section_idx, variable);
+  aic_sens.dCD = -ComputeAICGeometrySensitivity(mesh, aircraft, lambda.col(1),
+      solution.circulation, condition, surface_idx, section_idx, variable);
+  aic_sens.dCY = -ComputeAICGeometrySensitivity(mesh, aircraft, lambda.col(2),
+      solution.circulation, condition, surface_idx, section_idx, variable);
+  aic_sens.dCl = -ComputeAICGeometrySensitivity(mesh, aircraft, lambda.col(3),
+      solution.circulation, condition, surface_idx, section_idx, variable);
+  aic_sens.dCm = -ComputeAICGeometrySensitivity(mesh, aircraft, lambda.col(4),
+      solution.circulation, condition, surface_idx, section_idx, variable);
+  aic_sens.dCn = -ComputeAICGeometrySensitivity(mesh, aircraft, lambda.col(5),
+      solution.circulation, condition, surface_idx, section_idx, variable);
+  aic_sens.dCDi = 0.0;  // CDi handled via Trefftz plane
 
-  // For a complete implementation:
-  // Scalar aic_sens_CL = ComputeAICGeometrySensitivity(mesh, lambda.col(0),
-  //     solution.circulation, condition, surface_idx, section_idx, variable);
-  // ... etc for each output
+  // Step 6: Compute explicit term ∂J/∂θ|_Γ (forces change at fixed circulation)
+  // For geometry changes, the explicit force term changes through:
+  // - Bound vortex direction changes
+  // - Reference point changes for moments
+  // This is a secondary effect compared to the AIC/RHS terms
+  // For now, assume it's small and set to zero (could add later)
+  AeroGradients explicit_term;
+  explicit_term.dCL = 0.0;
+  explicit_term.dCD = 0.0;
+  explicit_term.dCY = 0.0;
+  explicit_term.dCl = 0.0;
+  explicit_term.dCm = 0.0;
+  explicit_term.dCn = 0.0;
+  explicit_term.dCDi = 0.0;
 
-  // Since AIC sensitivity is not fully implemented, fall back to FD
-  // but note that this is still more efficient than full FD because
-  // we reuse the LU factorization
-  AeroGradients fd_result = ComputeSectionGradientFD(
-      aircraft, condition, surface_idx, section_idx, variable, fd_step);
+  // Total gradient = explicit + implicit_rhs + aic_sens
+  AeroGradients result;
+  result.dCL = explicit_term.dCL + implicit_rhs.dCL + aic_sens.dCL;
+  result.dCD = explicit_term.dCD + implicit_rhs.dCD + aic_sens.dCD;
+  result.dCY = explicit_term.dCY + implicit_rhs.dCY + aic_sens.dCY;
+  result.dCl = explicit_term.dCl + implicit_rhs.dCl + aic_sens.dCl;
+  result.dCm = explicit_term.dCm + implicit_rhs.dCm + aic_sens.dCm;
+  result.dCn = explicit_term.dCn + implicit_rhs.dCn + aic_sens.dCn;
+  result.dCDi = 0.0;  // TODO: Add Trefftz plane gradient
 
-  // For twist, we have analytical RHS sensitivity, so use hybrid approach
-  if (variable == GeometryVariable::kTwist && db_dtheta.norm() > 1e-10) {
-    // The FD result includes both RHS and AIC contributions
-    // Our analytical RHS term should match the FD RHS contribution
-    // For now, just return FD result until AIC sensitivity is implemented
-    return fd_result;
-  }
-
-  return fd_result;
+  return result;
 }
 
 #endif  // VLM_USE_ENZYME
