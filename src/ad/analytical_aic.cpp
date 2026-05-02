@@ -10,12 +10,17 @@ namespace ad {
 
 namespace {
 
-/// Compute core radius for a vortex given chord, width, and whether same surface.
+/// Compute core radius for a vortex, matching solver logic.
+/// same_component: true when both vortices are on the same aerodynamic component.
+/// For same-component, uses tiny core (just prevents division by zero).
+/// For different-component, uses larger core to regularize near-field interactions.
 inline double compute_core_radius(
-    double chord, double strip_width,
-    int vortex_surface, int control_surface,
-    double core_chord_fraction, double core_width_fraction) {
-  if (vortex_surface == control_surface) return 0.0;
+    double strip_width,
+    bool same_component,
+    double chord, double core_chord_fraction, double core_width_fraction) {
+  if (same_component) {
+    return 0.0001 * strip_width;
+  }
   double chord_core = core_chord_fraction * chord;
   double width_core = core_width_fraction * strip_width;
   return (chord_core > width_core) ? chord_core : width_core;
@@ -68,8 +73,8 @@ void analytical_aic_element_gradient(
 void analytical_aic_row_gradient_rc(
     const double* rv1_all, const double* rv2_all,
     const double* rc, const double* normal,
-    const double* chord_all, const int* surface_idx_all,
-    int num_vortices, int control_surface_idx,
+    const double* chord_all, const int* component_idx_all,
+    int num_vortices, int row_idx, int control_component_idx,
     double core_chord_fraction, double core_width_fraction,
     double beta, const double* weights,
     double* d_rc, double* d_normal) {
@@ -84,10 +89,12 @@ void analytical_aic_row_gradient_rc(
     const double* rv2 = &rv2_all[3*j];
 
     double strip_width = compute_strip_width(rv1, rv2);
-    double core_radius = compute_core_radius(chord_all[j], strip_width,
-                                             surface_idx_all[j], control_surface_idx,
-                                             core_chord_fraction, core_width_fraction);
-    bool include_bound = (surface_idx_all[j] != control_surface_idx);
+    bool same_component = (component_idx_all[j] == control_component_idx);
+    double core_radius = compute_core_radius(strip_width, same_component,
+                                             chord_all[j], core_chord_fraction,
+                                             core_width_fraction);
+    // Match solver: only exclude bound vortex for self-influence (i == j)
+    bool include_bound = (j != row_idx);
 
     // d(AIC[i,j])/d(rc): VJP of horseshoe velocity w.r.t. field point, seeded with normal
     double vjp_rc[3];
@@ -116,7 +123,7 @@ void analytical_aic_row_gradient_rc(
 void analytical_aic_column_gradient_rv(
     const double* rv1_all, const double* rv2_all,
     const double* rc_all, const double* normal_all,
-    const double* chord_all, const int* surface_idx_all,
+    const double* chord_all, const int* component_idx_all,
     int num_vortices, int vortex_idx,
     double core_chord_fraction, double core_width_fraction,
     double beta, const double* weights,
@@ -127,7 +134,7 @@ void analytical_aic_column_gradient_rv(
 
   const double* rv1_j = &rv1_all[3*vortex_idx];
   const double* rv2_j = &rv2_all[3*vortex_idx];
-  int surface_j = surface_idx_all[vortex_idx];
+  int component_j = component_idx_all[vortex_idx];
   double strip_width_j = compute_strip_width(rv1_j, rv2_j);
 
   for (int i = 0; i < num_vortices; ++i) {
@@ -136,10 +143,12 @@ void analytical_aic_column_gradient_rv(
     const double* rc = &rc_all[3*i];
     const double* normal = &normal_all[3*i];
 
-    double core_radius = compute_core_radius(chord_all[vortex_idx], strip_width_j,
-                                             surface_j, surface_idx_all[i],
-                                             core_chord_fraction, core_width_fraction);
-    bool include_bound = (surface_j != surface_idx_all[i]);
+    bool same_component = (component_j == component_idx_all[i]);
+    double core_radius = compute_core_radius(strip_width_j, same_component,
+                                             chord_all[vortex_idx], core_chord_fraction,
+                                             core_width_fraction);
+    // Match solver: only exclude bound vortex for self-influence (i == j)
+    bool include_bound = (i != vortex_idx);
 
     // d(AIC[i,j])/d(rv1_j): VJP seeded with normal_i
     double vjp_rv1[3], vjp_rv2[3];
@@ -164,8 +173,8 @@ void analytical_aic_column_gradient_rv(
 void analytical_velocity_row_gradient_rc(
     const double* rv1_all, const double* rv2_all,
     const double* rc,
-    const double* chord_all, const int* surface_idx_all,
-    int num_vortices, int control_surface_idx,
+    const double* chord_all, const int* component_idx_all,
+    int num_vortices, int row_idx, int control_component_idx,
     double core_chord_fraction, double core_width_fraction,
     double beta, const double* gamma, const double* dJ_dV,
     double* d_rc) {
@@ -183,10 +192,12 @@ void analytical_velocity_row_gradient_rc(
     const double* rv2 = &rv2_all[3*j];
 
     double strip_width = compute_strip_width(rv1, rv2);
-    double core_radius = compute_core_radius(chord_all[j], strip_width,
-                                             surface_idx_all[j], control_surface_idx,
-                                             core_chord_fraction, core_width_fraction);
-    bool include_bound = (surface_idx_all[j] != control_surface_idx);
+    bool same_component = (component_idx_all[j] == control_component_idx);
+    double core_radius = compute_core_radius(strip_width, same_component,
+                                             chord_all[j], core_chord_fraction,
+                                             core_width_fraction);
+    // Match solver: only exclude bound vortex for self-influence (i == j)
+    bool include_bound = (j != row_idx);
 
     double vjp[3];
     horseshoe_velocity_vjp_field_point(rc, rv1, rv2, beta, core_radius,
@@ -205,7 +216,7 @@ void analytical_velocity_row_gradient_rc(
 void analytical_velocity_column_gradient_rv(
     const double* rv1_all, const double* rv2_all,
     const double* rc_all,
-    const double* chord_all, const int* surface_idx_all,
+    const double* chord_all, const int* component_idx_all,
     int num_vortices, int vortex_idx,
     double core_chord_fraction, double core_width_fraction,
     double beta, double gamma_j, const double* dJ_dV_all,
@@ -218,17 +229,19 @@ void analytical_velocity_column_gradient_rv(
 
   const double* rv1_j = &rv1_all[3*vortex_idx];
   const double* rv2_j = &rv2_all[3*vortex_idx];
-  int surface_j = surface_idx_all[vortex_idx];
+  int component_j = component_idx_all[vortex_idx];
   double strip_width_j = compute_strip_width(rv1_j, rv2_j);
 
   for (int i = 0; i < num_vortices; ++i) {
     const double* rc = &rc_all[3*i];
     const double* dJ_dV = &dJ_dV_all[3*i];
 
-    double core_radius = compute_core_radius(chord_all[vortex_idx], strip_width_j,
-                                             surface_j, surface_idx_all[i],
-                                             core_chord_fraction, core_width_fraction);
-    bool include_bound = (surface_j != surface_idx_all[i]);
+    bool same_component = (component_j == component_idx_all[i]);
+    double core_radius = compute_core_radius(strip_width_j, same_component,
+                                             chord_all[vortex_idx], core_chord_fraction,
+                                             core_width_fraction);
+    // Match solver: only exclude bound vortex for self-influence (i == j)
+    bool include_bound = (i != vortex_idx);
 
     double vjp_rv1[3], vjp_rv2[3];
     horseshoe_velocity_vjp_bound_left(rc, rv1_j, rv2_j, beta, core_radius,

@@ -22,6 +22,7 @@
 #include <vector>
 
 #include "vlm/core/types.h"
+#include "vlm/utils/math_utilities.h"
 
 namespace vlm {
 
@@ -66,6 +67,7 @@ struct MeshArrays {
   std::vector<double> normal;  ///< Normal vectors at control points [3*N]
   std::vector<double> chord;   ///< Local chord at each vortex [N]
   std::vector<int> surface_idx; ///< Surface index for each vortex [N]
+  std::vector<int> component_idx; ///< Component index for each vortex [N]
   Index num_vortices;
 };
 
@@ -115,30 +117,65 @@ struct SectionGradients {
 ///
 /// Given a strip within a section interval, compute the fraction FC
 /// where 0 = left section, 1 = right section.
+/// Uses the mesh generator's spacing to get correct fractions.
 ///
 /// @param strip_idx_in_interval Strip index within the section interval (0-based)
 /// @param num_strips_in_interval Total strips in this section interval
+/// @param spacing Spacing type used by the mesh generator
 /// @return Interpolation fraction FC in [0, 1]
 inline double ComputeStripInterpolationFraction(
     Index strip_idx_in_interval,
-    Index num_strips_in_interval) {
+    Index num_strips_in_interval,
+    SpacingType spacing = SpacingType::kCosine) {
   if (num_strips_in_interval <= 1) return 0.5;
-  // Center of strip, as in OptVL's YCP array
-  return (static_cast<double>(strip_idx_in_interval) + 0.5) /
-         static_cast<double>(num_strips_in_interval);
+  // The mesh generator uses GenerateCosineSpacing(2*N+1, spacing)
+  // where odd indices [2n+1] are control point (center) fractions
+  std::vector<Scalar> fracs = GenerateCosineSpacing(
+      2 * num_strips_in_interval + 1, spacing);
+  return fracs[2 * strip_idx_in_interval + 1];
 }
 
 /// @brief Compute edge interpolation fractions for a strip.
 ///
 /// Returns F1 (left edge) and F2 (right edge) fractions.
+/// Uses the mesh generator's spacing to get correct fractions.
 inline void ComputeStripEdgeFractions(
     Index strip_idx_in_interval,
     Index num_strips_in_interval,
     double* f1,
-    double* f2) {
-  double dn = static_cast<double>(num_strips_in_interval);
-  *f1 = static_cast<double>(strip_idx_in_interval) / dn;
-  *f2 = static_cast<double>(strip_idx_in_interval + 1) / dn;
+    double* f2,
+    SpacingType spacing = SpacingType::kCosine) {
+  // The mesh generator uses GenerateCosineSpacing(2*N+1, spacing)
+  // where even indices [2n] are panel edge fractions
+  std::vector<Scalar> fracs = GenerateCosineSpacing(
+      2 * num_strips_in_interval + 1, spacing);
+  *f1 = fracs[2 * strip_idx_in_interval];
+  *f2 = fracs[2 * strip_idx_in_interval + 2];
+}
+
+/// @brief Pre-compute all spanwise fractions for an interval.
+///
+/// More efficient than calling ComputeStripEdgeFractions per strip.
+/// Returns arrays of f1[N], f2[N], fc[N] for N strips.
+inline void BuildSpanwiseFractions(
+    Index num_strips,
+    SpacingType spacing,
+    std::vector<double>& f1_out,
+    std::vector<double>& f2_out,
+    std::vector<double>& fc_out) {
+  std::vector<Scalar> fracs = GenerateCosineSpacing(2 * num_strips + 1, spacing);
+  f1_out.resize(num_strips);
+  f2_out.resize(num_strips);
+  fc_out.resize(num_strips);
+  for (Index i = 0; i < num_strips; ++i) {
+    f1_out[i] = fracs[2 * i];
+    f2_out[i] = fracs[2 * i + 1];  // Note: fc is at odd index (center)
+    fc_out[i] = fracs[2 * i + 1];
+  }
+  // f2 uses the next even index
+  for (Index i = 0; i < num_strips; ++i) {
+    f2_out[i] = fracs[2 * i + 2];
+  }
 }
 
 // ============================================================================
@@ -348,7 +385,8 @@ MeshArrays ExtractMeshArrays(const VortexLattice& mesh);
 void BuildDefaultChordwiseFractions(
     Index num_chordwise,
     std::vector<double>& xvr_out,
-    std::vector<double>& xcp_out);
+    std::vector<double>& xcp_out,
+    SpacingType spacing = SpacingType::kCosine);
 
 }  // namespace ad
 }  // namespace vlm

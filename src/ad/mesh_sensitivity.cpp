@@ -112,6 +112,7 @@ MeshArrays ExtractMeshArrays(const VortexLattice& mesh) {
   arrays.normal.resize(3 * num_vortices);
   arrays.chord.resize(num_vortices);
   arrays.surface_idx.resize(num_vortices);
+  arrays.component_idx.resize(num_vortices);
 
   for (Index i = 0; i < num_vortices; ++i) {
     const HorseshoeVortex& vor = mesh.GetVortex(i);
@@ -134,6 +135,7 @@ MeshArrays ExtractMeshArrays(const VortexLattice& mesh) {
 
     arrays.chord[i] = vor.local_chord;
     arrays.surface_idx[i] = static_cast<int>(vor.surface_index);
+    arrays.component_idx[i] = static_cast<int>(vor.component_index);
   }
 
   return arrays;
@@ -142,14 +144,18 @@ MeshArrays ExtractMeshArrays(const VortexLattice& mesh) {
 void BuildDefaultChordwiseFractions(
     Index num_chordwise,
     std::vector<double>& xvr_out,
-    std::vector<double>& xcp_out) {
+    std::vector<double>& xcp_out,
+    SpacingType spacing) {
 
   xvr_out.resize(num_chordwise);
   xcp_out.resize(num_chordwise);
 
+  // Use the same spacing as the mesh generator (GenerateCosineSpacing for panel edges)
+  std::vector<Scalar> x_pt = GenerateCosineSpacing(num_chordwise + 1, spacing);
+
   for (Index i = 0; i < num_chordwise; ++i) {
-    double x1 = static_cast<double>(i) / static_cast<double>(num_chordwise);
-    double x2 = static_cast<double>(i + 1) / static_cast<double>(num_chordwise);
+    double x1 = x_pt[i];
+    double x2 = x_pt[i + 1];
     double dx = x2 - x1;
 
     // Standard VLM: vortex at 1/4 panel chord, control at 3/4

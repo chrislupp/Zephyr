@@ -48,6 +48,7 @@ void analytical_aic_element_gradient(
 /// @param chord_all Chord values [num_vortices]
 /// @param surface_idx_all Surface index for each vortex [num_vortices]
 /// @param num_vortices Total number of vortices
+/// @param row_idx Index of this row (for self-influence exclusion)
 /// @param control_surface_idx Surface index of the control point
 /// @param core_chord_fraction Core radius as fraction of chord
 /// @param core_width_fraction Core radius as fraction of strip width
@@ -58,8 +59,8 @@ void analytical_aic_element_gradient(
 void analytical_aic_row_gradient_rc(
     const double* rv1_all, const double* rv2_all,
     const double* rc, const double* normal,
-    const double* chord_all, const int* surface_idx_all,
-    int num_vortices, int control_surface_idx,
+    const double* chord_all, const int* component_idx_all,
+    int num_vortices, int row_idx, int control_component_idx,
     double core_chord_fraction, double core_width_fraction,
     double beta, const double* weights,
     double* d_rc, double* d_normal);
@@ -85,7 +86,7 @@ void analytical_aic_row_gradient_rc(
 void analytical_aic_column_gradient_rv(
     const double* rv1_all, const double* rv2_all,
     const double* rc_all, const double* normal_all,
-    const double* chord_all, const int* surface_idx_all,
+    const double* chord_all, const int* component_idx_all,
     int num_vortices, int vortex_idx,
     double core_chord_fraction, double core_width_fraction,
     double beta, const double* weights,
@@ -99,8 +100,8 @@ void analytical_aic_column_gradient_rv(
 void analytical_velocity_row_gradient_rc(
     const double* rv1_all, const double* rv2_all,
     const double* rc,
-    const double* chord_all, const int* surface_idx_all,
-    int num_vortices, int control_surface_idx,
+    const double* chord_all, const int* component_idx_all,
+    int num_vortices, int row_idx, int control_component_idx,
     double core_chord_fraction, double core_width_fraction,
     double beta, const double* gamma, const double* dJ_dV,
     double* d_rc);
@@ -109,7 +110,7 @@ void analytical_velocity_row_gradient_rc(
 void analytical_velocity_column_gradient_rv(
     const double* rv1_all, const double* rv2_all,
     const double* rc_all,
-    const double* chord_all, const int* surface_idx_all,
+    const double* chord_all, const int* component_idx_all,
     int num_vortices, int vortex_idx,
     double core_chord_fraction, double core_width_fraction,
     double beta, double gamma_j, const double* dJ_dV_all,

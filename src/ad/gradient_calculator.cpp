@@ -11,6 +11,7 @@
 #include "vlm/ad/analytical_aic.h"
 #include "vlm/ad/mesh_sensitivity.h"
 #include "vlm/aero/force_calculator.h"
+#include "vlm/geometry/surface.h"
 
 namespace vlm {
 namespace ad {
@@ -390,6 +391,64 @@ FullGradients GradientCalculator::ComputeFlightConditionDerivatives(
 
 namespace {
 
+/// Compute the chord-weighted twist derivative weight.
+/// Returns ∂(strip_twist)/∂(section_twist_radians) for either the left or right section.
+/// This accounts for the atan2 chord-weighted interpolation used by the mesh generator.
+inline double ComputeChordWeightedTwistWeight(
+    double fc,
+    double section_chord_left,
+    double section_chord_right,
+    double section_twist_left,
+    double section_twist_right,
+    bool is_left_section) {
+  double CL = section_chord_left;
+  double CR = section_chord_right;
+  double tL = section_twist_left;
+  double tR = section_twist_right;
+
+  double sinS = (1.0 - fc) * CL * std::sin(tL) + fc * CR * std::sin(tR);
+  double cosS = (1.0 - fc) * CL * std::cos(tL) + fc * CR * std::cos(tR);
+  double denom = sinS * sinS + cosS * cosS;
+
+  if (denom < 1e-30) return is_left_section ? (1.0 - fc) : fc;
+
+  if (is_left_section) {
+    double numer = (1.0 - fc) * CL * (std::cos(tL) * cosS + std::sin(tL) * sinS);
+    return numer / denom;
+  } else {
+    double numer = fc * CR * (std::cos(tR) * cosS + std::sin(tR) * sinS);
+    return numer / denom;
+  }
+}
+
+/// Get spacing types for a surface given its mesh index.
+/// Handles y-duplication mapping from mesh surface to aircraft surface.
+void GetSurfaceSpacing(const Aircraft& aircraft, const VortexLattice& mesh,
+                       Index surface_idx,
+                       SpacingType& spanwise_spacing,
+                       SpacingType& chordwise_spacing) {
+  const auto& surface_info = mesh.GetSurfaceInfo(surface_idx);
+  Index original_surface_idx = surface_info.is_y_duplicated
+                                   ? surface_info.original_surface_index
+                                   : surface_idx;
+
+  Index aircraft_surface_count = 0;
+  for (Index i = 0; i < aircraft.GetNumSurfaces(); ++i) {
+    if (aircraft_surface_count == original_surface_idx) {
+      spanwise_spacing = aircraft.GetSurface(i).GetSpanwiseSpacing();
+      chordwise_spacing = aircraft.GetSurface(i).GetChordwiseSpacing();
+      return;
+    }
+    aircraft_surface_count++;
+    if (aircraft.GetSurface(i).IsYDuplicated()) {
+      aircraft_surface_count++;
+    }
+  }
+  // Fallback to cosine (the default)
+  spanwise_spacing = SpacingType::kCosine;
+  chordwise_spacing = SpacingType::kCosine;
+}
+
 /// Compute the gradient of the RHS with respect to a geometry parameter.
 /// The RHS is b_i = -n_i · V_inf, so ∂b_i/∂θ = -(∂n_i/∂θ) · V_inf
 VecX ComputeRHSGeometrySensitivity(
@@ -409,6 +468,10 @@ VecX ComputeRHSGeometrySensitivity(
   if (surface_idx >= mesh.GetNumSurfaces()) return db_dtheta;
   const SurfaceMeshInfo& surf_info = mesh.GetSurfaceInfo(surface_idx);
 
+  // Get spacing types for this surface
+  SpacingType spanwise_spacing, chordwise_spacing;
+  GetSurfaceSpacing(aircraft, mesh, surface_idx, spanwise_spacing, chordwise_spacing);
+
   if (variable == GeometryVariable::kTwist) {
     SectionStripMapping mapping = BuildSectionStripMapping(
         aircraft, mesh, surface_idx);
@@ -417,15 +480,22 @@ VecX ComputeRHSGeometrySensitivity(
     Index num_chordwise = surf_info.num_chordwise;
 
     auto compute_twist_contribution = [&](Index first_strip, Index num_strips, bool is_left_section) {
+      // Get section chord and twist for chord-weighted interpolation
+      const Strip& first_strip_data = mesh.GetStrip(first_strip);
+      const Strip& last_strip_data = mesh.GetStrip(first_strip + num_strips - 1);
+      double sec_chord_left = first_strip_data.chord_left;
+      double sec_chord_right = last_strip_data.chord_right;
+      double sec_twist_left = first_strip_data.twist_angle_left;
+      double sec_twist_right = last_strip_data.twist_angle_right;
+
       for (Index istrip = 0; istrip < num_strips; ++istrip) {
         Index strip_idx = first_strip + istrip;
         const Strip& strip = mesh.GetStrip(strip_idx);
 
-        double f1, f2;
-        ComputeStripEdgeFractions(istrip, num_strips, &f1, &f2);
-
-        double fc = (f1 + f2) / 2.0;
-        double weight = is_left_section ? (1.0 - fc) : fc;
+        double fc = ComputeStripInterpolationFraction(istrip, num_strips, spanwise_spacing);
+        double weight = ComputeChordWeightedTwistWeight(
+            fc, sec_chord_left, sec_chord_right,
+            sec_twist_left, sec_twist_right, is_left_section);
 
         for (Index ichord = 0; ichord < num_chordwise; ++ichord) {
           Index vor_idx = strip.first_vortex_index + ichord;
@@ -470,13 +540,17 @@ VecX ComputeRHSGeometrySensitivity(
 
     Index num_chordwise = surf_info.num_chordwise;
 
+    // Pre-compute chordwise fractions
+    std::vector<double> xvr_fracs, xcp_fracs;
+    BuildDefaultChordwiseFractions(num_chordwise, xvr_fracs, xcp_fracs, chordwise_spacing);
+
     auto compute_interval_contribution = [&](Index first_strip, Index num_strips, bool is_left_section) {
       for (Index istrip = 0; istrip < num_strips; ++istrip) {
         Index strip_idx = first_strip + istrip;
         const Strip& strip = mesh.GetStrip(strip_idx);
 
         double f1, f2;
-        ComputeStripEdgeFractions(istrip, num_strips, &f1, &f2);
+        ComputeStripEdgeFractions(istrip, num_strips, &f1, &f2, spanwise_spacing);
 
         double w1 = is_left_section ? (1.0 - f1) : f1;
         double w2 = is_left_section ? (1.0 - f2) : f2;
@@ -485,9 +559,7 @@ VecX ComputeRHSGeometrySensitivity(
           Index vor_idx = strip.first_vortex_index + ichord;
           const HorseshoeVortex& vor = mesh.GetVortex(vor_idx);
 
-          double dx = 1.0 / static_cast<double>(num_chordwise);
-          double x1 = ichord * dx;
-          double xvr = x1 + 0.25 * dx;
+          double xvr = xvr_fracs[ichord];
 
           double d_rv1[3] = {0, 0, 0};
           double d_rv2[3] = {0, 0, 0};
@@ -527,13 +599,13 @@ VecX ComputeRHSGeometrySensitivity(
           d_bound_dir.z() = d_rv[2] / bound_len - bound_dir.z() * bd_dot_drv / bound_len;
 
           Vec3 normal = vor.normal_at_control_point;
-          Vec3 chord_dir = bound_dir.cross(normal);
-          double chord_len = chord_dir.norm();
-          if (chord_len < 1e-12) {
-            chord_dir = Vec3(1, 0, 0);
-          } else {
-            chord_dir /= chord_len;
-          }
+
+          // Use the actual solver chord direction (NOT bound_dir × normal)
+          double ang = strip.twist_angle - std::atan(vor.camber_slope_at_control_point);
+          Vec3 chord_dir;
+          chord_dir.x() = std::cos(ang);
+          chord_dir.y() = -std::sin(ang) * strip.trefftz_normal_y;
+          chord_dir.z() = -std::sin(ang) * strip.trefftz_normal_z;
 
           Vec3 d_normal_unnorm = chord_dir.cross(d_bound_dir);
 
@@ -548,6 +620,54 @@ VecX ComputeRHSGeometrySensitivity(
           d_normal.x() = d_normal_unnorm.x() / n_unnorm_len - normal.x() * n_dot_dnu / n_unnorm_len;
           d_normal.y() = d_normal_unnorm.y() / n_unnorm_len - normal.y() * n_dot_dnu / n_unnorm_len;
           d_normal.z() = d_normal_unnorm.z() / n_unnorm_len - normal.z() * n_dot_dnu / n_unnorm_len;
+
+          // Add Trefftz normal derivative contribution for kYle/kZle
+          // When LE positions change, trefftz_normal changes, which rotates chord_dir, which changes normal
+          if (variable == GeometryVariable::kYle || variable == GeometryVariable::kZle) {
+            double dy_s = strip.leading_edge_right.y() - strip.leading_edge_left.y();
+            double dz_s = strip.leading_edge_right.z() - strip.leading_edge_left.z();
+            double yz_mag = std::sqrt(dy_s * dy_s + dz_s * dz_s);
+            if (yz_mag > 1e-12) {
+              double d_dy = (variable == GeometryVariable::kYle) ? (w2 - w1) : 0.0;
+              double d_dz = (variable == GeometryVariable::kZle) ? (w2 - w1) : 0.0;
+              double cross_term = dz_s * d_dy - dy_s * d_dz;
+              double yz_mag3 = yz_mag * yz_mag * yz_mag;
+              double d_es_y = dy_s * cross_term / yz_mag3;
+              double d_es_z = dz_s * cross_term / yz_mag3;
+
+              double angle = strip.twist_angle - std::atan(vor.camber_slope_at_control_point);
+              double sin_a = std::sin(angle);
+
+              if (std::abs(sin_a) > 1e-14 && (std::abs(d_es_y) > 1e-30 || std::abs(d_es_z) > 1e-30)) {
+                double d_ec[3] = {0.0, -sin_a * d_es_y, -sin_a * d_es_z};
+                double eb[3] = {bound_dir.x(), bound_dir.y(), bound_dir.z()};
+                double d_ecxb[3] = {
+                    d_ec[1] * eb[2] - d_ec[2] * eb[1],
+                    d_ec[2] * eb[0] - d_ec[0] * eb[2],
+                    d_ec[0] * eb[1] - d_ec[1] * eb[0]
+                };
+
+                // Compute emag = |ec × eb|
+                double cos_a = std::cos(angle);
+                double es_y = strip.trefftz_normal_y;
+                double es_z = strip.trefftz_normal_z;
+                double ec_full[3] = {cos_a, -sin_a * es_y, -sin_a * es_z};
+                double ecxb_full[3] = {
+                    ec_full[1] * eb[2] - ec_full[2] * eb[1],
+                    ec_full[2] * eb[0] - ec_full[0] * eb[2],
+                    ec_full[0] * eb[1] - ec_full[1] * eb[0]
+                };
+                double emag = std::sqrt(ecxb_full[0]*ecxb_full[0] + ecxb_full[1]*ecxb_full[1] + ecxb_full[2]*ecxb_full[2]);
+
+                if (emag > 1e-12) {
+                  double n_dot_decxb = normal.x() * d_ecxb[0] + normal.y() * d_ecxb[1] + normal.z() * d_ecxb[2];
+                  d_normal.x() += (d_ecxb[0] - normal.x() * n_dot_decxb) / emag;
+                  d_normal.y() += (d_ecxb[1] - normal.y() * n_dot_decxb) / emag;
+                  d_normal.z() += (d_ecxb[2] - normal.z() * n_dot_decxb) / emag;
+                }
+              }
+            }
+          }
 
           Scalar db = -(d_normal.x() * v_inf[0] +
                         d_normal.y() * v_inf[1] +
@@ -589,18 +709,32 @@ Scalar ComputeAICGeometrySensitivityForInterval(
     double core_width_frac,
     double beta,
     GeometryVariable variable,
-    bool is_left_section) {
+    bool is_left_section,
+    SpacingType spanwise_spacing,
+    SpacingType chordwise_spacing) {
 
   Scalar result = 0.0;
   const Index n = arrays.num_vortices;
+
+  // Pre-compute chordwise fractions matching the mesh generator
+  std::vector<double> xvr_fracs, xcp_fracs;
+  BuildDefaultChordwiseFractions(num_chordwise, xvr_fracs, xcp_fracs, chordwise_spacing);
+
+  // Get section chord and twist for chord-weighted twist interpolation
+  const Strip& first_strip_data = mesh.GetStrip(first_strip);
+  const Strip& last_strip_data = mesh.GetStrip(first_strip + num_strips - 1);
+  double sec_chord_left = first_strip_data.chord_left;
+  double sec_chord_right = last_strip_data.chord_right;
+  double sec_twist_left = first_strip_data.twist_angle_left;
+  double sec_twist_right = last_strip_data.twist_angle_right;
 
   for (Index istrip = 0; istrip < num_strips; ++istrip) {
     Index strip_idx = first_strip + istrip;
     const Strip& strip = mesh.GetStrip(strip_idx);
 
     double f1, f2;
-    ComputeStripEdgeFractions(istrip, num_strips, &f1, &f2);
-    double fc = ComputeStripInterpolationFraction(istrip, num_strips);
+    ComputeStripEdgeFractions(istrip, num_strips, &f1, &f2, spanwise_spacing);
+    double fc = ComputeStripInterpolationFraction(istrip, num_strips, spanwise_spacing);
 
     double w1 = is_left_section ? (1.0 - f1) : f1;
     double w2 = is_left_section ? (1.0 - f2) : f2;
@@ -609,10 +743,8 @@ Scalar ComputeAICGeometrySensitivityForInterval(
     for (Index ichord = 0; ichord < num_chordwise; ++ichord) {
       Index vor_idx = strip.first_vortex_index + ichord;
 
-      double dx = 1.0 / static_cast<double>(num_chordwise);
-      double x1 = ichord * dx;
-      double xvr = x1 + 0.25 * dx;
-      double xcp = x1 + 0.75 * dx;
+      double xvr = xvr_fracs[ichord];
+      double xcp = xcp_fracs[ichord];
 
       double d_rv1[3] = {0, 0, 0};
       double d_rv2[3] = {0, 0, 0};
@@ -685,11 +817,102 @@ Scalar ComputeAICGeometrySensitivityForInterval(
             double normal[3] = {ecxb[0]/emag, ecxb[1]/emag, ecxb[2]/emag};
             double demag = normal[0]*decxb[0] + normal[1]*decxb[1] + normal[2]*decxb[2];
 
-            d_normal[0] = wc * (decxb[0] - normal[0]*demag) / emag;
-            d_normal[1] = wc * (decxb[1] - normal[1]*demag) / emag;
-            d_normal[2] = wc * (decxb[2] - normal[2]*demag) / emag;
+            // Use chord-weighted twist derivative with kDegreesToRadians
+            // (section twist parameter is in degrees)
+            double twist_weight = ComputeChordWeightedTwistWeight(
+                fc, sec_chord_left, sec_chord_right,
+                sec_twist_left, sec_twist_right, is_left_section);
+            double twist_scale = twist_weight * kDegreesToRadians;
+
+            d_normal[0] = twist_scale * (decxb[0] - normal[0]*demag) / emag;
+            d_normal[1] = twist_scale * (decxb[1] - normal[1]*demag) / emag;
+            d_normal[2] = twist_scale * (decxb[2] - normal[2]*demag) / emag;
           }
           break;
+        }
+      }
+
+      // For position-affecting variables, compute d_normal from bound direction change
+      if (variable != GeometryVariable::kTwist) {
+        const HorseshoeVortex& vor = mesh.GetVortex(vor_idx);
+        Vec3 bound_vec = vor.bound_vortex_right - vor.bound_vortex_left;
+        double bound_len = bound_vec.norm();
+        if (bound_len > 1e-12) {
+          Vec3 bound_dir = bound_vec / bound_len;
+
+          double d_rv[3] = {d_rv2[0] - d_rv1[0], d_rv2[1] - d_rv1[1], d_rv2[2] - d_rv1[2]};
+          double bd_dot_drv = bound_dir.x() * d_rv[0] + bound_dir.y() * d_rv[1] + bound_dir.z() * d_rv[2];
+
+          Vec3 d_bound_dir;
+          d_bound_dir.x() = d_rv[0] / bound_len - bound_dir.x() * bd_dot_drv / bound_len;
+          d_bound_dir.y() = d_rv[1] / bound_len - bound_dir.y() * bd_dot_drv / bound_len;
+          d_bound_dir.z() = d_rv[2] / bound_len - bound_dir.z() * bd_dot_drv / bound_len;
+
+          Vec3 normal_vec = vor.normal_at_control_point;
+
+          // Use the actual solver chord direction (NOT bound_dir × normal)
+          double ang = strip.twist_angle - std::atan(vor.camber_slope_at_control_point);
+          Vec3 chord_dir;
+          chord_dir.x() = std::cos(ang);
+          chord_dir.y() = -std::sin(ang) * strip.trefftz_normal_y;
+          chord_dir.z() = -std::sin(ang) * strip.trefftz_normal_z;
+
+          Vec3 d_normal_unnorm = chord_dir.cross(d_bound_dir);
+          Vec3 n_unnorm = chord_dir.cross(bound_dir);
+          double n_unnorm_len = n_unnorm.norm();
+          if (n_unnorm_len > 1e-12) {
+            double n_dot_dnu = normal_vec.x() * d_normal_unnorm.x() +
+                               normal_vec.y() * d_normal_unnorm.y() +
+                               normal_vec.z() * d_normal_unnorm.z();
+            d_normal[0] = d_normal_unnorm.x() / n_unnorm_len - normal_vec.x() * n_dot_dnu / n_unnorm_len;
+            d_normal[1] = d_normal_unnorm.y() / n_unnorm_len - normal_vec.y() * n_dot_dnu / n_unnorm_len;
+            d_normal[2] = d_normal_unnorm.z() / n_unnorm_len - normal_vec.z() * n_dot_dnu / n_unnorm_len;
+          }
+
+          // Add Trefftz normal derivative for kYle/kZle
+          if (variable == GeometryVariable::kYle || variable == GeometryVariable::kZle) {
+            double dy_s = strip.leading_edge_right.y() - strip.leading_edge_left.y();
+            double dz_s = strip.leading_edge_right.z() - strip.leading_edge_left.z();
+            double yz_mag = std::sqrt(dy_s * dy_s + dz_s * dz_s);
+            if (yz_mag > 1e-12) {
+              double d_dy = (variable == GeometryVariable::kYle) ? (w2 - w1) : 0.0;
+              double d_dz = (variable == GeometryVariable::kZle) ? (w2 - w1) : 0.0;
+              double cross_term = dz_s * d_dy - dy_s * d_dz;
+              double yz_mag3 = yz_mag * yz_mag * yz_mag;
+              double d_es_y = dy_s * cross_term / yz_mag3;
+              double d_es_z = dz_s * cross_term / yz_mag3;
+
+              double angle = strip.twist_angle - std::atan(vor.camber_slope_at_control_point);
+              double sin_a = std::sin(angle);
+
+              if (std::abs(sin_a) > 1e-14 && (std::abs(d_es_y) > 1e-30 || std::abs(d_es_z) > 1e-30)) {
+                double d_ec[3] = {0.0, -sin_a * d_es_y, -sin_a * d_es_z};
+                double eb[3] = {bound_dir.x(), bound_dir.y(), bound_dir.z()};
+                double d_ecxb_t[3] = {
+                    d_ec[1] * eb[2] - d_ec[2] * eb[1],
+                    d_ec[2] * eb[0] - d_ec[0] * eb[2],
+                    d_ec[0] * eb[1] - d_ec[1] * eb[0]
+                };
+                double cos_a = std::cos(angle);
+                double es_y_val = strip.trefftz_normal_y;
+                double es_z_val = strip.trefftz_normal_z;
+                double ec_f[3] = {cos_a, -sin_a * es_y_val, -sin_a * es_z_val};
+                double ecxb_f[3] = {
+                    ec_f[1] * eb[2] - ec_f[2] * eb[1],
+                    ec_f[2] * eb[0] - ec_f[0] * eb[2],
+                    ec_f[0] * eb[1] - ec_f[1] * eb[0]
+                };
+                double emag_t = std::sqrt(ecxb_f[0]*ecxb_f[0] + ecxb_f[1]*ecxb_f[1] + ecxb_f[2]*ecxb_f[2]);
+                if (emag_t > 1e-12) {
+                  double nv[3] = {normal_vec.x(), normal_vec.y(), normal_vec.z()};
+                  double n_dot_d = nv[0]*d_ecxb_t[0] + nv[1]*d_ecxb_t[1] + nv[2]*d_ecxb_t[2];
+                  d_normal[0] += (d_ecxb_t[0] - nv[0] * n_dot_d) / emag_t;
+                  d_normal[1] += (d_ecxb_t[1] - nv[1] * n_dot_d) / emag_t;
+                  d_normal[2] += (d_ecxb_t[2] - nv[2] * n_dot_d) / emag_t;
+                }
+              }
+            }
+          }
         }
       }
 
@@ -706,9 +929,10 @@ Scalar ComputeAICGeometrySensitivityForInterval(
             &arrays.rc[3 * vor_idx],
             &arrays.normal[3 * vor_idx],
             arrays.chord.data(),
-            arrays.surface_idx.data(),
+            arrays.component_idx.data(),
             static_cast<int>(n),
-            arrays.surface_idx[vor_idx],
+            static_cast<int>(vor_idx),
+            arrays.component_idx[vor_idx],
             core_chord_frac,
             core_width_frac,
             beta,
@@ -736,7 +960,7 @@ Scalar ComputeAICGeometrySensitivityForInterval(
             arrays.rc.data(),
             arrays.normal.data(),
             arrays.chord.data(),
-            arrays.surface_idx.data(),
+            arrays.component_idx.data(),
             static_cast<int>(n),
             static_cast<int>(vor_idx),
             core_chord_frac,
@@ -784,6 +1008,9 @@ Scalar ComputeAICGeometrySensitivity(
   double core_chord_frac = mesh.GetVortexCoreRadiusChordFraction();
   double core_width_frac = mesh.GetVortexCoreRadiusWidthFraction();
 
+  SpacingType spanwise_spacing, chordwise_spacing;
+  GetSurfaceSpacing(aircraft, mesh, surface_idx, spanwise_spacing, chordwise_spacing);
+
   Scalar result = 0.0;
 
   if (section_idx < mapping.num_sections - 1) {
@@ -793,7 +1020,7 @@ Scalar ComputeAICGeometrySensitivity(
           mesh, arrays, lambda, gamma,
           first_strip, num_strips, num_chordwise,
           core_chord_frac, core_width_frac, beta,
-          variable, true);
+          variable, true, spanwise_spacing, chordwise_spacing);
     }
   }
 
@@ -804,7 +1031,7 @@ Scalar ComputeAICGeometrySensitivity(
           mesh, arrays, lambda, gamma,
           first_strip, num_strips, num_chordwise,
           core_chord_frac, core_width_frac, beta,
-          variable, false);
+          variable, false, spanwise_spacing, chordwise_spacing);
     }
   }
 
@@ -824,18 +1051,24 @@ Scalar ComputeVelocityKernelGeometrySensitivityForInterval(
     double core_width_frac,
     double beta,
     GeometryVariable variable,
-    bool is_left_section) {
+    bool is_left_section,
+    SpacingType spanwise_spacing,
+    SpacingType chordwise_spacing) {
 
   Scalar result = 0.0;
   const Index n = arrays.num_vortices;
+
+  // Pre-compute chordwise fractions matching the mesh generator
+  std::vector<double> xvr_fracs, xcp_fracs;
+  BuildDefaultChordwiseFractions(num_chordwise, xvr_fracs, xcp_fracs, chordwise_spacing);
 
   for (Index istrip = 0; istrip < num_strips; ++istrip) {
     Index strip_idx = first_strip + istrip;
     const Strip& strip = mesh.GetStrip(strip_idx);
 
     double f1, f2;
-    ComputeStripEdgeFractions(istrip, num_strips, &f1, &f2);
-    double fc = ComputeStripInterpolationFraction(istrip, num_strips);
+    ComputeStripEdgeFractions(istrip, num_strips, &f1, &f2, spanwise_spacing);
+    double fc = ComputeStripInterpolationFraction(istrip, num_strips, spanwise_spacing);
 
     double w1 = is_left_section ? (1.0 - f1) : f1;
     double w2 = is_left_section ? (1.0 - f2) : f2;
@@ -844,10 +1077,8 @@ Scalar ComputeVelocityKernelGeometrySensitivityForInterval(
     for (Index ichord = 0; ichord < num_chordwise; ++ichord) {
       Index vor_idx = strip.first_vortex_index + ichord;
 
-      double dx = 1.0 / static_cast<double>(num_chordwise);
-      double x1 = ichord * dx;
-      double xvr = x1 + 0.25 * dx;
-      double xcp = x1 + 0.75 * dx;
+      double xvr = xvr_fracs[ichord];
+      double xcp = xcp_fracs[ichord];
 
       double d_rv1[3] = {0, 0, 0};
       double d_rv2[3] = {0, 0, 0};
@@ -888,9 +1119,10 @@ Scalar ComputeVelocityKernelGeometrySensitivityForInterval(
             arrays.rv2.data(),
             &arrays.rc[3 * vor_idx],
             arrays.chord.data(),
-            arrays.surface_idx.data(),
+            arrays.component_idx.data(),
             static_cast<int>(n),
-            arrays.surface_idx[vor_idx],
+            static_cast<int>(vor_idx),
+            arrays.component_idx[vor_idx],
             core_chord_frac,
             core_width_frac,
             beta,
@@ -912,7 +1144,7 @@ Scalar ComputeVelocityKernelGeometrySensitivityForInterval(
             arrays.rv2.data(),
             arrays.rc.data(),
             arrays.chord.data(),
-            arrays.surface_idx.data(),
+            arrays.component_idx.data(),
             static_cast<int>(n),
             static_cast<int>(vor_idx),
             core_chord_frac,
@@ -954,6 +1186,9 @@ Scalar ComputeVelocityKernelGeometrySensitivity(
   double core_chord_frac = mesh.GetVortexCoreRadiusChordFraction();
   double core_width_frac = mesh.GetVortexCoreRadiusWidthFraction();
 
+  SpacingType spanwise_spacing, chordwise_spacing;
+  GetSurfaceSpacing(aircraft, mesh, surface_idx, spanwise_spacing, chordwise_spacing);
+
   Scalar result = 0.0;
 
   if (section_idx < mapping.num_sections - 1) {
@@ -963,7 +1198,7 @@ Scalar ComputeVelocityKernelGeometrySensitivity(
           mesh, arrays, dJ_dV, gamma,
           first_strip, num_strips, num_chordwise,
           core_chord_frac, core_width_frac, beta,
-          variable, true);
+          variable, true, spanwise_spacing, chordwise_spacing);
     }
   }
 
@@ -974,7 +1209,7 @@ Scalar ComputeVelocityKernelGeometrySensitivity(
           mesh, arrays, dJ_dV, gamma,
           first_strip, num_strips, num_chordwise,
           core_chord_frac, core_width_frac, beta,
-          variable, false);
+          variable, false, spanwise_spacing, chordwise_spacing);
     }
   }
 
@@ -1033,6 +1268,14 @@ AeroGradients ComputeExplicitForceTerm(
     circulation[i] = solution.circulation(i);
   }
 
+  // Get spacing types
+  SpacingType spanwise_spacing, chordwise_spacing;
+  GetSurfaceSpacing(aircraft, mesh, surface_idx, spanwise_spacing, chordwise_spacing);
+
+  // Pre-compute chordwise fractions
+  std::vector<double> xvr_fracs, xcp_fracs;
+  BuildDefaultChordwiseFractions(num_chordwise, xvr_fracs, xcp_fracs, chordwise_spacing);
+
   // Initialize perturbation arrays to zero
   std::vector<double> d_bound_left(3 * n, 0.0);
   std::vector<double> d_bound_right(3 * n, 0.0);
@@ -1045,8 +1288,8 @@ AeroGradients ComputeExplicitForceTerm(
       const Strip& strip = mesh.GetStrip(strip_idx);
 
       double f1, f2;
-      ComputeStripEdgeFractions(istrip, num_strips, &f1, &f2);
-      double fc = ComputeStripInterpolationFraction(istrip, num_strips);
+      ComputeStripEdgeFractions(istrip, num_strips, &f1, &f2, spanwise_spacing);
+      double fc = ComputeStripInterpolationFraction(istrip, num_strips, spanwise_spacing);
 
       double w1 = is_left_section ? (1.0 - f1) : f1;
       double w2 = is_left_section ? (1.0 - f2) : f2;
@@ -1055,10 +1298,8 @@ AeroGradients ComputeExplicitForceTerm(
       for (Index ichord = 0; ichord < num_chordwise; ++ichord) {
         Index vor_idx = strip.first_vortex_index + ichord;
 
-        double dx = 1.0 / static_cast<double>(num_chordwise);
-        double x1 = ichord * dx;
-        double xvr = x1 + 0.25 * dx;
-        double xcp = x1 + 0.75 * dx;
+        double xvr = xvr_fracs[ichord];
+        double xcp = xcp_fracs[ichord];
 
         switch (variable) {
           case GeometryVariable::kChord:

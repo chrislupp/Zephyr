@@ -125,13 +125,25 @@ void ApplyVelocityKernelTranspose(
 
     double sum = 0.0;
 
+    Scalar panel_width_j = (vor_j.bound_vortex_right - vor_j.bound_vortex_left).norm();
+
     for (Index i = 0; i < n; ++i) {
       const HorseshoeVortex& vor_i = mesh.GetVortex(i);
 
       Vec3 field_point = vor_i.control_point;
 
-      Scalar dx = (vor_j.bound_vortex_right - vor_j.bound_vortex_left).norm();
-      Scalar core = 0.05 * dx;
+      // Match solver's core radius logic:
+      // same_component → tiny core (0.0001 * width)
+      // different_component → larger core
+      bool same_component = (vor_i.component_index == vor_j.component_index);
+      Scalar core;
+      if (same_component) {
+        core = 0.0001 * panel_width_j;
+      } else {
+        Scalar chord_core = mesh.GetVortexCoreRadiusChordFraction() * vor_j.local_chord;
+        Scalar width_core = mesh.GetVortexCoreRadiusWidthFraction() * panel_width_j;
+        core = std::max(chord_core, width_core);
+      }
 
       bool include_bound = (i != j);
 
