@@ -179,6 +179,7 @@ SolutionState VortexLatticeSolver::Solve(const FlightCondition& condition) {
   if (std::abs(condition.mach - current_mach_) > kEpsilon) {
     current_mach_ = condition.mach;
     aic_valid_ = false;
+    unit_responses_valid_ = false;  // AIC changed, so responses are invalid too
   }
 
   // Ensure unit responses are computed

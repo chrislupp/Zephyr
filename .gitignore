@@ -52,6 +52,9 @@ compile_commands.json
 *.mod
 *.smod
 
+# Caches
+.cache/
+
 # IDE and editor files
 .idea/
 .vscode/
