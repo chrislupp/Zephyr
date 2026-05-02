@@ -87,7 +87,7 @@ TEST_F(GradientCalculatorTest, AlphaDerivativesMatchStabilityDerivatives) {
   // - StabilityDerivatives computes linear derivatives assuming CD ~ CL²
   // - Finite differences compute actual CD change including the CL² effect
   // The two methods measure different quantities, so we skip this comparison
-  // for now. When Enzyme is working, we can ensure consistency.
+  // for now. The analytical adjoint method handles this correctly.
 }
 
 TEST_F(GradientCalculatorTest, BetaDerivativesMatchStabilityDerivatives) {
@@ -262,11 +262,8 @@ TEST_F(GradientCalculatorTest, FullGradientsComputation) {
 }
 
 TEST_F(GradientCalculatorTest, IsUsingEnzymeReturnsCorrectValue) {
-#ifdef VLM_USE_ENZYME
-  EXPECT_TRUE(ad::GradientCalculator::IsUsingEnzyme());
-#else
+  // Enzyme has been replaced with purely analytical derivatives
   EXPECT_FALSE(ad::GradientCalculator::IsUsingEnzyme());
-#endif
 }
 
 TEST_F(GradientCalculatorTest, DerivativesAtZeroAlpha) {

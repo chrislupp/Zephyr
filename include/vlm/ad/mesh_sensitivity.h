@@ -332,7 +332,7 @@ SectionStripMapping BuildSectionStripMapping(
 /// @brief Extract mesh arrays for gradient computation.
 ///
 /// Extracts raw position and normal arrays from VortexLattice into
-/// contiguous arrays suitable for Enzyme differentiation.
+/// contiguous arrays suitable for analytical differentiation.
 ///
 /// @param mesh The vortex lattice mesh
 /// @return Extracted mesh arrays

@@ -136,6 +136,76 @@ class OptVLGradientValidationTest : public ::testing::Test {
   // Relax tolerance to 5% for adjoint method comparisons
   const double rel_tol_ = 0.05;  // 5% relative error (adjoint vs FD)
   const double abs_tol_ = 1e-4;
+
+  /// Compute section gradient using finite differences on full system
+  ad::AeroGradients ComputeSectionGradientFD(
+      const FlightCondition& condition,
+      Index surface_idx,
+      Index section_idx,
+      ad::GeometryVariable var) {
+    const double h = 1e-6;
+
+    // Perturb aircraft geometry
+    auto perturb_aircraft = [&](double delta) -> Aircraft {
+      Aircraft perturbed = aircraft_;
+      Surface& surf = perturbed.GetSurfacesMutable()[surface_idx];
+      Section& sec = surf.GetSectionMutable(section_idx);
+
+      switch (var) {
+        case ad::GeometryVariable::kChord:
+          sec.SetChord(sec.GetChord() + delta);
+          break;
+        case ad::GeometryVariable::kTwist:
+          sec.SetTwistAngle(sec.GetTwistAngle() + delta);
+          break;
+        case ad::GeometryVariable::kXle: {
+          Vec3 pos = sec.GetLeadingEdgePosition();
+          pos.x() += delta;
+          sec.SetLeadingEdgePosition(pos);
+          break;
+        }
+        case ad::GeometryVariable::kYle: {
+          Vec3 pos = sec.GetLeadingEdgePosition();
+          pos.y() += delta;
+          sec.SetLeadingEdgePosition(pos);
+          break;
+        }
+        case ad::GeometryVariable::kZle: {
+          Vec3 pos = sec.GetLeadingEdgePosition();
+          pos.z() += delta;
+          sec.SetLeadingEdgePosition(pos);
+          break;
+        }
+      }
+      return perturbed;
+    };
+
+    // Solve at perturbed geometries
+    Aircraft aircraft_plus = perturb_aircraft(+h);
+    Aircraft aircraft_minus = perturb_aircraft(-h);
+
+    VortexLatticeSolver solver_plus, solver_minus;
+    solver_plus.SetAircraft(aircraft_plus);
+    solver_minus.SetAircraft(aircraft_minus);
+
+    SolutionState sol_plus = solver_plus.Solve(condition);
+    SolutionState sol_minus = solver_minus.Solve(condition);
+
+    ForceCalculator calc;
+    AerodynamicResults res_plus =
+        calc.ComputeForces(aircraft_plus, solver_plus.GetMesh(), sol_plus, condition);
+    AerodynamicResults res_minus =
+        calc.ComputeForces(aircraft_minus, solver_minus.GetMesh(), sol_minus, condition);
+
+    ad::AeroGradients result;
+    result.dCL = (res_plus.CL - res_minus.CL) / (2 * h);
+    result.dCD = (res_plus.CD - res_minus.CD) / (2 * h);
+    result.dCY = (res_plus.CY - res_minus.CY) / (2 * h);
+    result.dCl = (res_plus.Cl - res_minus.Cl) / (2 * h);
+    result.dCm = (res_plus.Cm - res_minus.Cm) / (2 * h);
+    result.dCn = (res_plus.Cn - res_minus.Cn) / (2 * h);
+    return result;
+  }
 };
 
 // ============================================================================
@@ -268,6 +338,69 @@ TEST_F(OptVLGradientValidationTest, GeometryGradientsVsFiniteDifferences) {
     EXPECT_TRUE(std::isfinite(section.xle_derivs.dCL));
     EXPECT_TRUE(std::isfinite(section.yle_derivs.dCL));
     EXPECT_TRUE(std::isfinite(section.zle_derivs.dCL));
+  }
+}
+
+TEST_F(OptVLGradientValidationTest, AdjointGeometryGradientMatchesFD) {
+  // This is the key validation test: adjoint geometry gradients should match FD
+  FlightCondition condition;
+  condition.alpha = 5.0 * kDegreesToRadians;
+  condition.mach = 0.3;
+
+  // Test multiple geometry variables and sections
+  std::vector<ad::GeometryVariable> vars = {
+      ad::GeometryVariable::kChord,
+      ad::GeometryVariable::kTwist,
+      ad::GeometryVariable::kXle,
+      ad::GeometryVariable::kYle,
+      ad::GeometryVariable::kZle
+  };
+
+  // Test on wing surface (surface 0)
+  Index surface_idx = 0;
+
+  // FD step and tolerance
+  // Adjoint vs FD can have more error than pure FD vs FD
+  const double rel_tol = 0.05;  // 5% relative tolerance
+  const double abs_tol = 1e-4;  // Absolute tolerance for near-zero values
+
+  for (auto var : vars) {
+    for (Index section_idx = 0; section_idx < 2; ++section_idx) {
+      // Get adjoint gradient (this is what we're testing)
+      ad::AeroGradients adjoint = grad_calc_.ComputeSectionGradient(
+          condition, surface_idx, section_idx, var);
+
+      // Get FD gradient for comparison
+      ad::AeroGradients fd = ComputeSectionGradientFD(
+          condition, surface_idx, section_idx, var);
+
+      // Check CL gradient
+      if (std::abs(fd.dCL) > abs_tol || std::abs(adjoint.dCL) > abs_tol) {
+        double rel_err = RelativeError(adjoint.dCL, fd.dCL, abs_tol);
+        EXPECT_LT(rel_err, rel_tol)
+            << "CL gradient mismatch for var=" << static_cast<int>(var)
+            << " section=" << section_idx
+            << ": adjoint=" << adjoint.dCL << " fd=" << fd.dCL;
+      }
+
+      // Check CD gradient
+      if (std::abs(fd.dCD) > abs_tol || std::abs(adjoint.dCD) > abs_tol) {
+        double rel_err = RelativeError(adjoint.dCD, fd.dCD, abs_tol);
+        EXPECT_LT(rel_err, rel_tol)
+            << "CD gradient mismatch for var=" << static_cast<int>(var)
+            << " section=" << section_idx
+            << ": adjoint=" << adjoint.dCD << " fd=" << fd.dCD;
+      }
+
+      // Check Cm gradient
+      if (std::abs(fd.dCm) > abs_tol || std::abs(adjoint.dCm) > abs_tol) {
+        double rel_err = RelativeError(adjoint.dCm, fd.dCm, abs_tol);
+        EXPECT_LT(rel_err, rel_tol)
+            << "Cm gradient mismatch for var=" << static_cast<int>(var)
+            << " section=" << section_idx
+            << ": adjoint=" << adjoint.dCm << " fd=" << fd.dCm;
+      }
+    }
   }
 }
 

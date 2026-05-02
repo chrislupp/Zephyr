@@ -107,7 +107,7 @@ struct ForceGradients {
 
 /// @brief Compute force gradients with respect to circulation.
 ///
-/// Uses finite differences initially; will use Enzyme AD when available.
+/// Uses analytical derivatives of the Kutta-Joukowski force kernel.
 ///
 /// @param mesh Vortex lattice mesh
 /// @param solution Forward solution state
