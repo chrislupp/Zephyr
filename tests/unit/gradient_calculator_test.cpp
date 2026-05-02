@@ -261,11 +261,6 @@ TEST_F(GradientCalculatorTest, FullGradientsComputation) {
   EXPECT_GT(grads.mach_derivs.dCL, 0.0);
 }
 
-TEST_F(GradientCalculatorTest, IsUsingEnzymeReturnsCorrectValue) {
-  // Enzyme has been replaced with purely analytical derivatives
-  EXPECT_FALSE(ad::GradientCalculator::IsUsingEnzyme());
-}
-
 TEST_F(GradientCalculatorTest, DerivativesAtZeroAlpha) {
   FlightCondition condition;
   condition.alpha = 0.0;

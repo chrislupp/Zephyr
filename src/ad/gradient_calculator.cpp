@@ -301,10 +301,6 @@ void GradientCalculator::SetReferencePoint(const Vec3& ref) {
   impl_->solver_.SetReferencePoint(ref);
 }
 
-bool GradientCalculator::IsUsingEnzyme() {
-  return false;  // Purely analytical derivatives, no Enzyme dependency
-}
-
 void GradientCalculator::SetFiniteDiffStep(Scalar) {
   // No-op: analytical derivatives don't use finite differences
 }

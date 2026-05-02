@@ -181,9 +181,6 @@ class GradientCalculator {
       Index section_index,
       GeometryVariable variable);
 
-  /// @brief Returns false (Enzyme is no longer used; purely analytical).
-  static bool IsUsingEnzyme();
-
   /// @brief No-op (analytical derivatives don't use finite differences).
   void SetFiniteDiffStep(Scalar step);
 
