@@ -551,6 +551,18 @@ void VortexLattice::GenerateDuplicateSurfaceMesh(Index original_surface_index,
       new_vor.control_point.y() = -orig_vor.control_point.y() + y_offset;
       new_vor.control_point.z() = orig_vor.control_point.z();
 
+      // Mirror normal: reflect y-component of original normal
+      new_vor.normal_at_control_point.x() =
+          orig_vor.normal_at_control_point.x();
+      new_vor.normal_at_control_point.y() =
+          -orig_vor.normal_at_control_point.y();
+      new_vor.normal_at_control_point.z() =
+          orig_vor.normal_at_control_point.z();
+
+      new_vor.normal_at_vortex.x() = orig_vor.normal_at_vortex.x();
+      new_vor.normal_at_vortex.y() = -orig_vor.normal_at_vortex.y();
+      new_vor.normal_at_vortex.z() = orig_vor.normal_at_vortex.z();
+
       new_vor.camber_slope_at_control_point =
           orig_vor.camber_slope_at_control_point;
       new_vor.camber_slope_at_vortex = orig_vor.camber_slope_at_vortex;

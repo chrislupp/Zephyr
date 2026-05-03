@@ -21,10 +21,11 @@ set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 # Find dependencies
 find_package(Eigen3 5.0 CONFIG REQUIRED)
 
-# Collect source files
+# Collect source files (exclude philote subdirectory, built separately)
 file(GLOB_RECURSE VLM_SOURCES
     ${CMAKE_CURRENT_SOURCE_DIR}/src/*.cpp
 )
+list(FILTER VLM_SOURCES EXCLUDE REGEX ".*/src/philote/.*")
 
 # Main library target
 add_library(vlm ${VLM_SOURCES})
@@ -98,6 +99,37 @@ endif()
 # Examples
 if(VLM_BUILD_EXAMPLES)
     add_subdirectory(examples)
+endif()
+
+# Philote MDO discipline server (optional)
+option(VLM_BUILD_PHILOTE "Build Philote MDO discipline server" OFF)
+if(VLM_BUILD_PHILOTE)
+    find_package(Protobuf CONFIG QUIET)
+    if(NOT Protobuf_FOUND)
+        find_package(Protobuf REQUIRED)
+    endif()
+    find_package(gRPC CONFIG REQUIRED)
+    find_package(PhiloteCpp REQUIRED)
+    # Ensure correct protobuf headers are found before any Homebrew system includes
+    get_target_property(_proto_inc protobuf::libprotobuf INTERFACE_INCLUDE_DIRECTORIES)
+
+    add_executable(vlm_philote_server
+        src/philote/vlm_discipline.cpp
+        src/philote/vlm_server.cpp
+    )
+    target_link_libraries(vlm_philote_server PRIVATE vlm PhiloteCpp::PhiloteCpp)
+    if(_proto_inc)
+        target_include_directories(vlm_philote_server BEFORE PRIVATE ${_proto_inc})
+    endif()
+
+    add_executable(mesh_philote_server
+        src/philote/mesh_discipline.cpp
+        src/philote/mesh_server.cpp
+    )
+    target_link_libraries(mesh_philote_server PRIVATE vlm PhiloteCpp::PhiloteCpp)
+    if(_proto_inc)
+        target_include_directories(mesh_philote_server BEFORE PRIVATE ${_proto_inc})
+    endif()
 endif()
 
 # Installation

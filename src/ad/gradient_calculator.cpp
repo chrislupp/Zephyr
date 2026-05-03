@@ -1608,6 +1608,14 @@ void GradientCalculator::SetMesh(const MeshInput& input) {
   impl_->mesh_set_ = true;
   impl_->aircraft_set_ = false;
   impl_->solution_cached_ = false;
+
+  // Sync aircraft reference quantities so AdjointDerivatives (which uses
+  // aircraft_ for ComputeForceGradients and ComputeExplicitDerivatives)
+  // picks up the correct reference area and moment reference point.
+  impl_->aircraft_.SetReferenceArea(input.reference.reference_area);
+  impl_->aircraft_.SetReferenceChord(input.reference.reference_chord);
+  impl_->aircraft_.SetReferenceSpan(input.reference.reference_span);
+  impl_->aircraft_.SetMomentReferencePoint(input.reference.moment_reference_point);
 }
 
 std::vector<SurfaceMeshNodeGradients> GradientCalculator::ComputeMeshNodeGradients(
@@ -1874,17 +1882,18 @@ std::vector<SurfaceMeshNodeGradients> GradientCalculator::ComputeMeshNodeGradien
     // On first objective, initialize the result structures
     if (obj == 0) {
       result.resize(mesh_input.surfaces.size());
-      Index vortex_offset = 0;
       for (size_t s = 0; s < mesh_input.surfaces.size(); ++s) {
         const auto& sm = mesh_input.surfaces[s];
         result[s].Init(sm.name, sm.nx, sm.ny);
-        vortex_offset += sm.nx * sm.ny;
       }
     }
 
-    Index vortex_offset = 0;
+    // Build mapping from input surface index to solver surface index.
+    // Each input surface creates one solver surface, plus one mirror if y-duplicated.
+    Index solver_surf_idx = 0;
     for (size_t s = 0; s < mesh_input.surfaces.size(); ++s) {
       const auto& sm = mesh_input.surfaces[s];
+      const SurfaceMeshInfo& sinfo = mesh.GetSurfaceInfo(solver_surf_idx);
 
       MeshNodeGradients* target = nullptr;
       switch (obj) {
@@ -1896,10 +1905,21 @@ std::vector<SurfaceMeshNodeGradients> GradientCalculator::ComputeMeshNodeGradien
         case 5: target = &result[s].dCn; break;
       }
 
+      // Propagate original surface vortex gradients to nodes
       PropagateMeshGradientsToNodes(
-          mesh_grads, sm, vortex_offset, sm.nx, sm.ny, *target);
+          mesh_grads, sm, sinfo.first_vortex_index, sm.nx, sm.ny, *target);
 
-      vortex_offset += sm.nx * sm.ny;
+      ++solver_surf_idx;
+
+      // For y-duplicated surfaces, also propagate the mirror vortex gradients
+      // back to the original nodes (with y-reflection and left/right swap)
+      if (sm.y_duplicated) {
+        const SurfaceMeshInfo& minfo = mesh.GetSurfaceInfo(solver_surf_idx);
+        PropagateMirrorMeshGradientsToNodes(
+            mesh_grads, sm, minfo.first_vortex_index,
+            sm.y_duplicate_plane, sm.nx, sm.ny, *target);
+        ++solver_surf_idx;
+      }
     }
   }
 
