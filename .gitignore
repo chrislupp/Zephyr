@@ -110,6 +110,10 @@ docs/_build/
 docs/html/
 docs/latex/
 doxygen/
+docs/node_modules/
+docs/build/
+docs/.docusaurus/
+docs/.cache-loader/
 
 # Example output directories
 *_out/

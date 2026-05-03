@@ -1,0 +1,23 @@
+---
+Checks: >
+  -*,
+  bugprone-*,
+  clang-analyzer-*,
+  modernize-*,
+  performance-*,
+  -bugprone-easily-swappable-parameters,
+  -bugprone-narrowing-conversions,
+  -bugprone-implicit-widening-of-multiplication-result,
+  -clang-analyzer-optin.performance.Padding,
+  -clang-analyzer-optin.portability.UnixAPI,
+  -modernize-use-trailing-return-type,
+  -modernize-avoid-c-arrays,
+  -performance-enum-size
+
+WarningsAsErrors: '*'
+
+HeaderFilterRegex: 'include/pegasus/.*'
+
+CheckOptions:
+  - key: modernize-use-auto.MinTypeNameLength
+    value: 5
