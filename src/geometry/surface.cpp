@@ -1,5 +1,5 @@
 /*
-    Project VLM
+    Project Pegasus
     Version 0.0.0
 
     Copyright 2024, Christopher A. Lupp
@@ -18,12 +18,12 @@
     along with this program.  If not, see <https://www.gnu.org/licenses/>.
 */
 
-#include "vlm/geometry/surface.h"
+#include "pegasus/geometry/surface.h"
 
 #include <cmath>
 #include <utility>
 
-namespace vlm {
+namespace pegasus {
 
 Surface::Surface(std::string name) : name_(std::move(name)) {}
 
@@ -116,4 +116,4 @@ Scalar Surface::ComputeSpan() const {
     return span;
 }
 
-}  // namespace vlm
+}  // namespace pegasus

@@ -1,5 +1,5 @@
 /*
-    Project VLM
+    Project Pegasus
     Version 0.0.0
 
     Copyright 2024, Christopher A. Lupp
@@ -18,13 +18,13 @@
     along with this program.  If not, see <https://www.gnu.org/licenses/>.
 */
 
-#include "vlm/geometry/aircraft.h"
+#include "pegasus/geometry/aircraft.h"
 
 #include <algorithm>
 #include <set>
 #include <utility>
 
-namespace vlm {
+namespace pegasus {
 
 Aircraft::Aircraft(std::string title) : title_(std::move(title)) {}
 
@@ -109,4 +109,4 @@ Scalar Aircraft::ComputeTotalSpan() const {
     return max_span;
 }
 
-}  // namespace vlm
+}  // namespace pegasus

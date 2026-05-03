@@ -1,5 +1,5 @@
 /*
-    Project VLM
+    Project Pegasus
     Version 0.0.0
 
     Copyright 2024, Christopher A. Lupp
@@ -18,18 +18,18 @@
     along with this program.  If not, see <https://www.gnu.org/licenses/>.
 */
 
-#include "vlm/visualization/vtk_export.h"
+#include "pegasus/visualization/vtk_export.h"
 
-#include "vlm/aero/aerodynamic_results.h"
-#include "vlm/solver/horseshoe_vortex.h"
-#include "vlm/solver/vortex_lattice.h"
-#include "vlm/solver/vortex_lattice_solver.h"
+#include "pegasus/aero/aerodynamic_results.h"
+#include "pegasus/solver/horseshoe_vortex.h"
+#include "pegasus/solver/vortex_lattice.h"
+#include "pegasus/solver/vortex_lattice_solver.h"
 
 #include <filesystem>
 #include <map>
 #include <tuple>
 
-#ifdef VLM_USE_VTK
+#ifdef PEGASUS_USE_VTK
 #include <vtkCellArray.h>
 #include <vtkCellData.h>
 #include <vtkDoubleArray.h>
@@ -44,10 +44,10 @@
 #include <vtkXMLUnstructuredGridWriter.h>
 #endif
 
-namespace vlm {
+namespace pegasus {
 
 bool VtkExporter::IsAvailable() {
-#ifdef VLM_USE_VTK
+#ifdef PEGASUS_USE_VTK
     return true;
 #else
     return false;
@@ -58,7 +58,7 @@ bool VtkExporter::ExportSurfaceMesh(const std::string& filename,
                                     const VortexLattice& mesh,
                                     const SolutionState& solution,
                                     const VtkExportOptions& options) {
-#ifdef VLM_USE_VTK
+#ifdef PEGASUS_USE_VTK
     if (!solution.is_valid || mesh.GetNumVortices() == 0) {
         return false;
     }
@@ -213,7 +213,7 @@ bool VtkExporter::ExportSpanwiseDistributions(const std::string& filename,
                                               const VortexLattice& mesh,
                                               const AerodynamicResults& results,
                                               const VtkExportOptions& options) {
-#ifdef VLM_USE_VTK
+#ifdef PEGASUS_USE_VTK
     if (!results.is_valid) {
         return false;
     }
@@ -334,7 +334,7 @@ bool VtkExporter::ExportWakeGeometry(const std::string& filename,
                                      const FlightCondition& condition,
                                      Scalar reference_chord,
                                      const VtkExportOptions& options) {
-#ifdef VLM_USE_VTK
+#ifdef PEGASUS_USE_VTK
     if (!solution.is_valid || mesh.GetNumStrips() == 0) {
         return false;
     }
@@ -427,7 +427,7 @@ bool VtkExporter::ExportVelocityField(const std::string& filename,
                                       const SolutionState& solution,
                                       const FlightCondition& condition,
                                       const VtkExportOptions& options) {
-#ifdef VLM_USE_VTK
+#ifdef PEGASUS_USE_VTK
     if (!solution.is_valid || mesh.GetNumVortices() == 0) {
         return false;
     }
@@ -509,7 +509,7 @@ bool VtkExporter::ExportAll(const std::string& directory,
                             const FlightCondition& condition,
                             Scalar reference_chord,
                             const VtkExportOptions& options) {
-#ifdef VLM_USE_VTK
+#ifdef PEGASUS_USE_VTK
     // Create directory if needed
     std::filesystem::create_directories(directory);
 
@@ -553,4 +553,4 @@ bool VtkExporter::ExportAll(const std::string& directory,
 #endif
 }
 
-}  // namespace vlm
+}  // namespace pegasus

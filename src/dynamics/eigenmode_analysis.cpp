@@ -1,5 +1,5 @@
 /*
-    Project VLM
+    Project Pegasus
     Version 0.0.0
 
     Copyright 2024, Christopher A. Lupp
@@ -18,14 +18,14 @@
     along with this program.  If not, see <https://www.gnu.org/licenses/>.
 */
 
-#include "vlm/dynamics/eigenmode_analysis.h"
+#include "pegasus/dynamics/eigenmode_analysis.h"
 
 #include <algorithm>
 #include <cmath>
 
 #include <Eigen/Eigenvalues>
 
-namespace vlm {
+namespace pegasus {
 
 namespace {
 
@@ -409,4 +409,4 @@ ModeType EigenmodeAnalysis::ClassifyMode(const Eigenmode& mode,
     return ModeType::kOther;
 }
 
-}  // namespace vlm
+}  // namespace pegasus

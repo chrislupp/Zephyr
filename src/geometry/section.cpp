@@ -1,5 +1,5 @@
 /*
-    Project VLM
+    Project Pegasus
     Version 0.0.0
 
     Copyright 2024, Christopher A. Lupp
@@ -18,11 +18,11 @@
     along with this program.  If not, see <https://www.gnu.org/licenses/>.
 */
 
-#include "vlm/geometry/section.h"
+#include "pegasus/geometry/section.h"
 
 #include <utility>
 
-namespace vlm {
+namespace pegasus {
 
 namespace {
 // Static flat plate airfoil for sections without custom airfoil
@@ -50,4 +50,4 @@ Airfoil& Section::GetAirfoilMutable() {
     return *airfoil_;
 }
 
-}  // namespace vlm
+}  // namespace pegasus

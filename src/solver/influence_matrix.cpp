@@ -1,5 +1,5 @@
 /*
-    Project VLM
+    Project Pegasus
     Version 0.0.0
 
     Copyright 2024, Christopher A. Lupp
@@ -18,12 +18,12 @@
     along with this program.  If not, see <https://www.gnu.org/licenses/>.
 */
 
-#include "vlm/solver/influence_matrix.h"
+#include "pegasus/solver/influence_matrix.h"
 
 #include <algorithm>
 #include <cmath>
 
-namespace vlm {
+namespace pegasus {
 
 namespace {
 
@@ -332,4 +332,4 @@ Vec3 InfluenceMatrixBuilder::ComputeInducedVelocity(
     return velocity;
 }
 
-}  // namespace vlm
+}  // namespace pegasus

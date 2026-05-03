@@ -1,5 +1,5 @@
 /*
-    Project VLM
+    Project Pegasus
     Version 0.0.0
 
     Copyright 2024, Christopher A. Lupp
@@ -18,14 +18,14 @@
     along with this program.  If not, see <https://www.gnu.org/licenses/>.
 */
 
-#include "vlm/trim/trim_solver.h"
+#include "pegasus/trim/trim_solver.h"
 
-#include "vlm/aero/force_calculator.h"
+#include "pegasus/aero/force_calculator.h"
 
 #include <cmath>
 #include <iostream>
 
-namespace vlm {
+namespace pegasus {
 
 namespace {
 
@@ -423,4 +423,4 @@ Index TrimSolver::GetVariableIndex(
     return idx;
 }
 
-}  // namespace vlm
+}  // namespace pegasus

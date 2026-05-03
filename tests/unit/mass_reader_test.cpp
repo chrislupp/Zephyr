@@ -1,5 +1,5 @@
 /*
-    Project VLM
+    Project Pegasus
     Version 0.0.0
 
     Copyright 2024, Christopher A. Lupp
@@ -22,9 +22,9 @@
 
 #include <gtest/gtest.h>
 
-#include "vlm/io/mass_reader.h"
+#include "pegasus/io/mass_reader.h"
 
-namespace vlm {
+namespace pegasus {
 namespace {
 
 constexpr double kTestTolerance = 1.0e-9;
@@ -327,4 +327,4 @@ rho = 1.225
 }
 
 }  // namespace
-}  // namespace vlm
+}  // namespace pegasus

@@ -1,5 +1,5 @@
 /*
-    Project VLM
+    Project Pegasus
     Version 0.0.0
 
     Copyright 2024, Christopher A. Lupp
@@ -22,14 +22,14 @@
 
 #include <cmath>
 
-#include "vlm/ad/gradient_calculator.h"
-#include "vlm/ad/mesh_node_sensitivity.h"
-#include "vlm/aero/force_calculator.h"
-#include "vlm/geometry/mesh_input.h"
-#include "vlm/solver/vortex_lattice_solver.h"
+#include "pegasus/gradients/gradient_calculator.h"
+#include "pegasus/gradients/mesh_node_sensitivity.h"
+#include "pegasus/aero/force_calculator.h"
+#include "pegasus/geometry/mesh_input.h"
+#include "pegasus/solver/vortex_lattice_solver.h"
 
-namespace vlm {
-namespace ad {
+namespace pegasus {
+namespace gradients {
 namespace {
 
 /// Build a flat rectangular wing mesh.
@@ -441,5 +441,5 @@ TEST(MeshNodeGradientTest, NormalGradientKernel) {
 }
 
 }  // namespace
-}  // namespace ad
-}  // namespace vlm
+}  // namespace gradients
+}  // namespace pegasus

@@ -1,5 +1,5 @@
 /*
-    Project VLM
+    Project Pegasus
     Version 0.0.0
 
     Copyright 2024, Christopher A. Lupp
@@ -18,12 +18,12 @@
     along with this program.  If not, see <https://www.gnu.org/licenses/>.
 */
 
-#include "vlm/utils/cubic_spline.h"
+#include "pegasus/utils/cubic_spline.h"
 
 #include <algorithm>
 #include <stdexcept>
 
-namespace vlm {
+namespace pegasus {
 
 void CubicSpline::Build(const std::vector<Scalar>& s,
                         const std::vector<Scalar>& x) {
@@ -265,4 +265,4 @@ void CubicSpline::SolveTridiagonal(std::vector<Scalar>& a,
     }
 }
 
-}  // namespace vlm
+}  // namespace pegasus

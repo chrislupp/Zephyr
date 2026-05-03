@@ -1,5 +1,5 @@
 /*
-    Project VLM
+    Project Pegasus
     Version 0.0.0
 
     Copyright 2024, Christopher A. Lupp
@@ -22,12 +22,12 @@
 
 #include <cmath>
 
-#include "vlm/aero/force_calculator.h"
-#include "vlm/geometry/aircraft.h"
-#include "vlm/geometry/mesh_input.h"
-#include "vlm/solver/vortex_lattice_solver.h"
+#include "pegasus/aero/force_calculator.h"
+#include "pegasus/geometry/aircraft.h"
+#include "pegasus/geometry/mesh_input.h"
+#include "pegasus/solver/vortex_lattice_solver.h"
 
-namespace vlm {
+namespace pegasus {
 namespace {
 
 /// Build a flat rectangular wing mesh with given dimensions.
@@ -190,4 +190,4 @@ TEST(MeshInputTest, MeshDimensions) {
 }
 
 }  // namespace
-}  // namespace vlm
+}  // namespace pegasus

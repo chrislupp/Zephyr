@@ -1,5 +1,5 @@
 /*
-    Project VLM
+    Project Pegasus
     Version 0.0.0
 
     Copyright 2024, Christopher A. Lupp
@@ -23,14 +23,14 @@
 
 #include <gtest/gtest.h>
 
-#include "vlm/aero/force_calculator.h"
-#include "vlm/geometry/aircraft.h"
-#include "vlm/geometry/section.h"
-#include "vlm/geometry/surface.h"
-#include "vlm/solver/vortex_lattice_solver.h"
-#include "vlm/visualization/vtk_export.h"
+#include "pegasus/aero/force_calculator.h"
+#include "pegasus/geometry/aircraft.h"
+#include "pegasus/geometry/section.h"
+#include "pegasus/geometry/surface.h"
+#include "pegasus/solver/vortex_lattice_solver.h"
+#include "pegasus/visualization/vtk_export.h"
 
-namespace vlm {
+namespace pegasus {
 namespace {
 
 class VtkExportTest : public ::testing::Test {
@@ -215,4 +215,4 @@ TEST_F(VtkExportTest, ExportOptionsDefaultsAreReasonable) {
 }
 
 }  // namespace
-}  // namespace vlm
+}  // namespace pegasus

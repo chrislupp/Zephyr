@@ -16,7 +16,7 @@ Checks: >
 
 WarningsAsErrors: '*'
 
-HeaderFilterRegex: 'include/vlm/.*'
+HeaderFilterRegex: 'include/pegasus/.*'
 
 CheckOptions:
   - key: modernize-use-auto.MinTypeNameLength

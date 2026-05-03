@@ -1,5 +1,5 @@
 /*
-    Project VLM
+    Project Pegasus
     Version 0.0.0
 
     Copyright 2024, Christopher A. Lupp
@@ -18,7 +18,7 @@
     along with this program.  If not, see <https://www.gnu.org/licenses/>.
 */
 
-#include "vlm/io/mass_reader.h"
+#include "pegasus/io/mass_reader.h"
 
 #include <algorithm>
 #include <cctype>
@@ -26,7 +26,7 @@
 #include <sstream>
 #include <stdexcept>
 
-namespace vlm {
+namespace pegasus {
 
 namespace {
 
@@ -377,4 +377,4 @@ bool MassReader::ParseComponentLine(const std::string& line, MassFileData& data,
     return true;
 }
 
-}  // namespace vlm
+}  // namespace pegasus

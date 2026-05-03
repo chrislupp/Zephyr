@@ -5,7 +5,7 @@ sidebar_position: 4
 # Section
 
 ```cpp
-#include "vlm/geometry/section.h"
+#include "pegasus/geometry/section.h"
 ```
 
 Defines a spanwise station on a lifting surface, specifying chord, twist, airfoil, and control surfaces.

@@ -1,5 +1,5 @@
 /*
-    Project VLM
+    Project Pegasus
     Version 0.0.0
 
     Copyright 2024, Christopher A. Lupp
@@ -22,14 +22,14 @@
 
 #include <cmath>
 
-#include "vlm/ad/gradient_calculator.h"
-#include "vlm/aero/stability_derivatives.h"
-#include "vlm/geometry/aircraft.h"
-#include "vlm/geometry/section.h"
-#include "vlm/geometry/surface.h"
-#include "vlm/solver/vortex_lattice_solver.h"
+#include "pegasus/gradients/gradient_calculator.h"
+#include "pegasus/aero/stability_derivatives.h"
+#include "pegasus/geometry/aircraft.h"
+#include "pegasus/geometry/section.h"
+#include "pegasus/geometry/surface.h"
+#include "pegasus/solver/vortex_lattice_solver.h"
 
-namespace vlm {
+namespace pegasus {
 namespace {
 
 /// @brief Test fixture for gradient calculator validation.
@@ -60,7 +60,7 @@ class GradientCalculatorTest : public ::testing::Test {
 
   Aircraft aircraft_{"Test Aircraft"};
   VortexLatticeSolver solver_;
-  ad::GradientCalculator grad_calc_;
+  gradients::GradientCalculator grad_calc_;
 
   // Tolerance for comparing derivatives
   // Finite differences have inherent numerical error, and the methods
@@ -81,7 +81,7 @@ TEST_F(GradientCalculatorTest, AlphaDerivativesMatchStabilityDerivatives) {
       stab_calc.ComputeDerivatives(aircraft_, solver_, condition);
 
   // Compute using GradientCalculator
-  ad::AeroGradients grads = grad_calc_.ComputeAlphaDerivatives(condition);
+  gradients::AeroGradients grads = grad_calc_.ComputeAlphaDerivatives(condition);
 
   // Compare lift curve slope
   EXPECT_NEAR(grads.dCL, stab_derivs.CL_alpha,
@@ -118,7 +118,7 @@ TEST_F(GradientCalculatorTest, BetaDerivativesMatchStabilityDerivatives) {
   StabilityDerivatives stab_derivs =
       stab_calc.ComputeDerivatives(aircraft_, solver_, condition);
 
-  ad::AeroGradients grads = grad_calc_.ComputeBetaDerivatives(condition);
+  gradients::AeroGradients grads = grad_calc_.ComputeBetaDerivatives(condition);
 
   // For a symmetric wing, CY_beta and Cn_beta should be ~0
   // Cl_beta (dihedral effect) depends on wing dihedral
@@ -147,7 +147,7 @@ TEST_F(GradientCalculatorTest, RollRateDerivativesMatchStabilityDerivatives) {
   StabilityDerivatives stab_derivs =
       stab_calc.ComputeDerivatives(aircraft_, solver_, condition);
 
-  ad::AeroGradients grads = grad_calc_.ComputeRollRateDerivatives(condition);
+  gradients::AeroGradients grads = grad_calc_.ComputeRollRateDerivatives(condition);
 
   // Roll damping Cl_p should be negative (restoring)
   EXPECT_NEAR(grads.dCl, stab_derivs.Cl_p,
@@ -171,7 +171,7 @@ TEST_F(GradientCalculatorTest, PitchRateDerivativesMatchStabilityDerivatives) {
   StabilityDerivatives stab_derivs =
       stab_calc.ComputeDerivatives(aircraft_, solver_, condition);
 
-  ad::AeroGradients grads = grad_calc_.ComputePitchRateDerivatives(condition);
+  gradients::AeroGradients grads = grad_calc_.ComputePitchRateDerivatives(condition);
 
   // Pitch damping Cm_q should be negative (restoring)
   EXPECT_NEAR(grads.dCm, stab_derivs.Cm_q,
@@ -195,7 +195,7 @@ TEST_F(GradientCalculatorTest, YawRateDerivativesMatchStabilityDerivatives) {
   StabilityDerivatives stab_derivs =
       stab_calc.ComputeDerivatives(aircraft_, solver_, condition);
 
-  ad::AeroGradients grads = grad_calc_.ComputeYawRateDerivatives(condition);
+  gradients::AeroGradients grads = grad_calc_.ComputeYawRateDerivatives(condition);
 
   // Yaw damping Cn_r should be negative (restoring)
   EXPECT_NEAR(grads.dCn, stab_derivs.Cn_r,
@@ -213,7 +213,7 @@ TEST_F(GradientCalculatorTest, MachDerivativesComputed) {
   condition.alpha = 5.0 * kDegreesToRadians;
   condition.mach = 0.5;  // Moderate subsonic Mach
 
-  ad::AeroGradients grads = grad_calc_.ComputeMachDerivatives(condition);
+  gradients::AeroGradients grads = grad_calc_.ComputeMachDerivatives(condition);
 
   // Prandtl-Glauert: CL increases with Mach (positive dCL/dM for subsonic)
   // CL ≈ CL0 / sqrt(1 - M²)
@@ -229,7 +229,7 @@ TEST_F(GradientCalculatorTest, MachDerivativesAtLowMach) {
   condition.alpha = 5.0 * kDegreesToRadians;
   condition.mach = 0.1;  // Low Mach - small compressibility effect
 
-  ad::AeroGradients grads = grad_calc_.ComputeMachDerivatives(condition);
+  gradients::AeroGradients grads = grad_calc_.ComputeMachDerivatives(condition);
 
   // At low Mach, derivatives should be small but positive
   EXPECT_GT(grads.dCL, 0.0);
@@ -244,10 +244,10 @@ TEST_F(GradientCalculatorTest, MachDerivativesAtHighMach) {
   condition.alpha = 5.0 * kDegreesToRadians;
   condition.mach = 0.8;  // High subsonic Mach
 
-  ad::AeroGradients grads_high = grad_calc_.ComputeMachDerivatives(condition);
+  gradients::AeroGradients grads_high = grad_calc_.ComputeMachDerivatives(condition);
 
   condition.mach = 0.3;
-  ad::AeroGradients grads_low = grad_calc_.ComputeMachDerivatives(condition);
+  gradients::AeroGradients grads_low = grad_calc_.ComputeMachDerivatives(condition);
 
   // Derivative should be larger at higher Mach (more sensitive)
   EXPECT_GT(grads_high.dCL, grads_low.dCL)
@@ -259,7 +259,7 @@ TEST_F(GradientCalculatorTest, FullGradientsComputation) {
   condition.alpha = 5.0 * kDegreesToRadians;
   condition.mach = 0.3;
 
-  ad::FullGradients grads = grad_calc_.ComputeFlightConditionDerivatives(condition);
+  gradients::FullGradients grads = grad_calc_.ComputeFlightConditionDerivatives(condition);
 
   // Sanity checks
   // CL_alpha should be positive (~2*pi for high AR wing)
@@ -282,7 +282,7 @@ TEST_F(GradientCalculatorTest, DerivativesAtZeroAlpha) {
   FlightCondition condition;
   condition.alpha = 0.0;
 
-  ad::AeroGradients grads = grad_calc_.ComputeAlphaDerivatives(condition);
+  gradients::AeroGradients grads = grad_calc_.ComputeAlphaDerivatives(condition);
 
   // At zero alpha, lift curve slope should still be positive
   EXPECT_GT(grads.dCL, 0.0);
@@ -324,14 +324,14 @@ class GradientCalculatorWithTailTest : public ::testing::Test {
 
   Aircraft aircraft_{"Wing-Tail"};
   VortexLatticeSolver solver_;
-  ad::GradientCalculator grad_calc_;
+  gradients::GradientCalculator grad_calc_;
 };
 
 TEST_F(GradientCalculatorWithTailTest, CmAlphaIsNegativeWithTail) {
   FlightCondition condition;
   condition.alpha = 5.0 * kDegreesToRadians;
 
-  ad::AeroGradients grads = grad_calc_.ComputeAlphaDerivatives(condition);
+  gradients::AeroGradients grads = grad_calc_.ComputeAlphaDerivatives(condition);
 
   // With horizontal tail behind CG, Cm_alpha should be negative (stable)
   // This is a key stability criterion
@@ -350,7 +350,7 @@ TEST_F(GradientCalculatorWithTailTest, MatchesStabilityDerivatives) {
   StabilityDerivatives stab_derivs =
       stab_calc.ComputeDerivatives(aircraft_, solver_, condition);
 
-  ad::AeroGradients grads = grad_calc_.ComputeAlphaDerivatives(condition);
+  gradients::AeroGradients grads = grad_calc_.ComputeAlphaDerivatives(condition);
 
   // Cm_alpha match
   EXPECT_NEAR(grads.dCm, stab_derivs.Cm_alpha,
@@ -381,15 +381,15 @@ class GeometryGradientTest : public ::testing::Test {
   }
 
   Aircraft aircraft_{"GeometryTest"};
-  ad::GradientCalculator grad_calc_;
+  gradients::GradientCalculator grad_calc_;
 };
 
 TEST_F(GeometryGradientTest, ChordGradientIsNonZero) {
   FlightCondition condition;
   condition.alpha = 5.0 * kDegreesToRadians;
 
-  ad::AeroGradients grads = grad_calc_.ComputeSectionGradient(
-      condition, 0, 0, ad::GeometryVariable::kChord);
+  gradients::AeroGradients grads = grad_calc_.ComputeSectionGradient(
+      condition, 0, 0, gradients::GeometryVariable::kChord);
 
   // Increasing chord should increase lift (more area)
   // dCL/dchord depends on how reference area is defined
@@ -405,12 +405,12 @@ TEST_F(GeometryGradientTest, TwistGradientPhysicallyCorrect) {
   condition.alpha = 5.0 * kDegreesToRadians;
 
   // Twist at root section
-  ad::AeroGradients root_grads = grad_calc_.ComputeSectionGradient(
-      condition, 0, 0, ad::GeometryVariable::kTwist);
+  gradients::AeroGradients root_grads = grad_calc_.ComputeSectionGradient(
+      condition, 0, 0, gradients::GeometryVariable::kTwist);
 
   // Twist at tip section
-  ad::AeroGradients tip_grads = grad_calc_.ComputeSectionGradient(
-      condition, 0, 1, ad::GeometryVariable::kTwist);
+  gradients::AeroGradients tip_grads = grad_calc_.ComputeSectionGradient(
+      condition, 0, 1, gradients::GeometryVariable::kTwist);
 
   // Positive twist (leading edge up) should increase local lift
   // For per-degree gradient, this should be positive
@@ -430,8 +430,8 @@ TEST_F(GeometryGradientTest, SpanPositionGradientNonZero) {
   condition.alpha = 5.0 * kDegreesToRadians;
 
   // Moving tip section outward (increasing y) should increase span
-  ad::AeroGradients grads = grad_calc_.ComputeSectionGradient(
-      condition, 0, 1, ad::GeometryVariable::kYle);
+  gradients::AeroGradients grads = grad_calc_.ComputeSectionGradient(
+      condition, 0, 1, gradients::GeometryVariable::kYle);
 
   // Gradient should be non-zero
   // Increasing span increases aspect ratio, which increases lift slope
@@ -442,7 +442,7 @@ TEST_F(GeometryGradientTest, FullGeometryGradientsReturnsAllSections) {
   FlightCondition condition;
   condition.alpha = 5.0 * kDegreesToRadians;
 
-  ad::GeometryGradients grads = grad_calc_.ComputeGeometryGradients(condition);
+  gradients::GeometryGradients grads = grad_calc_.ComputeGeometryGradients(condition);
 
   // Should have gradients for all sections (2 sections in our wing)
   EXPECT_EQ(grads.section_gradients.size(), 2u);
@@ -463,11 +463,11 @@ TEST_F(GeometryGradientTest, GetChordGradientsForExtraction) {
   FlightCondition condition;
   condition.alpha = 5.0 * kDegreesToRadians;
 
-  ad::GeometryGradients grads = grad_calc_.ComputeGeometryGradients(condition);
+  gradients::GeometryGradients grads = grad_calc_.ComputeGeometryGradients(condition);
 
   // Extract dCL/dchord for all sections
   VecX dCL_dchord = grads.GetChordGradientsFor(
-      [](const ad::AeroGradients& g) { return g.dCL; });
+      [](const gradients::AeroGradients& g) { return g.dCL; });
 
   EXPECT_EQ(dCL_dchord.size(), 2);
 
@@ -480,11 +480,11 @@ TEST_F(GeometryGradientTest, GetTwistGradientsForExtraction) {
   FlightCondition condition;
   condition.alpha = 5.0 * kDegreesToRadians;
 
-  ad::GeometryGradients grads = grad_calc_.ComputeGeometryGradients(condition);
+  gradients::GeometryGradients grads = grad_calc_.ComputeGeometryGradients(condition);
 
   // Extract dCm/dtwist for all sections
   VecX dCm_dtwist = grads.GetTwistGradientsFor(
-      [](const ad::AeroGradients& g) { return g.dCm; });
+      [](const gradients::AeroGradients& g) { return g.dCm; });
 
   EXPECT_EQ(dCm_dtwist.size(), 2);
 
@@ -502,8 +502,8 @@ TEST_F(GeometryGradientTest, DihedralGradientAffectsRollingMoment) {
   condition.beta = 2.0 * kDegreesToRadians;  // Add sideslip to see Cl effect
 
   // dCl/dz at tip (dihedral effect)
-  ad::AeroGradients grads = grad_calc_.ComputeSectionGradient(
-      condition, 0, 1, ad::GeometryVariable::kZle);
+  gradients::AeroGradients grads = grad_calc_.ComputeSectionGradient(
+      condition, 0, 1, gradients::GeometryVariable::kZle);
 
   // In sideslip, dihedral (positive z at tip) creates roll-out moment
   // The gradient should be non-zero
@@ -519,7 +519,7 @@ TEST_F(GeometryGradientTest, GradientsAreSymmetricForSymmetricSections) {
   FlightCondition condition;
   condition.alpha = 5.0 * kDegreesToRadians;
 
-  ad::GeometryGradients grads = grad_calc_.ComputeGeometryGradients(condition);
+  gradients::GeometryGradients grads = grad_calc_.ComputeGeometryGradients(condition);
 
   // All gradients should be finite
   for (const auto& section_grad : grads.section_gradients) {
@@ -566,14 +566,14 @@ class MultiSurfaceGeometryGradientTest : public ::testing::Test {
   }
 
   Aircraft aircraft_{"MultiSurface"};
-  ad::GradientCalculator grad_calc_;
+  gradients::GradientCalculator grad_calc_;
 };
 
 TEST_F(MultiSurfaceGeometryGradientTest, GradientsComputedForAllSurfaces) {
   FlightCondition condition;
   condition.alpha = 5.0 * kDegreesToRadians;
 
-  ad::GeometryGradients grads = grad_calc_.ComputeGeometryGradients(condition);
+  gradients::GeometryGradients grads = grad_calc_.ComputeGeometryGradients(condition);
 
   // Should have gradients for all sections: 2 wing + 2 tail = 4 sections
   EXPECT_EQ(grads.section_gradients.size(), 4u);
@@ -593,8 +593,8 @@ TEST_F(MultiSurfaceGeometryGradientTest, TailTwistAffectsPitchingMoment) {
   condition.alpha = 5.0 * kDegreesToRadians;
 
   // Tail twist should have strong effect on pitching moment
-  ad::AeroGradients tail_twist_grads = grad_calc_.ComputeSectionGradient(
-      condition, 1, 0, ad::GeometryVariable::kTwist);  // Surface 1 = HTail
+  gradients::AeroGradients tail_twist_grads = grad_calc_.ComputeSectionGradient(
+      condition, 1, 0, gradients::GeometryVariable::kTwist);  // Surface 1 = HTail
 
   // Tail twist affects Cm significantly (tail is aft of moment reference)
   EXPECT_NE(tail_twist_grads.dCm, 0.0)
@@ -607,4 +607,4 @@ TEST_F(MultiSurfaceGeometryGradientTest, TailTwistAffectsPitchingMoment) {
 }
 
 }  // namespace
-}  // namespace vlm
+}  // namespace pegasus

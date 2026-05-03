@@ -172,7 +172,7 @@ jobs:
         sed -i 's/\(VERSION\s\+\)[0-9]\+\.[0-9]\+\.[0-9]\+/\1'"$NEW_VERSION"'/' CMakeLists.txt
 
         echo "CMakeLists.txt updated:"
-        grep "project(VLM" CMakeLists.txt
+        grep "project(Pegasus" CMakeLists.txt
 
     # -- Update CHANGELOG.md ---------------------------------------------
     - name: Update CHANGELOG.md

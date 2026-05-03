@@ -1,5 +1,5 @@
 /*
-    Project VLM
+    Project Pegasus
     Version 0.0.0
 
     Copyright 2024, Christopher A. Lupp
@@ -25,9 +25,9 @@
 
 #include <gtest/gtest.h>
 
-#include "vlm/vlm.h"
+#include "pegasus/pegasus.h"
 
-namespace vlm {
+namespace pegasus {
 namespace {
 
 // VLM results differ from simplified analytical formulas by ~5-10%
@@ -267,4 +267,4 @@ TEST(AvlFileTest, SolveFromParsedGeometry) {
 }
 
 }  // namespace
-}  // namespace vlm
+}  // namespace pegasus

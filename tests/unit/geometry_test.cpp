@@ -1,5 +1,5 @@
 /*
-    Project VLM
+    Project Pegasus
     Version 0.0.0
 
     Copyright 2024, Christopher A. Lupp
@@ -22,13 +22,13 @@
 
 #include <gtest/gtest.h>
 
-#include "vlm/geometry/airfoil.h"
-#include "vlm/geometry/aircraft.h"
-#include "vlm/geometry/section.h"
-#include "vlm/geometry/surface.h"
-#include "vlm/io/avl_reader.h"
+#include "pegasus/geometry/airfoil.h"
+#include "pegasus/geometry/aircraft.h"
+#include "pegasus/geometry/section.h"
+#include "pegasus/geometry/surface.h"
+#include "pegasus/io/avl_reader.h"
 
-namespace vlm {
+namespace pegasus {
 namespace {
 
 constexpr double kTestTolerance = 1.0e-6;
@@ -391,4 +391,4 @@ aileron 1.0 0.75 0 1 0 -1.0
 }
 
 }  // namespace
-}  // namespace vlm
+}  // namespace pegasus

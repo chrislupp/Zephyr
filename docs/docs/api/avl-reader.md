@@ -5,7 +5,7 @@ sidebar_position: 10
 # AvlReader
 
 ```cpp
-#include "vlm/io/avl_reader.h"
+#include "pegasus/io/avl_reader.h"
 ```
 
 Parser for Athena Vortex Lattice (AVL) geometry files.
@@ -56,7 +56,7 @@ std::cout << "Total panels: " << aircraft.ComputeTotalVortexCount() << std::endl
 The `MassReader` class parses AVL mass property files:
 
 ```cpp
-#include "vlm/io/mass_reader.h"
+#include "pegasus/io/mass_reader.h"
 
 MassReader mass_reader;
 MassData mass_data = mass_reader.ReadFile("aircraft.mass");

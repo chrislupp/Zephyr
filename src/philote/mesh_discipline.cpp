@@ -1,5 +1,5 @@
 /*
-    Project VLM
+    Project Pegasus
     Version 0.0.0
 
     Copyright 2024, Christopher A. Lupp
@@ -18,13 +18,13 @@
     along with this program.  If not, see <https://www.gnu.org/licenses/>.
 */
 
-#include "vlm/philote/mesh_discipline.h"
+#include "pegasus/philote/mesh_discipline.h"
 
 #include <algorithm>
 #include <cmath>
 #include <stdexcept>
 
-namespace vlm {
+namespace pegasus {
 
 // =============================================================================
 // Precomputation
@@ -193,4 +193,4 @@ void MeshDiscipline::ComputePartials(const philote::Variables& inputs,
     }
 }
 
-}  // namespace vlm
+}  // namespace pegasus

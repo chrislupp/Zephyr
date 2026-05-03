@@ -47,9 +47,9 @@ jobs:
       run: >
         cmake -B ${{github.workspace}}/build
         -DCMAKE_BUILD_TYPE=Debug
-        -DVLM_BUILD_TESTS=ON
-        -DVLM_ENABLE_VTK=OFF
-        -DVLM_BUILD_PHILOTE=OFF
+        -DPEGASUS_BUILD_TESTS=ON
+        -DPEGASUS_ENABLE_VTK=OFF
+        -DPEGASUS_BUILD_PHILOTE=OFF
         -DCMAKE_PREFIX_PATH=${{github.workspace}}/deps
         -DCMAKE_EXPORT_COMPILE_COMMANDS=ON
 
@@ -57,7 +57,7 @@ jobs:
       run: >
         run-clang-tidy-18
         -p ${{github.workspace}}/build
-        -header-filter='include/vlm/'
+        -header-filter='include/pegasus/'
         $(find src -name '*.cpp' | grep -v philote)
 
   build:
@@ -92,9 +92,9 @@ jobs:
       run: >
         cmake -B ${{github.workspace}}/build
         -DCMAKE_BUILD_TYPE=${{ matrix.build_type }}
-        -DVLM_BUILD_TESTS=ON
-        -DVLM_ENABLE_VTK=OFF
-        -DVLM_BUILD_PHILOTE=OFF
+        -DPEGASUS_BUILD_TESTS=ON
+        -DPEGASUS_ENABLE_VTK=OFF
+        -DPEGASUS_BUILD_PHILOTE=OFF
         -DCMAKE_PREFIX_PATH=${{github.workspace}}/deps
 
     - name: Build
@@ -132,9 +132,9 @@ jobs:
       run: >
         cmake -B ${{github.workspace}}/build
         -DCMAKE_BUILD_TYPE=Release
-        -DVLM_BUILD_TESTS=ON
-        -DVLM_ENABLE_VTK=OFF
-        -DVLM_BUILD_PHILOTE=OFF
+        -DPEGASUS_BUILD_TESTS=ON
+        -DPEGASUS_ENABLE_VTK=OFF
+        -DPEGASUS_BUILD_PHILOTE=OFF
         -DCMAKE_PREFIX_PATH=${{github.workspace}}/deps
         -DCMAKE_CXX_FLAGS="-fprofile-instr-generate -fcoverage-mapping"
         -DCMAKE_C_FLAGS="-fprofile-instr-generate -fcoverage-mapping"

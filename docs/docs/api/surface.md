@@ -5,7 +5,7 @@ sidebar_position: 3
 # Surface
 
 ```cpp
-#include "vlm/geometry/surface.h"
+#include "pegasus/geometry/surface.h"
 ```
 
 Represents a lifting surface (wing, tail, fin) composed of spanwise sections.

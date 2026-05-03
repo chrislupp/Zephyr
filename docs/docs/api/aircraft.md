@@ -5,7 +5,7 @@ sidebar_position: 2
 # Aircraft
 
 ```cpp
-#include "vlm/geometry/aircraft.h"
+#include "pegasus/geometry/aircraft.h"
 ```
 
 Top-level geometry container representing a complete aircraft configuration.

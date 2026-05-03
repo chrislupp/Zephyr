@@ -1,5 +1,5 @@
 /*
-    Project VLM
+    Project Pegasus
     Version 0.0.0
 
     Copyright 2024, Christopher A. Lupp
@@ -18,12 +18,12 @@
     along with this program.  If not, see <https://www.gnu.org/licenses/>.
 */
 
-#include "vlm/solver/vortex_lattice_solver.h"
+#include "pegasus/solver/vortex_lattice_solver.h"
 
 #include <cmath>
 #include <stdexcept>
 
-namespace vlm {
+namespace pegasus {
 
 VortexLatticeSolver::VortexLatticeSolver() = default;
 
@@ -250,4 +250,4 @@ SolutionState VortexLatticeSolver::Solve(const FlightCondition& condition) {
     return state;
 }
 
-}  // namespace vlm
+}  // namespace pegasus

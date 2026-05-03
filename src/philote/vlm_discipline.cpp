@@ -1,5 +1,5 @@
 /*
-    Project VLM
+    Project Pegasus
     Version 0.0.0
 
     Copyright 2024, Christopher A. Lupp
@@ -18,13 +18,13 @@
     along with this program.  If not, see <https://www.gnu.org/licenses/>.
 */
 
-#include "vlm/philote/vlm_discipline.h"
+#include "pegasus/philote/vlm_discipline.h"
 
 #include <algorithm>
 #include <sstream>
 #include <stdexcept>
 
-namespace vlm {
+namespace pegasus {
 
 // =============================================================================
 // String parsing utilities
@@ -346,7 +346,7 @@ void VlmDiscipline::ComputePartials(const philote::Variables& inputs,
     }
 
     // Flight condition gradients
-    ad::FullGradients fc_grads =
+    gradients::FullGradients fc_grads =
         grad_calc_.ComputeFlightConditionDerivatives(condition);
 
     // CL partials
@@ -445,4 +445,4 @@ void VlmDiscipline::ComputePartials(const philote::Variables& inputs,
     }
 }
 
-}  // namespace vlm
+}  // namespace pegasus

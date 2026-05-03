@@ -11,9 +11,9 @@ This guide walks through a minimal VLM analysis: defining a rectangular wing, so
 VLM provides a single facade header that includes all public API components:
 
 ```cpp
-#include "vlm/vlm.h"
+#include "pegasus/vlm.h"
 
-using namespace vlm;
+using namespace pegasus;
 ```
 
 ## Define the Geometry

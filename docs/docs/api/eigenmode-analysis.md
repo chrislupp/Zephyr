@@ -5,7 +5,7 @@ sidebar_position: 9
 # EigenmodeAnalysis
 
 ```cpp
-#include "vlm/dynamics/eigenmode_analysis.h"
+#include "pegasus/dynamics/eigenmode_analysis.h"
 ```
 
 Linearized dynamic stability analysis through eigenvalue decomposition of the equations of motion.

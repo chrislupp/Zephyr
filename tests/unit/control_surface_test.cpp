@@ -1,5 +1,5 @@
 /*
-    Project VLM
+    Project Pegasus
     Version 0.0.0
 
     Copyright 2024, Christopher A. Lupp
@@ -23,16 +23,16 @@
 
 #include <gtest/gtest.h>
 
-#include "vlm/aero/force_calculator.h"
-#include "vlm/aero/stability_derivatives.h"
-#include "vlm/geometry/aircraft.h"
-#include "vlm/geometry/section.h"
-#include "vlm/geometry/surface.h"
-#include "vlm/io/avl_reader.h"
-#include "vlm/solver/vortex_lattice.h"
-#include "vlm/solver/vortex_lattice_solver.h"
+#include "pegasus/aero/force_calculator.h"
+#include "pegasus/aero/stability_derivatives.h"
+#include "pegasus/geometry/aircraft.h"
+#include "pegasus/geometry/section.h"
+#include "pegasus/geometry/surface.h"
+#include "pegasus/io/avl_reader.h"
+#include "pegasus/solver/vortex_lattice.h"
+#include "pegasus/solver/vortex_lattice_solver.h"
 
-namespace vlm {
+namespace pegasus {
 namespace {
 
 constexpr Scalar kTestTolerance = 1e-10;
@@ -686,4 +686,4 @@ TEST_F(StabilityDerivativesControlTest, ControlDerivativesVector) {
 }
 
 }  // namespace
-}  // namespace vlm
+}  // namespace pegasus

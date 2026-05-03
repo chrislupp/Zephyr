@@ -1,4 +1,4 @@
-# Project VLM
+# Project Pegasus
 # Version 0.0.0
 #
 # Copyright 2024, Christopher A. Lupp
@@ -19,7 +19,7 @@
 include(GoogleTest)
 
 # Unit tests
-add_executable(vlm_unit_tests
+add_executable(pegasus_unit_tests
     unit/cubic_spline_test.cpp
     unit/geometry_test.cpp
     unit/vortex_lattice_test.cpp
@@ -40,26 +40,26 @@ add_executable(vlm_unit_tests
     unit/mesh_node_gradient_test.cpp
 )
 
-target_link_libraries(vlm_unit_tests
+target_link_libraries(pegasus_unit_tests
     PRIVATE
-        vlm
+        pegasus
         GTest::gtest_main
 )
 
-gtest_discover_tests(vlm_unit_tests)
+gtest_discover_tests(pegasus_unit_tests)
 
 # Integration tests
-add_executable(vlm_integration_tests
+add_executable(pegasus_integration_tests
     integration/rectangular_wing_test.cpp
 )
 
-target_link_libraries(vlm_integration_tests
+target_link_libraries(pegasus_integration_tests
     PRIVATE
-        vlm
+        pegasus
         GTest::gtest_main
 )
 
-gtest_discover_tests(vlm_integration_tests
+gtest_discover_tests(pegasus_integration_tests
     WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}
 )
 

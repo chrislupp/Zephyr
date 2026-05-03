@@ -1,5 +1,5 @@
 /*
-    Project VLM
+    Project Pegasus
     Version 0.0.0
 
     Copyright 2024, Christopher A. Lupp
@@ -18,7 +18,7 @@
     along with this program.  If not, see <https://www.gnu.org/licenses/>.
 */
 
-#include "vlm/geometry/airfoil.h"
+#include "pegasus/geometry/airfoil.h"
 
 #include <algorithm>
 #include <cmath>
@@ -27,7 +27,7 @@
 #include <sstream>
 #include <stdexcept>
 
-namespace vlm {
+namespace pegasus {
 
 Airfoil Airfoil::CreateFlatPlate() {
     Airfoil airfoil;
@@ -324,4 +324,4 @@ void Airfoil::ExtractCamberFromCoordinates(
     }
 }
 
-}  // namespace vlm
+}  // namespace pegasus

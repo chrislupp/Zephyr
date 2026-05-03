@@ -26,11 +26,11 @@ The program:
 ## Code
 
 ```cpp
-#include "vlm/vlm.h"
+#include "pegasus/vlm.h"
 
 #include <iostream>
 
-using namespace vlm;
+using namespace pegasus;
 
 int main() {
     // Create a tapered wing with washout

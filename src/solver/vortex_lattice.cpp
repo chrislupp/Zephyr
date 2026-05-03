@@ -1,5 +1,5 @@
 /*
-    Project VLM
+    Project Pegasus
     Version 0.0.0
 
     Copyright 2024, Christopher A. Lupp
@@ -18,15 +18,15 @@
     along with this program.  If not, see <https://www.gnu.org/licenses/>.
 */
 
-#include "vlm/solver/vortex_lattice.h"
+#include "pegasus/solver/vortex_lattice.h"
 
-#include "vlm/utils/math_utilities.h"
+#include "pegasus/utils/math_utilities.h"
 
 #include <algorithm>
 #include <cmath>
 #include <stdexcept>
 
-namespace vlm {
+namespace pegasus {
 
 void VortexLattice::Clear() {
     vortices_.clear();
@@ -967,4 +967,4 @@ void VortexLattice::GenerateSurfaceFromMesh(
     surface_info_.push_back(surf_info);
 }
 
-}  // namespace vlm
+}  // namespace pegasus

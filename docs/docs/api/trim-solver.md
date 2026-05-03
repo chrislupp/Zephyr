@@ -5,7 +5,7 @@ sidebar_position: 8
 # TrimSolver
 
 ```cpp
-#include "vlm/trim/trim_solver.h"
+#include "pegasus/trim/trim_solver.h"
 ```
 
 Newton-Raphson trim solver for finding aircraft equilibrium at specified flight constraints.

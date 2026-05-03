@@ -17,12 +17,12 @@ The program:
 ## Code
 
 ```cpp
-#include "vlm/vlm.h"
+#include "pegasus/vlm.h"
 
 #include <iomanip>
 #include <iostream>
 
-using namespace vlm;
+using namespace pegasus;
 
 int main() {
     // Create a rectangular wing

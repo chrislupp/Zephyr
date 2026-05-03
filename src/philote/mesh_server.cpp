@@ -1,5 +1,5 @@
 /*
-    Project VLM
+    Project Pegasus
     Version 0.0.0
 
     Copyright 2024, Christopher A. Lupp
@@ -18,7 +18,7 @@
     along with this program.  If not, see <https://www.gnu.org/licenses/>.
 */
 
-#include "vlm/philote/mesh_discipline.h"
+#include "pegasus/philote/mesh_discipline.h"
 
 #include <iostream>
 #include <memory>
@@ -31,7 +31,7 @@ int main(int argc, char* argv[]) {
     if (argc > 1)
         address = argv[1];
 
-    auto discipline = std::make_shared<vlm::MeshDiscipline>();
+    auto discipline = std::make_shared<pegasus::MeshDiscipline>();
 
     grpc::ServerBuilder builder;
     builder.AddListeningPort(address, grpc::InsecureServerCredentials());

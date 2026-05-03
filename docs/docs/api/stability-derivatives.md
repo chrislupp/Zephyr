@@ -5,7 +5,7 @@ sidebar_position: 7
 # StabilityDerivativeCalculator
 
 ```cpp
-#include "vlm/aero/stability_derivatives.h"
+#include "pegasus/aero/stability_derivatives.h"
 ```
 
 Computes stability and control derivatives by evaluating unit perturbation responses.

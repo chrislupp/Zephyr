@@ -1,5 +1,5 @@
 /*
-    Project VLM
+    Project Pegasus
     Version 0.0.0
 
     Copyright 2024, Christopher A. Lupp
@@ -18,14 +18,14 @@
     along with this program.  If not, see <https://www.gnu.org/licenses/>.
 */
 
-#include "vlm/utils/cubic_spline.h"
+#include "pegasus/utils/cubic_spline.h"
 
 #include <cmath>
 #include <vector>
 
 #include <gtest/gtest.h>
 
-namespace vlm {
+namespace pegasus {
 namespace {
 
 // Test tolerance for floating point comparisons
@@ -264,4 +264,4 @@ TEST_F(CubicSplineTest, ValidityAndSizeQueries) {
 }
 
 }  // namespace
-}  // namespace vlm
+}  // namespace pegasus

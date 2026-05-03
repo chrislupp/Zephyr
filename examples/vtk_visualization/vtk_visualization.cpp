@@ -1,5 +1,5 @@
 /*
-    Project VLM
+    Project Pegasus
     Version 0.0.0
 
     Copyright 2024, Christopher A. Lupp
@@ -24,10 +24,10 @@
 #include <filesystem>
 #include <iostream>
 
-#include "vlm/vlm.h"
+#include "pegasus/pegasus.h"
 
 int main(int argc, char* argv[]) {
-  using namespace vlm;
+  using namespace pegasus;
 
   std::cout << "VLM VTK Visualization Export Example\n";
   std::cout << "=====================================\n\n";

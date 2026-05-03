@@ -1,5 +1,5 @@
 /*
-    Project VLM
+    Project Pegasus
     Version 0.0.0
 
     Copyright 2024, Christopher A. Lupp
@@ -18,17 +18,17 @@
     along with this program.  If not, see <https://www.gnu.org/licenses/>.
 */
 
-#include "vlm/aero/stability_derivatives.h"
+#include "pegasus/aero/stability_derivatives.h"
 
-#include "vlm/aero/aerodynamic_results.h"
-#include "vlm/aero/force_calculator.h"
-#include "vlm/geometry/aircraft.h"
-#include "vlm/solver/vortex_lattice.h"
-#include "vlm/solver/vortex_lattice_solver.h"
+#include "pegasus/aero/aerodynamic_results.h"
+#include "pegasus/aero/force_calculator.h"
+#include "pegasus/geometry/aircraft.h"
+#include "pegasus/solver/vortex_lattice.h"
+#include "pegasus/solver/vortex_lattice_solver.h"
 
 #include <cmath>
 
-namespace vlm {
+namespace pegasus {
 
 namespace {
 
@@ -258,4 +258,4 @@ BodyAxisDerivatives StabilityDerivativeCalculator::ComputeBodyAxisDerivatives(
     return derivs;
 }
 
-}  // namespace vlm
+}  // namespace pegasus

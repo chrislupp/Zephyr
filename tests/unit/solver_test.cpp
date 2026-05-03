@@ -1,5 +1,5 @@
 /*
-    Project VLM
+    Project Pegasus
     Version 0.0.0
 
     Copyright 2024, Christopher A. Lupp
@@ -22,12 +22,12 @@
 
 #include <gtest/gtest.h>
 
-#include "vlm/geometry/aircraft.h"
-#include "vlm/geometry/section.h"
-#include "vlm/geometry/surface.h"
-#include "vlm/solver/vortex_lattice_solver.h"
+#include "pegasus/geometry/aircraft.h"
+#include "pegasus/geometry/section.h"
+#include "pegasus/geometry/surface.h"
+#include "pegasus/solver/vortex_lattice_solver.h"
 
-namespace vlm {
+namespace pegasus {
 namespace {
 
 constexpr double kTestTolerance = 1.0e-6;
@@ -379,4 +379,4 @@ TEST_F(VortexLatticeSolverTest, InducedVelocityAtControlPoints) {
 }
 
 }  // namespace
-}  // namespace vlm
+}  // namespace pegasus

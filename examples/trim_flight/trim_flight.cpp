@@ -1,5 +1,5 @@
 /*
-    Project VLM
+    Project Pegasus
     Version 0.0.0
 
     Copyright 2024, Christopher A. Lupp
@@ -24,10 +24,10 @@
 #include <iomanip>
 #include <iostream>
 
-#include "vlm/vlm.h"
+#include "pegasus/pegasus.h"
 
 int main() {
-  using namespace vlm;
+  using namespace pegasus;
 
   std::cout << "VLM Trim Flight Example\n";
   std::cout << "=======================\n\n";

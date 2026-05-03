@@ -1,5 +1,5 @@
 /*
-    Project VLM
+    Project Pegasus
     Version 0.0.0
 
     Copyright 2024, Christopher A. Lupp
@@ -36,14 +36,14 @@
 #include <cmath>
 #include <random>
 
-#include "vlm/ad/gradient_calculator.h"
-#include "vlm/aero/force_calculator.h"
-#include "vlm/geometry/aircraft.h"
-#include "vlm/geometry/section.h"
-#include "vlm/geometry/surface.h"
-#include "vlm/solver/vortex_lattice_solver.h"
+#include "pegasus/gradients/gradient_calculator.h"
+#include "pegasus/aero/force_calculator.h"
+#include "pegasus/geometry/aircraft.h"
+#include "pegasus/geometry/section.h"
+#include "pegasus/geometry/surface.h"
+#include "pegasus/solver/vortex_lattice_solver.h"
 
-namespace vlm {
+namespace pegasus {
 namespace {
 
 /// Compute relative error, handling near-zero values
@@ -144,7 +144,7 @@ class OptVLGradientValidationTest : public ::testing::Test {
 
   Aircraft aircraft_{"ValidationAircraft"};
   VortexLatticeSolver solver_;
-  ad::GradientCalculator grad_calc_;
+  gradients::GradientCalculator grad_calc_;
 
   // OptVL uses 1e-5 to 1e-7 for FD steps
   const double fd_step_ = 1e-6;
@@ -155,11 +155,11 @@ class OptVLGradientValidationTest : public ::testing::Test {
   const double abs_tol_ = 1e-4;
 
   /// Compute section gradient using finite differences on full system
-  ad::AeroGradients ComputeSectionGradientFD(
+  gradients::AeroGradients ComputeSectionGradientFD(
       const FlightCondition& condition,
       Index surface_idx,
       Index section_idx,
-      ad::GeometryVariable var) {
+      gradients::GeometryVariable var) {
     const double h = 1e-6;
 
     // Perturb aircraft geometry
@@ -169,25 +169,25 @@ class OptVLGradientValidationTest : public ::testing::Test {
       Section& sec = surf.GetSectionMutable(section_idx);
 
       switch (var) {
-        case ad::GeometryVariable::kChord:
+        case gradients::GeometryVariable::kChord:
           sec.SetChord(sec.GetChord() + delta);
           break;
-        case ad::GeometryVariable::kTwist:
+        case gradients::GeometryVariable::kTwist:
           sec.SetTwistAngle(sec.GetTwistAngle() + delta);
           break;
-        case ad::GeometryVariable::kXle: {
+        case gradients::GeometryVariable::kXle: {
           Vec3 pos = sec.GetLeadingEdgePosition();
           pos.x() += delta;
           sec.SetLeadingEdgePosition(pos);
           break;
         }
-        case ad::GeometryVariable::kYle: {
+        case gradients::GeometryVariable::kYle: {
           Vec3 pos = sec.GetLeadingEdgePosition();
           pos.y() += delta;
           sec.SetLeadingEdgePosition(pos);
           break;
         }
-        case ad::GeometryVariable::kZle: {
+        case gradients::GeometryVariable::kZle: {
           Vec3 pos = sec.GetLeadingEdgePosition();
           pos.z() += delta;
           sec.SetLeadingEdgePosition(pos);
@@ -214,7 +214,7 @@ class OptVLGradientValidationTest : public ::testing::Test {
     AerodynamicResults res_minus =
         calc.ComputeForces(aircraft_minus, solver_minus.GetMesh(), sol_minus, condition);
 
-    ad::AeroGradients result;
+    gradients::AeroGradients result;
     result.dCL = (res_plus.CL - res_minus.CL) / (2 * h);
     result.dCD = (res_plus.CD - res_minus.CD) / (2 * h);
     result.dCY = (res_plus.CY - res_minus.CY) / (2 * h);
@@ -234,7 +234,7 @@ TEST_F(OptVLGradientValidationTest, AlphaDerivativesMatchFD) {
   condition.alpha = 5.0 * kDegreesToRadians;
   condition.mach = 0.5;
 
-  ad::AeroGradients grads = grad_calc_.ComputeAlphaDerivatives(condition);
+  gradients::AeroGradients grads = grad_calc_.ComputeAlphaDerivatives(condition);
 
   // dCL/dalpha
   double fd_CL_alpha = FiniteDiffAlpha(condition, [](const AerodynamicResults& r) { return r.CL; });
@@ -264,7 +264,7 @@ TEST_F(OptVLGradientValidationTest, BetaDerivativesMatchFD) {
   condition.alpha = 5.0 * kDegreesToRadians;
   condition.mach = 0.5;
 
-  ad::AeroGradients grads = grad_calc_.ComputeBetaDerivatives(condition);
+  gradients::AeroGradients grads = grad_calc_.ComputeBetaDerivatives(condition);
 
   // dCY/dbeta - relax tolerance as adjoint approximation has some error
   double fd_CY_beta = FiniteDiffBeta(condition, [](const AerodynamicResults& r) { return r.CY; });
@@ -288,7 +288,7 @@ TEST_F(OptVLGradientValidationTest, MachDerivativesMatchFD) {
   condition.alpha = 5.0 * kDegreesToRadians;
   condition.mach = 0.5;
 
-  ad::AeroGradients grads = grad_calc_.ComputeMachDerivatives(condition);
+  gradients::AeroGradients grads = grad_calc_.ComputeMachDerivatives(condition);
 
   // dCL/dMach
   double fd_CL_mach = FiniteDiffMach(condition, [](const AerodynamicResults& r) { return r.CL; });
@@ -312,12 +312,12 @@ TEST_F(OptVLGradientValidationTest, FullGradientsConsistency) {
   condition.mach = 0.3;
 
   // Compute full gradients
-  ad::FullGradients full = grad_calc_.ComputeFlightConditionDerivatives(condition);
+  gradients::FullGradients full = grad_calc_.ComputeFlightConditionDerivatives(condition);
 
   // Compute individual derivatives
-  ad::AeroGradients alpha = grad_calc_.ComputeAlphaDerivatives(condition);
-  ad::AeroGradients beta = grad_calc_.ComputeBetaDerivatives(condition);
-  ad::AeroGradients mach = grad_calc_.ComputeMachDerivatives(condition);
+  gradients::AeroGradients alpha = grad_calc_.ComputeAlphaDerivatives(condition);
+  gradients::AeroGradients beta = grad_calc_.ComputeBetaDerivatives(condition);
+  gradients::AeroGradients mach = grad_calc_.ComputeMachDerivatives(condition);
 
   // Verify consistency between full and individual computations
   // Small differences expected due to adjoint caching behavior
@@ -337,7 +337,7 @@ TEST_F(OptVLGradientValidationTest, GeometryGradientsVsFiniteDifferences) {
   condition.mach = 0.3;
 
   // Get all geometry gradients
-  ad::GeometryGradients grads = grad_calc_.ComputeGeometryGradients(condition);
+  gradients::GeometryGradients grads = grad_calc_.ComputeGeometryGradients(condition);
 
   // Verify each section has reasonable gradients
   for (const auto& section : grads.section_gradients) {
@@ -365,12 +365,12 @@ TEST_F(OptVLGradientValidationTest, AdjointGeometryGradientMatchesFD) {
   condition.mach = 0.3;
 
   // Test multiple geometry variables and sections
-  std::vector<ad::GeometryVariable> vars = {
-      ad::GeometryVariable::kChord,
-      ad::GeometryVariable::kTwist,
-      ad::GeometryVariable::kXle,
-      ad::GeometryVariable::kYle,
-      ad::GeometryVariable::kZle
+  std::vector<gradients::GeometryVariable> vars = {
+      gradients::GeometryVariable::kChord,
+      gradients::GeometryVariable::kTwist,
+      gradients::GeometryVariable::kXle,
+      gradients::GeometryVariable::kYle,
+      gradients::GeometryVariable::kZle
   };
 
   // Test on wing surface (surface 0)
@@ -384,11 +384,11 @@ TEST_F(OptVLGradientValidationTest, AdjointGeometryGradientMatchesFD) {
   for (auto var : vars) {
     for (Index section_idx = 0; section_idx < 2; ++section_idx) {
       // Get adjoint gradient (this is what we're testing)
-      ad::AeroGradients adjoint = grad_calc_.ComputeSectionGradient(
+      gradients::AeroGradients adjoint = grad_calc_.ComputeSectionGradient(
           condition, surface_idx, section_idx, var);
 
       // Get FD gradient for comparison
-      ad::AeroGradients fd = ComputeSectionGradientFD(
+      gradients::AeroGradients fd = ComputeSectionGradientFD(
           condition, surface_idx, section_idx, var);
 
       // Check CL gradient
@@ -426,10 +426,10 @@ TEST_F(OptVLGradientValidationTest, TwistGradientSignIsCorrect) {
   condition.alpha = 5.0 * kDegreesToRadians;
 
   // Positive twist (leading edge up) should increase local lift
-  ad::AeroGradients wing_root = grad_calc_.ComputeSectionGradient(
-      condition, 0, 0, ad::GeometryVariable::kTwist);
-  ad::AeroGradients wing_tip = grad_calc_.ComputeSectionGradient(
-      condition, 0, 1, ad::GeometryVariable::kTwist);
+  gradients::AeroGradients wing_root = grad_calc_.ComputeSectionGradient(
+      condition, 0, 0, gradients::GeometryVariable::kTwist);
+  gradients::AeroGradients wing_tip = grad_calc_.ComputeSectionGradient(
+      condition, 0, 1, gradients::GeometryVariable::kTwist);
 
   // Both should give positive dCL/dtwist
   EXPECT_GT(wing_root.dCL, 0.0)
@@ -443,8 +443,8 @@ TEST_F(OptVLGradientValidationTest, TailTwistGradientAffectsCmStrongly) {
   condition.alpha = 5.0 * kDegreesToRadians;
 
   // Tail twist should have strong effect on Cm
-  ad::AeroGradients tail_twist = grad_calc_.ComputeSectionGradient(
-      condition, 1, 0, ad::GeometryVariable::kTwist);  // Surface 1 = HTail
+  gradients::AeroGradients tail_twist = grad_calc_.ComputeSectionGradient(
+      condition, 1, 0, gradients::GeometryVariable::kTwist);  // Surface 1 = HTail
 
   // Positive tail twist creates nose-down moment (negative Cm)
   EXPECT_LT(tail_twist.dCm, 0.0)
@@ -464,7 +464,7 @@ TEST_F(OptVLGradientValidationTest, LiftCurveSlopeIsReasonable) {
   condition.alpha = 5.0 * kDegreesToRadians;
   condition.mach = 0.3;
 
-  ad::AeroGradients grads = grad_calc_.ComputeAlphaDerivatives(condition);
+  gradients::AeroGradients grads = grad_calc_.ComputeAlphaDerivatives(condition);
 
   // For a wing with AR ~8, thin airfoil theory gives:
   // CL_alpha = 2*pi * AR / (AR + 2) ≈ 5.0 per radian
@@ -479,7 +479,7 @@ TEST_F(OptVLGradientValidationTest, RollDampingIsNegative) {
   FlightCondition condition;
   condition.alpha = 5.0 * kDegreesToRadians;
 
-  ad::AeroGradients grads = grad_calc_.ComputeRollRateDerivatives(condition);
+  gradients::AeroGradients grads = grad_calc_.ComputeRollRateDerivatives(condition);
 
   // Cl_p (roll damping) should always be negative
   EXPECT_LT(grads.dCl, 0.0) << "Roll damping Cl_p should be negative";
@@ -489,7 +489,7 @@ TEST_F(OptVLGradientValidationTest, PitchRateDerivativesAreComputed) {
   FlightCondition condition;
   condition.alpha = 5.0 * kDegreesToRadians;
 
-  ad::AeroGradients grads = grad_calc_.ComputePitchRateDerivatives(condition);
+  gradients::AeroGradients grads = grad_calc_.ComputePitchRateDerivatives(condition);
 
   // With a tail, Cm_q should be non-zero
   // Note: Sign depends on moment reference position relative to aero center
@@ -511,8 +511,8 @@ TEST_F(OptVLGradientValidationTest, CompressibilityIncreasesCoefficients) {
   FlightCondition high_mach = low_mach;
   high_mach.mach = 0.6;
 
-  ad::AeroGradients low = grad_calc_.ComputeMachDerivatives(low_mach);
-  ad::AeroGradients high = grad_calc_.ComputeMachDerivatives(high_mach);
+  gradients::AeroGradients low = grad_calc_.ComputeMachDerivatives(low_mach);
+  gradients::AeroGradients high = grad_calc_.ComputeMachDerivatives(high_mach);
 
   // Mach sensitivity should increase with Mach (nonlinear Prandtl-Glauert)
   EXPECT_GT(high.dCL, low.dCL)
@@ -528,7 +528,7 @@ TEST_F(OptVLGradientValidationTest, LateralDerivsAreSmallComparedToLongitudinal)
   condition.alpha = 5.0 * kDegreesToRadians;
   condition.beta = 0.0;  // No sideslip
 
-  ad::AeroGradients alpha = grad_calc_.ComputeAlphaDerivatives(condition);
+  gradients::AeroGradients alpha = grad_calc_.ComputeAlphaDerivatives(condition);
 
   // At zero sideslip, lateral coefficients and their alpha derivatives
   // should be much smaller than longitudinal derivatives
@@ -549,7 +549,7 @@ TEST_F(OptVLGradientValidationTest, ZeroAlphaGivesMinimumDragSlope) {
   condition.alpha = 0.0;
   condition.mach = 0.3;
 
-  ad::AeroGradients grads = grad_calc_.ComputeAlphaDerivatives(condition);
+  gradients::AeroGradients grads = grad_calc_.ComputeAlphaDerivatives(condition);
 
   // At zero alpha (minimum drag), dCD/dalpha should be very small
   // (we're at the bottom of the drag polar)
@@ -558,4 +558,4 @@ TEST_F(OptVLGradientValidationTest, ZeroAlphaGivesMinimumDragSlope) {
 }
 
 }  // namespace
-}  // namespace vlm
+}  // namespace pegasus

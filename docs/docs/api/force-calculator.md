@@ -5,7 +5,7 @@ sidebar_position: 6
 # ForceCalculator
 
 ```cpp
-#include "vlm/aero/force_calculator.h"
+#include "pegasus/aero/force_calculator.h"
 ```
 
 Computes aerodynamic forces and moments from a VLM solution using the Kutta-Joukowski theorem and Trefftz plane analysis.

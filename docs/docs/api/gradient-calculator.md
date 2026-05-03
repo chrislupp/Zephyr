@@ -5,7 +5,7 @@ sidebar_position: 11
 # GradientCalculator
 
 ```cpp
-#include "vlm/ad/gradient_calculator.h"
+#include "pegasus/gradients/gradient_calculator.h"
 ```
 
 High-level interface for computing analytical gradients of aerodynamic coefficients using the adjoint method.

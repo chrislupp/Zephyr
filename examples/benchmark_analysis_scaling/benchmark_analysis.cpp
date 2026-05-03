@@ -11,7 +11,7 @@
 #include <iostream>
 #include <vector>
 
-#include "vlm/vlm.h"
+#include "pegasus/pegasus.h"
 
 int main() {
   constexpr double span = 10.0;
@@ -28,13 +28,13 @@ int main() {
     int n_stations = ny + 1;
 
     // Build mesh input (matches the Philote benchmark geometry)
-    vlm::MeshInput mesh_input;
+    pegasus::MeshInput mesh_input;
     mesh_input.reference.reference_area = span * chord;
     mesh_input.reference.reference_chord = chord;
     mesh_input.reference.reference_span = span;
     mesh_input.reference.moment_reference_point = {0.25 * chord, 0.0, 0.0};
 
-    vlm::SurfaceMesh surface;
+    pegasus::SurfaceMesh surface;
     surface.name = "wing";
     surface.nx = nx;
     surface.ny = ny;
@@ -54,13 +54,13 @@ int main() {
     }
     mesh_input.surfaces.push_back(surface);
 
-    vlm::FlightCondition condition;
+    pegasus::FlightCondition condition;
     condition.alpha = alpha_rad;
     condition.dynamic_pressure = 0.5 * 1.225 * 25.0 * 25.0;
 
     // Warm-up run
     {
-      vlm::VortexLatticeSolver solver;
+      pegasus::VortexLatticeSolver solver;
       solver.SetMesh(mesh_input);
       solver.RebuildAIC();
       solver.Solve(condition);
@@ -69,12 +69,12 @@ int main() {
     // Timed runs
     auto t0 = std::chrono::high_resolution_clock::now();
     for (int r = 0; r < n_repeats; ++r) {
-      vlm::VortexLatticeSolver solver;
+      pegasus::VortexLatticeSolver solver;
       solver.SetMesh(mesh_input);
       solver.RebuildAIC();
-      vlm::SolutionState state = solver.Solve(condition);
+      pegasus::SolutionState state = solver.Solve(condition);
 
-      vlm::ForceCalculator calc;
+      pegasus::ForceCalculator calc;
       calc.ComputeForces(mesh_input.reference, solver.GetMesh(),
                          state, condition);
     }

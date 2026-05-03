@@ -1,5 +1,5 @@
 /*
-    Project VLM
+    Project Pegasus
     Version 0.0.0
 
     Copyright 2024, Christopher A. Lupp
@@ -23,11 +23,11 @@
 
 #include <gtest/gtest.h>
 
-#include "vlm/ad/autodiff_tape.h"
-#include "vlm/ad/dual_number.h"
+#include "pegasus/gradients/autodiff_tape.h"
+#include "pegasus/gradients/dual_number.h"
 
-namespace vlm {
-namespace ad {
+namespace pegasus {
+namespace gradients {
 namespace {
 
 constexpr double kTestTolerance = 1.0e-8;
@@ -651,5 +651,5 @@ TEST(CrossValidationTest, ForwardVsReverseMultiVar) {
 }
 
 }  // namespace
-}  // namespace ad
-}  // namespace vlm
+}  // namespace gradients
+}  // namespace pegasus

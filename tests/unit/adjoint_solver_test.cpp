@@ -1,5 +1,5 @@
 /*
-    Project VLM
+    Project Pegasus
     Version 0.0.0
 
     Copyright 2024, Christopher A. Lupp
@@ -20,13 +20,13 @@
 
 #include <gtest/gtest.h>
 
-#include "vlm/ad/adjoint_solver.h"
-#include "vlm/aero/force_calculator.h"
-#include "vlm/geometry/aircraft.h"
-#include "vlm/geometry/section.h"
-#include "vlm/geometry/surface.h"
+#include "pegasus/gradients/adjoint_solver.h"
+#include "pegasus/aero/force_calculator.h"
+#include "pegasus/geometry/aircraft.h"
+#include "pegasus/geometry/section.h"
+#include "pegasus/geometry/surface.h"
 
-namespace vlm {
+namespace pegasus {
 namespace {
 
 // ============================================================================
@@ -61,7 +61,7 @@ class AdjointSolverTest : public ::testing::Test {
 
 TEST_F(AdjointSolverTest, ConstructFromSolverBeforeSolve) {
   // Before calling Solve(), AIC is not yet built
-  ad::AdjointSolver adjoint(solver_);
+  gradients::AdjointSolver adjoint(solver_);
 
   // AIC is built lazily during Solve(), so adjoint should NOT be valid yet
   EXPECT_FALSE(adjoint.IsValid());
@@ -72,7 +72,7 @@ TEST_F(AdjointSolverTest, ConstructFromSolverAfterSolve) {
   condition.alpha = 5.0 * kDegreesToRadians;
   solver_.Solve(condition);
 
-  ad::AdjointSolver adjoint(solver_);
+  gradients::AdjointSolver adjoint(solver_);
   EXPECT_TRUE(adjoint.IsValid());
   EXPECT_GT(adjoint.GetNumUnknowns(), 0);
 }
@@ -81,7 +81,7 @@ TEST_F(AdjointSolverTest, SolveAdjointReturnsCorrectSize) {
   FlightCondition condition;
   solver_.Solve(condition);
 
-  ad::AdjointSolver adjoint(solver_);
+  gradients::AdjointSolver adjoint(solver_);
   const Index n = adjoint.GetNumUnknowns();
 
   VecX rhs = VecX::Ones(n);
@@ -95,7 +95,7 @@ TEST_F(AdjointSolverTest, AdjointSolveIsCorrect) {
   FlightCondition condition;
   solver_.Solve(condition);
 
-  ad::AdjointSolver adjoint(solver_);
+  gradients::AdjointSolver adjoint(solver_);
   const Index n = adjoint.GetNumUnknowns();
 
   // Random RHS
@@ -116,7 +116,7 @@ TEST_F(AdjointSolverTest, SolveMultipleAdjointProblems) {
   FlightCondition condition;
   solver_.Solve(condition);
 
-  ad::AdjointSolver adjoint(solver_);
+  gradients::AdjointSolver adjoint(solver_);
   const Index n = adjoint.GetNumUnknowns();
 
   // Multiple RHS vectors (e.g., for CL, CD, Cm simultaneously)
@@ -147,7 +147,7 @@ TEST_F(AdjointSolverTest, ForceGradientsHaveCorrectSize) {
   condition.alpha = 5.0 * kDegreesToRadians;
   SolutionState solution = solver_.Solve(condition);
 
-  ad::ForceGradients grads = ad::ComputeForceGradients(
+  gradients::ForceGradients grads = gradients::ComputeForceGradients(
       solver_.GetMesh(), solution, condition, aircraft_);
 
   const Index n = solution.circulation.size();
@@ -164,7 +164,7 @@ TEST_F(AdjointSolverTest, ForceGradientsAreNonZero) {
   condition.alpha = 5.0 * kDegreesToRadians;
   SolutionState solution = solver_.Solve(condition);
 
-  ad::ForceGradients grads = ad::ComputeForceGradients(
+  gradients::ForceGradients grads = gradients::ComputeForceGradients(
       solver_.GetMesh(), solution, condition, aircraft_);
 
   // At non-zero alpha, CL should depend on circulation
@@ -182,7 +182,7 @@ TEST_F(AdjointSolverTest, CLGradientIsPositive) {
   condition.alpha = 5.0 * kDegreesToRadians;
   SolutionState solution = solver_.Solve(condition);
 
-  ad::ForceGradients grads = ad::ComputeForceGradients(
+  gradients::ForceGradients grads = gradients::ComputeForceGradients(
       solver_.GetMesh(), solution, condition, aircraft_);
 
   // Most elements should have positive dCL/dGamma
@@ -274,7 +274,7 @@ TEST_F(AdjointValidationTest, DISABLED_AdjointMatchesFiniteDiffForCL) {
   solver_.Solve(condition);
 
   // Adjoint derivative
-  double adjoint_deriv = ad::ComputeTotalDerivative(0, solver_, condition, aircraft_);
+  double adjoint_deriv = gradients::ComputeTotalDerivative(0, solver_, condition, aircraft_);
 
   // Finite difference derivative
   double fd_deriv = FiniteDiffDerivative(0, condition);
@@ -306,11 +306,11 @@ TEST_F(AdjointSolverTest, AdjointIdentityTest) {
   const Index n = solution.circulation.size();
 
   // Compute force gradients
-  ad::ForceGradients grads = ad::ComputeForceGradients(
+  gradients::ForceGradients grads = gradients::ComputeForceGradients(
       mesh, solution, condition, aircraft_);
 
   // Solve adjoint for CL
-  ad::AdjointSolver adjoint(solver_);
+  gradients::AdjointSolver adjoint(solver_);
   VecX lambda_CL = adjoint.SolveAdjoint(grads.dCL_dGamma);
 
   // The adjoint variable lambda represents dCL/db where b is the RHS
@@ -322,4 +322,4 @@ TEST_F(AdjointSolverTest, AdjointIdentityTest) {
 }
 
 }  // namespace
-}  // namespace vlm
+}  // namespace pegasus

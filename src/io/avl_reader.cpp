@@ -1,5 +1,5 @@
 /*
-    Project VLM
+    Project Pegasus
     Version 0.0.0
 
     Copyright 2024, Christopher A. Lupp
@@ -18,7 +18,7 @@
     along with this program.  If not, see <https://www.gnu.org/licenses/>.
 */
 
-#include "vlm/io/avl_reader.h"
+#include "pegasus/io/avl_reader.h"
 
 #include <algorithm>
 #include <cctype>
@@ -27,7 +27,7 @@
 #include <sstream>
 #include <stdexcept>
 
-namespace vlm {
+namespace pegasus {
 
 namespace {
 
@@ -493,4 +493,4 @@ Aircraft AvlReader::ParseString(const std::string& content,
     return aircraft;
 }
 
-}  // namespace vlm
+}  // namespace pegasus

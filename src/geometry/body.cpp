@@ -1,5 +1,5 @@
 /*
-    Project VLM
+    Project Pegasus
     Version 0.0.0
 
     Copyright 2024, Christopher A. Lupp
@@ -18,12 +18,12 @@
     along with this program.  If not, see <https://www.gnu.org/licenses/>.
 */
 
-#include "vlm/geometry/body.h"
+#include "pegasus/geometry/body.h"
 
 #include <utility>
 
-namespace vlm {
+namespace pegasus {
 
 Body::Body(std::string name) : name_(std::move(name)) {}
 
-}  // namespace vlm
+}  // namespace pegasus

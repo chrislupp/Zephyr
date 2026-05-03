@@ -5,7 +5,7 @@ sidebar_position: 5
 # VortexLatticeSolver
 
 ```cpp
-#include "vlm/solver/vortex_lattice_solver.h"
+#include "pegasus/solver/vortex_lattice_solver.h"
 ```
 
 Core VLM solver that builds the aerodynamic influence coefficient (AIC) matrix and solves for circulation distributions.
