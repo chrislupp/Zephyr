@@ -1,0 +1,380 @@
+// Copyright (c) 2024 VLM Authors
+// SPDX-License-Identifier: AGPL-3.0-or-later
+
+#include "vlm/philote/vlm_discipline.h"
+
+#include <algorithm>
+#include <sstream>
+#include <stdexcept>
+
+namespace vlm {
+
+// =============================================================================
+// String parsing utilities
+// =============================================================================
+
+std::vector<std::string> VlmDiscipline::SplitString(const std::string& str,
+                                                    char delimiter) {
+  std::vector<std::string> tokens;
+  std::istringstream stream(str);
+  std::string token;
+  while (std::getline(stream, token, delimiter)) {
+    // Trim whitespace
+    auto start = token.find_first_not_of(" \t");
+    auto end = token.find_last_not_of(" \t");
+    if (start != std::string::npos) {
+      tokens.push_back(token.substr(start, end - start + 1));
+    }
+  }
+  return tokens;
+}
+
+bool VlmDiscipline::ParseBool(const std::string& str) {
+  std::string lower = str;
+  std::transform(lower.begin(), lower.end(), lower.begin(), ::tolower);
+  return lower == "true" || lower == "1" || lower == "yes";
+}
+
+// =============================================================================
+// Philote lifecycle methods
+// =============================================================================
+
+void VlmDiscipline::Initialize() {
+  ExplicitDiscipline::Initialize();
+
+  // Surface configuration
+  AddOption("num_surfaces", "int");
+  AddOption("surface_names", "string");
+  AddOption("surface_nx", "string");
+  AddOption("surface_ny", "string");
+  AddOption("surface_has_wake", "string");
+  AddOption("surface_y_duplicated", "string");
+  AddOption("surface_y_duplicate_plane", "string");
+  AddOption("surface_component_index", "string");
+  AddOption("surface_affected_by_freestream", "string");
+
+  // Reference quantities
+  AddOption("reference_area", "float");
+  AddOption("reference_chord", "float");
+  AddOption("reference_span", "float");
+  AddOption("moment_ref_x", "float");
+  AddOption("moment_ref_y", "float");
+  AddOption("moment_ref_z", "float");
+}
+
+void VlmDiscipline::SetOptions(
+    const google::protobuf::Struct& options_struct) {
+  const auto& fields = options_struct.fields();
+
+  // Parse number of surfaces
+  int64_t num_surfaces = 1;
+  auto it = fields.find("num_surfaces");
+  if (it != fields.end()) {
+    num_surfaces = static_cast<int64_t>(it->second.number_value());
+  }
+
+  // Parse surface names
+  std::vector<std::string> names;
+  it = fields.find("surface_names");
+  if (it != fields.end()) {
+    names = SplitString(it->second.string_value(), ',');
+  }
+  if (static_cast<int64_t>(names.size()) != num_surfaces) {
+    throw std::runtime_error(
+        "surface_names count does not match num_surfaces");
+  }
+
+  // Parse nx values
+  std::vector<std::string> nx_strs;
+  it = fields.find("surface_nx");
+  if (it != fields.end()) {
+    nx_strs = SplitString(it->second.string_value(), ',');
+  }
+  if (static_cast<int64_t>(nx_strs.size()) != num_surfaces) {
+    throw std::runtime_error("surface_nx count does not match num_surfaces");
+  }
+
+  // Parse ny values
+  std::vector<std::string> ny_strs;
+  it = fields.find("surface_ny");
+  if (it != fields.end()) {
+    ny_strs = SplitString(it->second.string_value(), ',');
+  }
+  if (static_cast<int64_t>(ny_strs.size()) != num_surfaces) {
+    throw std::runtime_error("surface_ny count does not match num_surfaces");
+  }
+
+  // Parse optional surface properties
+  std::vector<std::string> has_wake_strs, y_dup_strs, y_dup_plane_strs,
+      comp_idx_strs, aff_strs;
+
+  it = fields.find("surface_has_wake");
+  if (it != fields.end())
+    has_wake_strs = SplitString(it->second.string_value(), ',');
+
+  it = fields.find("surface_y_duplicated");
+  if (it != fields.end())
+    y_dup_strs = SplitString(it->second.string_value(), ',');
+
+  it = fields.find("surface_y_duplicate_plane");
+  if (it != fields.end())
+    y_dup_plane_strs = SplitString(it->second.string_value(), ',');
+
+  it = fields.find("surface_component_index");
+  if (it != fields.end())
+    comp_idx_strs = SplitString(it->second.string_value(), ',');
+
+  it = fields.find("surface_affected_by_freestream");
+  if (it != fields.end())
+    aff_strs = SplitString(it->second.string_value(), ',');
+
+  // Build surface configs
+  surfaces_.clear();
+  surfaces_.resize(num_surfaces);
+  for (int64_t i = 0; i < num_surfaces; ++i) {
+    surfaces_[i].name = names[i];
+    surfaces_[i].nx = std::stoll(nx_strs[i]);
+    surfaces_[i].ny = std::stoll(ny_strs[i]);
+
+    if (i < static_cast<int64_t>(has_wake_strs.size()))
+      surfaces_[i].has_wake = ParseBool(has_wake_strs[i]);
+    if (i < static_cast<int64_t>(y_dup_strs.size()))
+      surfaces_[i].y_duplicated = ParseBool(y_dup_strs[i]);
+    if (i < static_cast<int64_t>(y_dup_plane_strs.size()))
+      surfaces_[i].y_duplicate_plane = std::stod(y_dup_plane_strs[i]);
+    if (i < static_cast<int64_t>(comp_idx_strs.size()))
+      surfaces_[i].component_index = std::stoll(comp_idx_strs[i]);
+    if (i < static_cast<int64_t>(aff_strs.size()))
+      surfaces_[i].affected_by_freestream = ParseBool(aff_strs[i]);
+  }
+
+  // Parse reference quantities
+  it = fields.find("reference_area");
+  if (it != fields.end()) ref_.reference_area = it->second.number_value();
+
+  it = fields.find("reference_chord");
+  if (it != fields.end()) ref_.reference_chord = it->second.number_value();
+
+  it = fields.find("reference_span");
+  if (it != fields.end()) ref_.reference_span = it->second.number_value();
+
+  it = fields.find("moment_ref_x");
+  if (it != fields.end()) ref_.moment_reference_point[0] = it->second.number_value();
+
+  it = fields.find("moment_ref_y");
+  if (it != fields.end()) ref_.moment_reference_point[1] = it->second.number_value();
+
+  it = fields.find("moment_ref_z");
+  if (it != fields.end()) ref_.moment_reference_point[2] = it->second.number_value();
+
+  // Call parent to trigger Configure()
+  ExplicitDiscipline::SetOptions(options_struct);
+}
+
+void VlmDiscipline::Setup() {
+  // Mesh node inputs (one per surface)
+  for (const auto& s : surfaces_) {
+    int64_t num_values = (s.nx + 1) * (s.ny + 1) * 3;
+    AddInput(s.name, {num_values}, "m");
+  }
+
+  // Flight condition inputs
+  AddInput("alpha", {1}, "rad");
+  AddInput("beta", {1}, "rad");
+  AddInput("mach", {1}, "");
+  AddInput("dynamic_pressure", {1}, "Pa");
+  AddInput("roll_rate", {1}, "");
+  AddInput("pitch_rate", {1}, "");
+  AddInput("yaw_rate", {1}, "");
+
+  // Aerodynamic coefficient outputs
+  AddOutput("CL", {1}, "");
+  AddOutput("CD", {1}, "");
+  AddOutput("CY", {1}, "");
+  AddOutput("Cl", {1}, "");
+  AddOutput("Cm", {1}, "");
+  AddOutput("Cn", {1}, "");
+}
+
+void VlmDiscipline::SetupPartials() {
+  const char* outputs[] = {"CL", "CD", "CY", "Cl", "Cm", "Cn"};
+
+  // Partials w.r.t. mesh node coordinates
+  for (const auto& s : surfaces_) {
+    for (const char* out : outputs) {
+      DeclarePartials(out, s.name);
+    }
+  }
+
+  // Partials w.r.t. flight condition inputs
+  const char* fc_inputs[] = {"alpha", "beta", "mach", "dynamic_pressure",
+                             "roll_rate", "pitch_rate", "yaw_rate"};
+  for (const char* out : outputs) {
+    for (const char* inp : fc_inputs) {
+      DeclarePartials(out, inp);
+    }
+  }
+}
+
+// =============================================================================
+// Helper methods
+// =============================================================================
+
+MeshInput VlmDiscipline::BuildMeshInput(
+    const philote::Variables& inputs) const {
+  MeshInput mesh_input;
+  mesh_input.reference = ref_;
+
+  for (const auto& s : surfaces_) {
+    SurfaceMesh surface;
+    surface.name = s.name;
+    surface.nx = s.nx;
+    surface.ny = s.ny;
+    surface.component_index = s.component_index;
+    surface.affected_by_freestream = s.affected_by_freestream;
+    surface.has_wake = s.has_wake;
+    surface.y_duplicated = s.y_duplicated;
+    surface.y_duplicate_plane = s.y_duplicate_plane;
+
+    int64_t num_nodes = (s.nx + 1) * (s.ny + 1);
+    surface.nodes.resize(num_nodes, 3);
+    const auto& var = inputs.at(s.name);
+    for (int64_t n = 0; n < num_nodes; ++n) {
+      surface.nodes(n, 0) = var(n * 3 + 0);
+      surface.nodes(n, 1) = var(n * 3 + 1);
+      surface.nodes(n, 2) = var(n * 3 + 2);
+    }
+
+    mesh_input.surfaces.push_back(std::move(surface));
+  }
+
+  return mesh_input;
+}
+
+FlightCondition VlmDiscipline::BuildFlightCondition(
+    const philote::Variables& inputs) const {
+  FlightCondition condition;
+  condition.alpha = inputs.at("alpha")(0);
+  condition.beta = inputs.at("beta")(0);
+  condition.mach = inputs.at("mach")(0);
+  condition.dynamic_pressure = inputs.at("dynamic_pressure")(0);
+  condition.roll_rate = inputs.at("roll_rate")(0);
+  condition.pitch_rate = inputs.at("pitch_rate")(0);
+  condition.yaw_rate = inputs.at("yaw_rate")(0);
+  return condition;
+}
+
+// =============================================================================
+// Compute
+// =============================================================================
+
+void VlmDiscipline::Compute(const philote::Variables& inputs,
+                            philote::Variables& outputs) {
+  MeshInput mesh_input = BuildMeshInput(inputs);
+  FlightCondition condition = BuildFlightCondition(inputs);
+
+  solver_.SetMesh(mesh_input);
+  solver_.RebuildAIC();
+  SolutionState state = solver_.Solve(condition);
+
+  ForceCalculator calc;
+  AerodynamicResults results =
+      calc.ComputeForces(mesh_input.reference, solver_.GetMesh(),
+                         state, condition);
+
+  outputs.at("CL")(0) = results.CL;
+  outputs.at("CD")(0) = results.CD;
+  outputs.at("CY")(0) = results.CY;
+  outputs.at("Cl")(0) = results.Cl;
+  outputs.at("Cm")(0) = results.Cm;
+  outputs.at("Cn")(0) = results.Cn;
+}
+
+// =============================================================================
+// ComputePartials
+// =============================================================================
+
+void VlmDiscipline::ComputePartials(const philote::Variables& inputs,
+                                    philote::Partials& partials) {
+  MeshInput mesh_input = BuildMeshInput(inputs);
+  FlightCondition condition = BuildFlightCondition(inputs);
+
+  // Mesh node gradients
+  grad_calc_.SetMesh(mesh_input);
+  auto node_grads = grad_calc_.ComputeMeshNodeGradients(condition);
+
+  for (size_t s = 0; s < surfaces_.size(); ++s) {
+    const auto& sg = node_grads[s];
+    const std::string& name = surfaces_[s].name;
+    int64_t n = (surfaces_[s].nx + 1) * (surfaces_[s].ny + 1) * 3;
+
+    for (int64_t i = 0; i < n; ++i) {
+      partials[{"CL", name}](i) = sg.dCL.d_nodes[i];
+      partials[{"CD", name}](i) = sg.dCD.d_nodes[i];
+      partials[{"CY", name}](i) = sg.dCY.d_nodes[i];
+      partials[{"Cl", name}](i) = sg.dCl.d_nodes[i];
+      partials[{"Cm", name}](i) = sg.dCm.d_nodes[i];
+      partials[{"Cn", name}](i) = sg.dCn.d_nodes[i];
+    }
+  }
+
+  // Flight condition gradients
+  ad::FullGradients fc_grads =
+      grad_calc_.ComputeFlightConditionDerivatives(condition);
+
+  // CL partials
+  partials[{"CL", "alpha"}](0) = fc_grads.alpha_derivs.dCL;
+  partials[{"CL", "beta"}](0) = fc_grads.beta_derivs.dCL;
+  partials[{"CL", "mach"}](0) = fc_grads.mach_derivs.dCL;
+  partials[{"CL", "roll_rate"}](0) = fc_grads.p_derivs.dCL;
+  partials[{"CL", "pitch_rate"}](0) = fc_grads.q_derivs.dCL;
+  partials[{"CL", "yaw_rate"}](0) = fc_grads.r_derivs.dCL;
+  partials[{"CL", "dynamic_pressure"}](0) = 0.0;
+
+  // CD partials
+  partials[{"CD", "alpha"}](0) = fc_grads.alpha_derivs.dCD;
+  partials[{"CD", "beta"}](0) = fc_grads.beta_derivs.dCD;
+  partials[{"CD", "mach"}](0) = fc_grads.mach_derivs.dCD;
+  partials[{"CD", "roll_rate"}](0) = fc_grads.p_derivs.dCD;
+  partials[{"CD", "pitch_rate"}](0) = fc_grads.q_derivs.dCD;
+  partials[{"CD", "yaw_rate"}](0) = fc_grads.r_derivs.dCD;
+  partials[{"CD", "dynamic_pressure"}](0) = 0.0;
+
+  // CY partials
+  partials[{"CY", "alpha"}](0) = fc_grads.alpha_derivs.dCY;
+  partials[{"CY", "beta"}](0) = fc_grads.beta_derivs.dCY;
+  partials[{"CY", "mach"}](0) = fc_grads.mach_derivs.dCY;
+  partials[{"CY", "roll_rate"}](0) = fc_grads.p_derivs.dCY;
+  partials[{"CY", "pitch_rate"}](0) = fc_grads.q_derivs.dCY;
+  partials[{"CY", "yaw_rate"}](0) = fc_grads.r_derivs.dCY;
+  partials[{"CY", "dynamic_pressure"}](0) = 0.0;
+
+  // Cl partials
+  partials[{"Cl", "alpha"}](0) = fc_grads.alpha_derivs.dCl;
+  partials[{"Cl", "beta"}](0) = fc_grads.beta_derivs.dCl;
+  partials[{"Cl", "mach"}](0) = fc_grads.mach_derivs.dCl;
+  partials[{"Cl", "roll_rate"}](0) = fc_grads.p_derivs.dCl;
+  partials[{"Cl", "pitch_rate"}](0) = fc_grads.q_derivs.dCl;
+  partials[{"Cl", "yaw_rate"}](0) = fc_grads.r_derivs.dCl;
+  partials[{"Cl", "dynamic_pressure"}](0) = 0.0;
+
+  // Cm partials
+  partials[{"Cm", "alpha"}](0) = fc_grads.alpha_derivs.dCm;
+  partials[{"Cm", "beta"}](0) = fc_grads.beta_derivs.dCm;
+  partials[{"Cm", "mach"}](0) = fc_grads.mach_derivs.dCm;
+  partials[{"Cm", "roll_rate"}](0) = fc_grads.p_derivs.dCm;
+  partials[{"Cm", "pitch_rate"}](0) = fc_grads.q_derivs.dCm;
+  partials[{"Cm", "yaw_rate"}](0) = fc_grads.r_derivs.dCm;
+  partials[{"Cm", "dynamic_pressure"}](0) = 0.0;
+
+  // Cn partials
+  partials[{"Cn", "alpha"}](0) = fc_grads.alpha_derivs.dCn;
+  partials[{"Cn", "beta"}](0) = fc_grads.beta_derivs.dCn;
+  partials[{"Cn", "mach"}](0) = fc_grads.mach_derivs.dCn;
+  partials[{"Cn", "roll_rate"}](0) = fc_grads.p_derivs.dCn;
+  partials[{"Cn", "pitch_rate"}](0) = fc_grads.q_derivs.dCn;
+  partials[{"Cn", "yaw_rate"}](0) = fc_grads.r_derivs.dCn;
+  partials[{"Cn", "dynamic_pressure"}](0) = 0.0;
+}
+
+}  // namespace vlm
