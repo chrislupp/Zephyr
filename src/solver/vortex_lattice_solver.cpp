@@ -23,6 +23,17 @@ void VortexLatticeSolver::SetAircraft(const Aircraft& aircraft) {
   unit_responses_valid_ = false;
 }
 
+void VortexLatticeSolver::SetMesh(const MeshInput& input) {
+  mesh_.GenerateFromMesh(input);
+
+  ref_quantities_ = input.reference;
+  reference_point_ = input.reference.moment_reference_point;
+
+  // Invalidate cached matrices
+  aic_valid_ = false;
+  unit_responses_valid_ = false;
+}
+
 void VortexLatticeSolver::SetSymmetry(const SymmetryConfig& config) {
   symmetry_ = config;
 

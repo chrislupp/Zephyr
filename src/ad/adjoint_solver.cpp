@@ -6,8 +6,9 @@
 #include <cmath>
 #include <vector>
 
-#include "vlm/ad/analytical_forces.h"
 #include "vlm/ad/analytical_biot_savart.h"
+#include "vlm/ad/analytical_forces.h"
+#include "vlm/geometry/mesh_input.h"
 
 namespace vlm {
 namespace ad {
@@ -52,7 +53,7 @@ MatX AdjointSolver::SolveAdjointMultiple(const MatX& rhs) const {
 void ExtractMeshData(
     const VortexLattice& mesh,
     const SolutionState& solution,
-    const Aircraft& aircraft,
+    const Vec3& moment_ref,
     std::vector<double>& bound_left,
     std::vector<double>& bound_right,
     std::vector<double>& control_points,
@@ -65,8 +66,6 @@ void ExtractMeshData(
   control_points.resize(3 * n);
   moment_arm.resize(3 * n);
   induced_velocity.resize(3 * n);
-
-  Vec3 moment_ref = aircraft.GetMomentReferencePoint();
 
   for (Index i = 0; i < n; ++i) {
     const HorseshoeVortex& vor = mesh.GetVortex(i);
@@ -163,12 +162,13 @@ void ApplyVelocityKernelTranspose(
   }
 }
 
-/// Compute force gradients using analytical derivatives
-ForceGradients ComputeForceGradients(
+/// Core implementation of force gradient computation
+static ForceGradients ComputeForceGradientsImpl(
     const VortexLattice& mesh,
     const SolutionState& solution,
     const FlightCondition& condition,
-    const Aircraft& aircraft) {
+    const Vec3& moment_ref,
+    double reference_area) {
 
   const Index n = solution.circulation.size();
 
@@ -186,7 +186,7 @@ ForceGradients ComputeForceGradients(
 
   // Extract mesh data into raw arrays
   std::vector<double> bound_left, bound_right, control_points, moment_arm, induced_velocity;
-  ExtractMeshData(mesh, solution, aircraft, bound_left, bound_right,
+  ExtractMeshData(mesh, solution, moment_ref, bound_left, bound_right,
                   control_points, moment_arm, induced_velocity);
 
   // Copy circulation to contiguous array
@@ -194,8 +194,6 @@ ForceGradients ComputeForceGradients(
   for (Index i = 0; i < n; ++i) {
     circulation[i] = solution.circulation(i);
   }
-
-  double reference_area = aircraft.GetReferenceArea();
 
   // The TOTAL circulation gradient is:
   //   dJ/dGamma_total = dJ/dGamma|_V + K^T * dJ/dV
@@ -314,6 +312,30 @@ ForceGradients ComputeForceGradients(
   }
 
   return grads;
+}
+
+/// Compute force gradients using Aircraft (existing API)
+ForceGradients ComputeForceGradients(
+    const VortexLattice& mesh,
+    const SolutionState& solution,
+    const FlightCondition& condition,
+    const Aircraft& aircraft) {
+  return ComputeForceGradientsImpl(
+      mesh, solution, condition,
+      aircraft.GetMomentReferencePoint(),
+      aircraft.GetReferenceArea());
+}
+
+/// Compute force gradients using ReferenceQuantities (mesh-based API)
+ForceGradients ComputeForceGradients(
+    const VortexLattice& mesh,
+    const SolutionState& solution,
+    const FlightCondition& condition,
+    const ReferenceQuantities& ref) {
+  return ComputeForceGradientsImpl(
+      mesh, solution, condition,
+      ref.moment_reference_point,
+      ref.reference_area);
 }
 
 // ============================================================================

@@ -12,9 +12,11 @@
 
 #include <functional>
 
+#include "vlm/ad/mesh_node_sensitivity.h"
 #include "vlm/aero/aerodynamic_results.h"
 #include "vlm/core/types.h"
 #include "vlm/geometry/aircraft.h"
+#include "vlm/geometry/mesh_input.h"
 #include "vlm/solver/vortex_lattice_solver.h"
 
 namespace vlm {
@@ -180,6 +182,20 @@ class GradientCalculator {
       Index surface_index,
       Index section_index,
       GeometryVariable variable);
+
+  // ==========================================================================
+  // Direct Mesh Input
+  // ==========================================================================
+
+  /// @brief Set direct mesh input (alternative to SetAircraft).
+  void SetMesh(const MeshInput& input);
+
+  /// @brief Compute gradients of all aero outputs w.r.t. mesh node coordinates.
+  ///
+  /// Returns one SurfaceMeshNodeGradients per surface, containing gradients
+  /// of CL, CD, CY, Cl, Cm, Cn w.r.t. each node's x,y,z coordinates.
+  std::vector<SurfaceMeshNodeGradients> ComputeMeshNodeGradients(
+      const FlightCondition& condition);
 
   /// @brief No-op (analytical derivatives don't use finite differences).
   void SetFiniteDiffStep(Scalar step);

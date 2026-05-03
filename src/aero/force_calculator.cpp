@@ -112,6 +112,17 @@ StripLoads ForceCalculator::ComputeStripLoads(
 AerodynamicResults ForceCalculator::ComputeForces(
     const Aircraft& aircraft, const VortexLattice& mesh,
     const SolutionState& solution, const FlightCondition& condition) const {
+  ReferenceQuantities ref;
+  ref.reference_area = aircraft.GetReferenceArea();
+  ref.reference_chord = aircraft.GetReferenceChord();
+  ref.reference_span = aircraft.GetReferenceSpan();
+  ref.moment_reference_point = aircraft.GetMomentReferencePoint();
+  return ComputeForces(ref, mesh, solution, condition);
+}
+
+AerodynamicResults ForceCalculator::ComputeForces(
+    const ReferenceQuantities& ref, const VortexLattice& mesh,
+    const SolutionState& solution, const FlightCondition& condition) const {
   AerodynamicResults results;
 
   if (!solution.is_valid || mesh.GetNumVortices() == 0) {
@@ -119,10 +130,10 @@ AerodynamicResults ForceCalculator::ComputeForces(
   }
 
   // Set reference quantities
-  results.reference_area = aircraft.GetReferenceArea();
-  results.reference_chord = aircraft.GetReferenceChord();
-  results.reference_span = aircraft.GetReferenceSpan();
-  results.moment_reference_point = aircraft.GetMomentReferencePoint();
+  results.reference_area = ref.reference_area;
+  results.reference_chord = ref.reference_chord;
+  results.reference_span = ref.reference_span;
+  results.moment_reference_point = ref.moment_reference_point;
 
   // Freestream direction for stability axis transformation (used in BodyToStabilityAxis)
 

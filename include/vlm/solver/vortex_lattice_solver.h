@@ -10,6 +10,7 @@
 
 #include "vlm/core/types.h"
 #include "vlm/geometry/aircraft.h"
+#include "vlm/geometry/mesh_input.h"
 #include "vlm/solver/influence_matrix.h"
 #include "vlm/solver/vortex_lattice.h"
 
@@ -97,6 +98,17 @@ class VortexLatticeSolver {
   /// Generates the vortex lattice mesh from the aircraft geometry.
   /// Invalidates any cached AIC matrix.
   void SetAircraft(const Aircraft& aircraft);
+
+  /// @brief Sets direct mesh input (alternative to SetAircraft).
+  ///
+  /// Generates the vortex lattice from structured mesh node grids.
+  /// Reference quantities are taken from the MeshInput.
+  void SetMesh(const MeshInput& input);
+
+  /// @brief Gets reference quantities (set by SetMesh or extracted from Aircraft).
+  const ReferenceQuantities& GetReferenceQuantities() const {
+    return ref_quantities_;
+  }
 
   /// @brief Gets the generated mesh.
   const VortexLattice& GetMesh() const { return mesh_; }
@@ -190,6 +202,7 @@ class VortexLatticeSolver {
   VortexLattice mesh_;
   SymmetryConfig symmetry_;
   Vec3 reference_point_{0, 0, 0};
+  ReferenceQuantities ref_quantities_;
 
   // AIC matrix and factorization
   MatX aic_matrix_;

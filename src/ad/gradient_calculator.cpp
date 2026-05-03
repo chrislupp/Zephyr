@@ -9,8 +9,10 @@
 #include "vlm/ad/adjoint_solver.h"
 #include "vlm/ad/analytical_forces.h"
 #include "vlm/ad/analytical_aic.h"
+#include "vlm/ad/mesh_node_sensitivity.h"
 #include "vlm/ad/mesh_sensitivity.h"
 #include "vlm/aero/force_calculator.h"
+#include "vlm/geometry/mesh_input.h"
 #include "vlm/geometry/surface.h"
 
 namespace vlm {
@@ -26,7 +28,10 @@ class GradientCalculator::Impl {
   VortexLatticeSolver solver_;
   ForceCalculator force_calc_;
   bool aircraft_set_{false};
+  bool mesh_set_{false};
   bool use_adjoint_{true};
+  MeshInput mesh_input_;
+  ReferenceQuantities ref_quantities_;
 
   // Cached solution for adjoint computations
   SolutionState cached_solution_;
@@ -1590,6 +1595,315 @@ GeometryGradients GradientCalculator::ComputeGeometryGradients(
   }
 
   return grads;
+}
+
+// ============================================================================
+// Mesh Input Methods
+// ============================================================================
+
+void GradientCalculator::SetMesh(const MeshInput& input) {
+  impl_->mesh_input_ = input;
+  impl_->ref_quantities_ = input.reference;
+  impl_->solver_.SetMesh(input);
+  impl_->mesh_set_ = true;
+  impl_->aircraft_set_ = false;
+  impl_->solution_cached_ = false;
+}
+
+std::vector<SurfaceMeshNodeGradients> GradientCalculator::ComputeMeshNodeGradients(
+    const FlightCondition& condition) {
+
+  std::vector<SurfaceMeshNodeGradients> result;
+  if (!impl_->mesh_set_) return result;
+
+  const MeshInput& mesh_input = impl_->mesh_input_;
+  const ReferenceQuantities& ref = impl_->ref_quantities_;
+
+  // Step 1: Solve forward problem
+  if (!impl_->solution_cached_ ||
+      condition.alpha != impl_->cached_condition_.alpha ||
+      condition.beta != impl_->cached_condition_.beta) {
+    impl_->SolveAndCache(condition);
+  }
+
+  const VortexLattice& mesh = impl_->solver_.GetMesh();
+  const SolutionState& solution = impl_->cached_solution_;
+  const Index n = solution.circulation.size();
+  if (n == 0) return result;
+
+  // Step 2: Compute force gradients dJ/dGamma for all 6 outputs
+  ForceGradients force_grads = ComputeForceGradients(
+      mesh, solution, condition, ref);
+
+  // Step 3: Solve adjoint systems A^T * lambda = dJ/dGamma
+  AdjointSolver adjoint(impl_->solver_);
+  if (!adjoint.IsValid()) return result;
+
+  MatX rhs(n, 6);
+  rhs.col(0) = force_grads.dCL_dGamma;
+  rhs.col(1) = force_grads.dCD_dGamma;
+  rhs.col(2) = force_grads.dCY_dGamma;
+  rhs.col(3) = force_grads.dCl_dGamma;
+  rhs.col(4) = force_grads.dCm_dGamma;
+  rhs.col(5) = force_grads.dCn_dGamma;
+
+  MatX lambda = adjoint.SolveAdjointMultiple(rhs);
+
+  // Extract mesh arrays for analytical kernels
+  MeshArrays arrays = ExtractMeshArrays(mesh);
+
+  double beta_pg = std::sqrt(std::max(0.01, 1.0 - condition.mach * condition.mach));
+  double core_chord_frac = mesh.GetVortexCoreRadiusChordFraction();
+  double core_width_frac = mesh.GetVortexCoreRadiusWidthFraction();
+
+  // Freestream direction
+  double v_inf[3];
+  compute_freestream_direction(condition.alpha, condition.beta, v_inf);
+
+  // Extract geometric data for force kernel
+  Vec3 moment_ref = ref.moment_reference_point;
+  std::vector<double> bound_left(3 * n), bound_right(3 * n);
+  std::vector<double> moment_arm(3 * n), induced_velocity(3 * n);
+  std::vector<double> circulation(n);
+  for (Index i = 0; i < n; ++i) {
+    const HorseshoeVortex& vor = mesh.GetVortex(i);
+    bound_left[3*i+0] = vor.bound_vortex_left.x();
+    bound_left[3*i+1] = vor.bound_vortex_left.y();
+    bound_left[3*i+2] = vor.bound_vortex_left.z();
+    bound_right[3*i+0] = vor.bound_vortex_right.x();
+    bound_right[3*i+1] = vor.bound_vortex_right.y();
+    bound_right[3*i+2] = vor.bound_vortex_right.z();
+    moment_arm[3*i+0] = vor.control_point.x() - moment_ref.x();
+    moment_arm[3*i+1] = vor.control_point.y() - moment_ref.y();
+    moment_arm[3*i+2] = vor.control_point.z() - moment_ref.z();
+    if (solution.induced_velocity.rows() > i) {
+      induced_velocity[3*i+0] = solution.induced_velocity(i, 0);
+      induced_velocity[3*i+1] = solution.induced_velocity(i, 1);
+      induced_velocity[3*i+2] = solution.induced_velocity(i, 2);
+    }
+    circulation[i] = solution.circulation(i);
+  }
+
+  // Step 4: For each objective, accumulate full MeshGradients then chain-rule to nodes
+  // We compute for all 6 objectives
+  for (int obj = 0; obj < 6; ++obj) {
+    VecX lam = lambda.col(obj);
+
+    MeshGradients mesh_grads;
+    mesh_grads.Resize(n);
+
+    // (a) RHS term: lambda^T * (db/d_mesh)
+    // b_i = -n_i . V_inf, so db/d(normal_i) = -V_inf
+    // Contribution: d_normal[i] += -lambda[i] * V_inf (reversed sign in chain rule)
+    // But the total derivative has +lambda^T * db/dtheta, so:
+    // d_normal[i] += lambda[i] * (-V_inf)  ... wait, let me think.
+    //
+    // Total: dJ/dtheta = explicit + lambda^T * db/dtheta - lambda^T * dA/dtheta * Gamma
+    // We accumulate into MeshGradients the "seed" that when contracted with
+    // d(mesh_positions)/d(mesh_nodes), gives the total derivative.
+    //
+    // For the RHS term: lambda^T * db/dtheta
+    //   b_i = -normal_i . V_inf (only normal depends on mesh geometry)
+    //   db_i/d(normal_i) = -V_inf
+    //   So lambda^T * db/d(normal) contributes: d_normal[i] += lambda[i] * (-V_inf[k]) for each k
+    for (Index i = 0; i < n; ++i) {
+      mesh_grads.d_normal[3*i+0] += lam(i) * (-v_inf[0]);
+      mesh_grads.d_normal[3*i+1] += lam(i) * (-v_inf[1]);
+      mesh_grads.d_normal[3*i+2] += lam(i) * (-v_inf[2]);
+    }
+
+    // (b) AIC term: -lambda^T * dA/dtheta * Gamma
+    // For row i: the AIC row depends on rc_i and normal_i
+    // For column j: the AIC column depends on rv1_j and rv2_j
+    //
+    // Row gradient: d(AIC_row[i] . Gamma)/d(rc_i) and d/d(normal_i)
+    // Contribution scaled by -lambda[i]
+    for (Index i = 0; i < n; ++i) {
+      double d_rc_out[3] = {0, 0, 0};
+      double d_normal_out[3] = {0, 0, 0};
+
+      analytical_aic_row_gradient_rc(
+          arrays.rv1.data(), arrays.rv2.data(),
+          &arrays.rc[3*i], &arrays.normal[3*i],
+          arrays.chord.data(), arrays.component_idx.data(),
+          static_cast<int>(n), static_cast<int>(i),
+          arrays.component_idx[i],
+          core_chord_frac, core_width_frac, beta_pg,
+          solution.circulation.data(),
+          d_rc_out, d_normal_out);
+
+      for (int k = 0; k < 3; ++k) {
+        mesh_grads.d_rc[3*i+k] += -lam(i) * d_rc_out[k];
+        mesh_grads.d_normal[3*i+k] += -lam(i) * d_normal_out[k];
+      }
+    }
+
+    // Column gradient: d(lambda^T . AIC_col[j])/d(rv1_j, rv2_j)
+    // Contribution scaled by -Gamma[j]
+    for (Index j = 0; j < n; ++j) {
+      double d_rv1_out[3] = {0, 0, 0};
+      double d_rv2_out[3] = {0, 0, 0};
+
+      analytical_aic_column_gradient_rv(
+          arrays.rv1.data(), arrays.rv2.data(),
+          arrays.rc.data(), arrays.normal.data(),
+          arrays.chord.data(), arrays.component_idx.data(),
+          static_cast<int>(n), static_cast<int>(j),
+          core_chord_frac, core_width_frac, beta_pg,
+          lam.data(),
+          d_rv1_out, d_rv2_out);
+
+      for (int k = 0; k < 3; ++k) {
+        mesh_grads.d_rv1[3*j+k] += -solution.circulation(j) * d_rv1_out[k];
+        mesh_grads.d_rv2[3*j+k] += -solution.circulation(j) * d_rv2_out[k];
+      }
+    }
+
+    // (c) Explicit force term: dJ/d(rv1, rv2, moment_arm)|_Gamma,V
+    // We use the analytical_force_geometry_gradient with unit perturbations
+    // per vortex. But that function is a forward-mode computation that takes
+    // d_bound_left, d_bound_right, d_moment_arm perturbation vectors.
+    // For the adjoint approach, we need to accumulate contributions per vortex.
+    //
+    // The force is: F_total = sum_i 2*Gamma_i * V_eff_i x (rv2_i - rv1_i)
+    // And moment contributions involve moment_arm.
+    // We can compute the explicit per-vortex sensitivities.
+    {
+      // Per-vortex perturbations: set one at a time for each vortex
+      // Actually, this is expensive (O(N^2)). Instead, let's use the
+      // vectorized force gradient: pass unit perturbation for each vortex.
+      // The force geometry gradient is linear in the perturbation, so we
+      // can pass identity perturbation per vortex.
+      for (Index vi = 0; vi < n; ++vi) {
+        // Perturb rv1 (bound_left) of vortex vi in each direction
+        for (int dir = 0; dir < 3; ++dir) {
+          std::vector<double> d_bl(3*n, 0.0), d_br(3*n, 0.0), d_ma(3*n, 0.0);
+          d_bl[3*vi + dir] = 1.0;
+          double d_res[6];
+          analytical_force_geometry_gradient(
+              condition.alpha, condition.beta,
+              circulation.data(), induced_velocity.data(),
+              bound_left.data(), bound_right.data(),
+              moment_arm.data(),
+              static_cast<int>(n), ref.reference_area,
+              d_bl.data(), d_br.data(), d_ma.data(), d_res);
+          mesh_grads.d_rv1[3*vi + dir] += d_res[obj];
+        }
+        // Perturb rv2 (bound_right) of vortex vi in each direction
+        for (int dir = 0; dir < 3; ++dir) {
+          std::vector<double> d_bl(3*n, 0.0), d_br(3*n, 0.0), d_ma(3*n, 0.0);
+          d_br[3*vi + dir] = 1.0;
+          double d_res[6];
+          analytical_force_geometry_gradient(
+              condition.alpha, condition.beta,
+              circulation.data(), induced_velocity.data(),
+              bound_left.data(), bound_right.data(),
+              moment_arm.data(),
+              static_cast<int>(n), ref.reference_area,
+              d_bl.data(), d_br.data(), d_ma.data(), d_res);
+          mesh_grads.d_rv2[3*vi + dir] += d_res[obj];
+        }
+        // Perturb moment_arm (maps to rc) of vortex vi in each direction
+        for (int dir = 0; dir < 3; ++dir) {
+          std::vector<double> d_bl(3*n, 0.0), d_br(3*n, 0.0), d_ma(3*n, 0.0);
+          d_ma[3*vi + dir] = 1.0;
+          double d_res[6];
+          analytical_force_geometry_gradient(
+              condition.alpha, condition.beta,
+              circulation.data(), induced_velocity.data(),
+              bound_left.data(), bound_right.data(),
+              moment_arm.data(),
+              static_cast<int>(n), ref.reference_area,
+              d_bl.data(), d_br.data(), d_ma.data(), d_res);
+          mesh_grads.d_rc[3*vi + dir] += d_res[obj];
+        }
+      }
+    }
+
+    // (d) Velocity kernel geometry term: (dJ/dV) . (dV/d_mesh) . d(mesh)/d(nodes)
+    // dJ/dV is computed analytically, then we propagate through the velocity kernel
+    {
+      std::vector<double> dJ_dV(3 * n, 0.0);
+      analytical_force_induced_velocity_gradient(
+          condition.alpha, condition.beta,
+          circulation.data(), induced_velocity.data(),
+          bound_left.data(), bound_right.data(),
+          nullptr, moment_arm.data(),
+          static_cast<int>(n), ref.reference_area,
+          obj, dJ_dV.data());
+
+      // Propagate through velocity kernel: for each vortex, compute
+      // d(sum_i dJ_dV . V[i,j]*Gamma[j])/d(rc_i, rv1_j, rv2_j)
+      for (Index i = 0; i < n; ++i) {
+        double d_rc_out[3] = {0, 0, 0};
+        analytical_velocity_row_gradient_rc(
+            arrays.rv1.data(), arrays.rv2.data(),
+            &arrays.rc[3*i],
+            arrays.chord.data(), arrays.component_idx.data(),
+            static_cast<int>(n), static_cast<int>(i),
+            arrays.component_idx[i],
+            core_chord_frac, core_width_frac, beta_pg,
+            solution.circulation.data(),
+            &dJ_dV[3*i],
+            d_rc_out);
+        for (int k = 0; k < 3; ++k) {
+          mesh_grads.d_rc[3*i+k] += d_rc_out[k];
+        }
+      }
+
+      for (Index j = 0; j < n; ++j) {
+        double d_rv1_out[3] = {0, 0, 0};
+        double d_rv2_out[3] = {0, 0, 0};
+        analytical_velocity_column_gradient_rv(
+            arrays.rv1.data(), arrays.rv2.data(),
+            arrays.rc.data(),
+            arrays.chord.data(), arrays.component_idx.data(),
+            static_cast<int>(n), static_cast<int>(j),
+            core_chord_frac, core_width_frac, beta_pg,
+            solution.circulation(j),
+            dJ_dV.data(),
+            d_rv1_out, d_rv2_out);
+        for (int k = 0; k < 3; ++k) {
+          mesh_grads.d_rv1[3*j+k] += d_rv1_out[k];
+          mesh_grads.d_rv2[3*j+k] += d_rv2_out[k];
+        }
+      }
+    }
+
+    // Step 5: Chain-rule MeshGradients -> MeshNodeGradients per surface
+    // On first objective, initialize the result structures
+    if (obj == 0) {
+      result.resize(mesh_input.surfaces.size());
+      Index vortex_offset = 0;
+      for (size_t s = 0; s < mesh_input.surfaces.size(); ++s) {
+        const auto& sm = mesh_input.surfaces[s];
+        result[s].Init(sm.name, sm.nx, sm.ny);
+        vortex_offset += sm.nx * sm.ny;
+      }
+    }
+
+    Index vortex_offset = 0;
+    for (size_t s = 0; s < mesh_input.surfaces.size(); ++s) {
+      const auto& sm = mesh_input.surfaces[s];
+
+      MeshNodeGradients* target = nullptr;
+      switch (obj) {
+        case 0: target = &result[s].dCL; break;
+        case 1: target = &result[s].dCD; break;
+        case 2: target = &result[s].dCY; break;
+        case 3: target = &result[s].dCl; break;
+        case 4: target = &result[s].dCm; break;
+        case 5: target = &result[s].dCn; break;
+      }
+
+      PropagateMeshGradientsToNodes(
+          mesh_grads, sm, vortex_offset, sm.nx, sm.ny, *target);
+
+      vortex_offset += sm.nx * sm.ny;
+    }
+  }
+
+  return result;
 }
 
 }  // namespace ad
