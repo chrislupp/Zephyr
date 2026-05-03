@@ -110,3 +110,6 @@ docs/_build/
 docs/html/
 docs/latex/
 doxygen/
+
+# Example output directories
+*_out/
