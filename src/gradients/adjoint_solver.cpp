@@ -20,9 +20,9 @@
 
 #include "pegasus/gradients/adjoint_solver.h"
 
+#include "pegasus/geometry/mesh_input.h"
 #include "pegasus/gradients/analytical_biot_savart.h"
 #include "pegasus/gradients/analytical_forces.h"
-#include "pegasus/geometry/mesh_input.h"
 
 #include <cmath>
 #include <vector>

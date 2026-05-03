@@ -28,11 +28,11 @@
 /// with respect to flight conditions and geometry parameters, enabling
 /// gradient-based optimization workflows via the adjoint method.
 
-#include "pegasus/gradients/mesh_node_sensitivity.h"
 #include "pegasus/aero/aerodynamic_results.h"
 #include "pegasus/core/types.h"
 #include "pegasus/geometry/aircraft.h"
 #include "pegasus/geometry/mesh_input.h"
+#include "pegasus/gradients/mesh_node_sensitivity.h"
 #include "pegasus/solver/vortex_lattice_solver.h"
 
 #include <functional>

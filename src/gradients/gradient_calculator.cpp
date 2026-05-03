@@ -20,14 +20,14 @@
 
 #include "pegasus/gradients/gradient_calculator.h"
 
+#include "pegasus/aero/force_calculator.h"
+#include "pegasus/geometry/mesh_input.h"
+#include "pegasus/geometry/surface.h"
 #include "pegasus/gradients/adjoint_solver.h"
 #include "pegasus/gradients/analytical_aic.h"
 #include "pegasus/gradients/analytical_forces.h"
 #include "pegasus/gradients/mesh_node_sensitivity.h"
 #include "pegasus/gradients/mesh_sensitivity.h"
-#include "pegasus/aero/force_calculator.h"
-#include "pegasus/geometry/mesh_input.h"
-#include "pegasus/geometry/surface.h"
 
 #include <cmath>
 #include <vector>

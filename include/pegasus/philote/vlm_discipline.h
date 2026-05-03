@@ -20,9 +20,9 @@
 
 #pragma once
 
-#include "pegasus/gradients/gradient_calculator.h"
 #include "pegasus/aero/force_calculator.h"
 #include "pegasus/geometry/mesh_input.h"
+#include "pegasus/gradients/gradient_calculator.h"
 #include "pegasus/solver/vortex_lattice_solver.h"
 
 #include <string>

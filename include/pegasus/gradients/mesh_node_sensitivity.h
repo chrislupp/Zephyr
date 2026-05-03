@@ -35,9 +35,9 @@
 ///       + 0.5*(0.25*N(i,j+1) + 0.75*N(i+1,j+1)) [midspan 3/4 chord]
 ///   normal = normalize((N(i+1,j+1)-N(i,j)) x (N(i+1,j)-N(i,j+1)))
 
-#include "pegasus/gradients/mesh_sensitivity.h"
 #include "pegasus/core/types.h"
 #include "pegasus/geometry/mesh_input.h"
+#include "pegasus/gradients/mesh_sensitivity.h"
 
 #include <cmath>
 #include <vector>
