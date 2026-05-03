@@ -1,5 +1,8 @@
 # VLM - Vortex Lattice Method Library
 
+[![Build and Tests](https://github.com/chrislupp/Pegasus/actions/workflows/build.yml/badge.svg?branch=main)](https://github.com/chrislupp/Pegasus/actions/workflows/build.yml)
+[![codecov](https://codecov.io/gh/chrislupp/Pegasus/branch/main/graph/badge.svg)](https://codecov.io/gh/chrislupp/Pegasus)
+
 A modern C++17 implementation of the Vortex Lattice Method for aerodynamic analysis, ported from OptVL with enhancements for automatic differentiation and MDO integration.
 
 ## Features
@@ -16,7 +19,7 @@ A modern C++17 implementation of the Vortex Lattice Method for aerodynamic analy
 
 - CMake 3.16+
 - C++17 compiler (GCC 8+, Clang 7+, MSVC 2019+)
-- Eigen 3.3+ (automatically found or specify `EIGEN3_ROOT`)
+- Eigen 5.0+ (automatically found or specify `CMAKE_PREFIX_PATH`)
 
 ## Building
 
@@ -282,9 +285,13 @@ Run examples from the build directory:
 | `TrimResult` | Trim solution state |
 | `EigenmodeResults` | Dynamic mode eigenvalues |
 
+## Documentation
+
+Full documentation is available at [https://chrislupp.github.io/Pegasus/](https://chrislupp.github.io/Pegasus/).
+
 ## License
 
-AGPL-3.0-or-later
+GPL-3.0-or-later
 
 ## Acknowledgments
 

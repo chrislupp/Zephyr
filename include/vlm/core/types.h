@@ -4,9 +4,10 @@
 #ifndef VLM_CORE_TYPES_H_
 #define VLM_CORE_TYPES_H_
 
+#include <cstdint>
+
 #include <Eigen/Core>
 #include <Eigen/Dense>
-#include <cstdint>
 
 namespace vlm {
 
@@ -64,18 +65,18 @@ constexpr Scalar kDefaultTolerance = 1.0e-10;
 ///
 /// Controls how the geometry is mirrored across symmetry planes.
 enum class SymmetryType : int {
-  kNone = 0,           ///< No symmetry
-  kSymmetric = 1,      ///< Regular symmetry (same sign)
-  kAntisymmetric = -1  ///< Antisymmetric (opposite sign, free surface)
+    kNone = 0,           ///< No symmetry
+    kSymmetric = 1,      ///< Regular symmetry (same sign)
+    kAntisymmetric = -1  ///< Antisymmetric (opposite sign, free surface)
 };
 
 /// @brief Spacing distribution type for panel generation.
 enum class SpacingType {
-  kNone,      ///< No spacing specified (use default)
-  kUniform,   ///< Uniform spacing
-  kCosine,    ///< Cosine spacing (clustered at edges)
-  kSine,      ///< Sine spacing
-  kBlend      ///< Blend of uniform and cosine
+    kNone,     ///< No spacing specified (use default)
+    kUniform,  ///< Uniform spacing
+    kCosine,   ///< Cosine spacing (clustered at edges)
+    kSine,     ///< Sine spacing
+    kBlend     ///< Blend of uniform and cosine
 };
 
 }  // namespace vlm

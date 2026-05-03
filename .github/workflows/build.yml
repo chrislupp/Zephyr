@@ -1,0 +1,164 @@
+name: Build and Tests
+
+on:
+  push:
+    branches: [ '*' ]
+  pull_request:
+    branches: [ main, develop ]
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
+jobs:
+  format:
+    runs-on: ubuntu-24.04
+
+    name: Format
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Check Formatting
+      run: |
+        find include src -name '*.h' -o -name '*.cpp' | \
+          xargs clang-format-18 --dry-run --Werror
+
+  clang-tidy:
+    if: github.event_name == 'pull_request' && (github.base_ref == 'main' || github.base_ref == 'develop')
+    runs-on: ubuntu-24.04
+
+    name: Clang-Tidy
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Install Dependencies
+      run: sudo apt-get update && sudo apt-get install -y clang-tidy-18
+
+    - name: Install Eigen 5.0
+      run: |
+        git clone https://gitlab.com/libeigen/eigen.git
+        cd eigen
+        git checkout master
+        cmake -B build -DCMAKE_INSTALL_PREFIX=${{github.workspace}}/deps -DBUILD_TESTING=OFF -DEIGEN_BUILD_BLAS=OFF -DEIGEN_BUILD_LAPACK=OFF
+        cmake --install build
+
+    - name: Configure CMake
+      run: >
+        cmake -B ${{github.workspace}}/build
+        -DCMAKE_BUILD_TYPE=Debug
+        -DVLM_BUILD_TESTS=ON
+        -DVLM_ENABLE_VTK=OFF
+        -DVLM_BUILD_PHILOTE=OFF
+        -DCMAKE_PREFIX_PATH=${{github.workspace}}/deps
+        -DCMAKE_EXPORT_COMPILE_COMMANDS=ON
+
+    - name: Run clang-tidy
+      run: >
+        run-clang-tidy-18
+        -p ${{github.workspace}}/build
+        -header-filter='include/vlm/'
+        $(find src -name '*.cpp' | grep -v philote)
+
+  build:
+    needs: [format]
+    runs-on: ubuntu-24.04
+
+    strategy:
+      fail-fast: false
+      matrix:
+        compiler:
+          - { cc: gcc-14, cxx: g++-14, name: GCC 14 }
+        build_type: [Release]
+
+    name: ${{ matrix.compiler.name }} / ${{ matrix.build_type }}
+
+    env:
+      CC: ${{ matrix.compiler.cc }}
+      CXX: ${{ matrix.compiler.cxx }}
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Install Eigen 5.0
+      run: |
+        git clone https://gitlab.com/libeigen/eigen.git
+        cd eigen
+        git checkout master
+        cmake -B build -DCMAKE_INSTALL_PREFIX=${{github.workspace}}/deps -DBUILD_TESTING=OFF -DEIGEN_BUILD_BLAS=OFF -DEIGEN_BUILD_LAPACK=OFF
+        cmake --install build
+
+    - name: Configure CMake
+      run: >
+        cmake -B ${{github.workspace}}/build
+        -DCMAKE_BUILD_TYPE=${{ matrix.build_type }}
+        -DVLM_BUILD_TESTS=ON
+        -DVLM_ENABLE_VTK=OFF
+        -DVLM_BUILD_PHILOTE=OFF
+        -DCMAKE_PREFIX_PATH=${{github.workspace}}/deps
+
+    - name: Build
+      run: cmake --build ${{github.workspace}}/build --config ${{ matrix.build_type }} -j$(nproc)
+
+    - name: Tests
+      working-directory: ${{github.workspace}}/build
+      run: ctest -C ${{ matrix.build_type }} --output-on-failure
+
+  coverage:
+    needs: [format]
+    runs-on: ubuntu-24.04
+
+    name: Coverage
+
+    env:
+      CC: clang-18
+      CXX: clang++-18
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Install Dependencies
+      run: sudo apt-get update && sudo apt-get install -y llvm-18
+
+    - name: Install Eigen 5.0
+      run: |
+        git clone https://gitlab.com/libeigen/eigen.git
+        cd eigen
+        git checkout master
+        cmake -B build -DCMAKE_INSTALL_PREFIX=${{github.workspace}}/deps -DBUILD_TESTING=OFF -DEIGEN_BUILD_BLAS=OFF -DEIGEN_BUILD_LAPACK=OFF
+        cmake --install build
+
+    - name: Configure CMake
+      run: >
+        cmake -B ${{github.workspace}}/build
+        -DCMAKE_BUILD_TYPE=Release
+        -DVLM_BUILD_TESTS=ON
+        -DVLM_ENABLE_VTK=OFF
+        -DVLM_BUILD_PHILOTE=OFF
+        -DCMAKE_PREFIX_PATH=${{github.workspace}}/deps
+        -DCMAKE_CXX_FLAGS="-fprofile-instr-generate -fcoverage-mapping"
+        -DCMAKE_C_FLAGS="-fprofile-instr-generate -fcoverage-mapping"
+
+    - name: Build
+      run: cmake --build ${{github.workspace}}/build -j$(nproc)
+
+    - name: Run Tests
+      working-directory: ${{github.workspace}}/build
+      env:
+        LLVM_PROFILE_FILE: ${{github.workspace}}/build/coverage-%p.profraw
+      run: ctest --output-on-failure
+
+    - name: Generate Coverage Report
+      run: |
+        llvm-profdata-18 merge -sparse ${{github.workspace}}/build/coverage-*.profraw -o coverage.profdata
+        TEST_BINS=$(find ${{github.workspace}}/build/tests -type f -executable | sed '1!s/^/-object /')
+        llvm-cov-18 export -format=lcov -instr-profile=coverage.profdata $TEST_BINS \
+          -ignore-filename-regex='(_deps|tests/|examples/|/usr/)' > coverage.info
+
+    - name: Upload to Codecov
+      uses: codecov/codecov-action@v5
+      with:
+        files: coverage.info
+        fail_ci_if_error: true
+      env:
+        CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}

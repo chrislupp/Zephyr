@@ -4,7 +4,8 @@
 #pragma once
 
 /// @file adjoint_solver.h
-/// @brief Adjoint solver for efficient gradient computation via implicit differentiation.
+/// @brief Adjoint solver for efficient gradient computation via implicit
+/// differentiation.
 ///
 /// The VLM problem involves an implicit linear system: A(θ)·Γ = b(θ)
 /// where θ are design variables, A is the AIC matrix, and Γ is circulation.
@@ -48,42 +49,42 @@ namespace ad {
 /// // Now lambda can be used to compute total gradients
 /// @endcode
 class AdjointSolver {
- public:
-  /// @brief Construct adjoint solver from a primal solver.
-  ///
-  /// The primal solver must have a valid AIC matrix (i.e., SetAircraft
-  /// and Solve must have been called).
-  ///
-  /// @param solver Reference to the primal VLM solver
-  explicit AdjointSolver(const VortexLatticeSolver& solver);
+public:
+    /// @brief Construct adjoint solver from a primal solver.
+    ///
+    /// The primal solver must have a valid AIC matrix (i.e., SetAircraft
+    /// and Solve must have been called).
+    ///
+    /// @param solver Reference to the primal VLM solver
+    explicit AdjointSolver(const VortexLatticeSolver& solver);
 
-  /// @brief Solve the adjoint system Aᵀ·λ = rhs.
-  ///
-  /// Uses the LU factorization from the forward solve for efficiency.
-  ///
-  /// @param rhs Right-hand side vector (typically ∂J/∂Γ)
-  /// @return Adjoint variable λ
-  VecX SolveAdjoint(const VecX& rhs) const;
+    /// @brief Solve the adjoint system Aᵀ·λ = rhs.
+    ///
+    /// Uses the LU factorization from the forward solve for efficiency.
+    ///
+    /// @param rhs Right-hand side vector (typically ∂J/∂Γ)
+    /// @return Adjoint variable λ
+    VecX SolveAdjoint(const VecX& rhs) const;
 
-  /// @brief Solve multiple adjoint systems at once.
-  ///
-  /// Solves Aᵀ·Λ = RHS where each column is a separate adjoint problem.
-  /// Useful when computing gradients for multiple objectives.
-  ///
-  /// @param rhs Matrix where each column is a right-hand side
-  /// @return Matrix where each column is the corresponding adjoint solution
-  MatX SolveAdjointMultiple(const MatX& rhs) const;
+    /// @brief Solve multiple adjoint systems at once.
+    ///
+    /// Solves Aᵀ·Λ = RHS where each column is a separate adjoint problem.
+    /// Useful when computing gradients for multiple objectives.
+    ///
+    /// @param rhs Matrix where each column is a right-hand side
+    /// @return Matrix where each column is the corresponding adjoint solution
+    MatX SolveAdjointMultiple(const MatX& rhs) const;
 
-  /// @brief Check if the adjoint solver is valid (has valid AIC).
-  bool IsValid() const { return is_valid_; }
+    /// @brief Check if the adjoint solver is valid (has valid AIC).
+    bool IsValid() const { return is_valid_; }
 
-  /// @brief Get the number of circulation unknowns.
-  Index GetNumUnknowns() const { return num_unknowns_; }
+    /// @brief Get the number of circulation unknowns.
+    Index GetNumUnknowns() const { return num_unknowns_; }
 
- private:
-  const VortexLatticeSolver* solver_;
-  bool is_valid_;
-  Index num_unknowns_;
+private:
+    const VortexLatticeSolver* solver_;
+    bool is_valid_;
+    Index num_unknowns_;
 };
 
 /// @brief Compute gradients of aerodynamic forces with respect to circulation.
@@ -98,12 +99,12 @@ class AdjointSolver {
 /// @param reference_chord Reference chord for moment normalization
 /// @return Structure containing gradients for each output
 struct ForceGradients {
-  VecX dCL_dGamma;   ///< Gradient of lift coefficient
-  VecX dCD_dGamma;   ///< Gradient of drag coefficient
-  VecX dCY_dGamma;   ///< Gradient of side force coefficient
-  VecX dCl_dGamma;   ///< Gradient of rolling moment coefficient
-  VecX dCm_dGamma;   ///< Gradient of pitching moment coefficient
-  VecX dCn_dGamma;   ///< Gradient of yawing moment coefficient
+    VecX dCL_dGamma;  ///< Gradient of lift coefficient
+    VecX dCD_dGamma;  ///< Gradient of drag coefficient
+    VecX dCY_dGamma;  ///< Gradient of side force coefficient
+    VecX dCl_dGamma;  ///< Gradient of rolling moment coefficient
+    VecX dCm_dGamma;  ///< Gradient of pitching moment coefficient
+    VecX dCn_dGamma;  ///< Gradient of yawing moment coefficient
 };
 
 /// @brief Compute force gradients with respect to circulation.
@@ -115,18 +116,16 @@ struct ForceGradients {
 /// @param condition Flight condition
 /// @param aircraft Aircraft geometry (for reference quantities)
 /// @return Gradients of all force coefficients w.r.t. circulation
-ForceGradients ComputeForceGradients(
-    const VortexLattice& mesh,
-    const SolutionState& solution,
-    const FlightCondition& condition,
-    const Aircraft& aircraft);
+ForceGradients ComputeForceGradients(const VortexLattice& mesh,
+                                     const SolutionState& solution,
+                                     const FlightCondition& condition,
+                                     const Aircraft& aircraft);
 
 /// @brief Compute force gradients using reference quantities directly.
-ForceGradients ComputeForceGradients(
-    const VortexLattice& mesh,
-    const SolutionState& solution,
-    const FlightCondition& condition,
-    const ReferenceQuantities& ref);
+ForceGradients ComputeForceGradients(const VortexLattice& mesh,
+                                     const SolutionState& solution,
+                                     const FlightCondition& condition,
+                                     const ReferenceQuantities& ref);
 
 /// @brief Compute total derivative of objective w.r.t. flight condition.
 ///
@@ -140,11 +139,9 @@ ForceGradients ComputeForceGradients(
 /// @param condition Flight condition
 /// @param aircraft Aircraft geometry
 /// @return Total derivative dJ/dα (or dJ/dβ, etc.)
-double ComputeTotalDerivative(
-    int objective,
-    const VortexLatticeSolver& solver,
-    const FlightCondition& condition,
-    const Aircraft& aircraft);
+double ComputeTotalDerivative(int objective, const VortexLatticeSolver& solver,
+                              const FlightCondition& condition,
+                              const Aircraft& aircraft);
 
 }  // namespace ad
 }  // namespace vlm

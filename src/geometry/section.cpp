@@ -18,17 +18,17 @@ Section::Section(const Vec3& leading_edge_position, Scalar chord,
       airfoil_(airfoil) {}
 
 const Airfoil& Section::GetAirfoil() const {
-  if (airfoil_) {
-    return *airfoil_;
-  }
-  return g_flat_plate;
+    if (airfoil_) {
+        return *airfoil_;
+    }
+    return g_flat_plate;
 }
 
 Airfoil& Section::GetAirfoilMutable() {
-  if (!airfoil_) {
-    airfoil_ = std::make_shared<Airfoil>(Airfoil::CreateFlatPlate());
-  }
-  return *airfoil_;
+    if (!airfoil_) {
+        airfoil_ = std::make_shared<Airfoil>(Airfoil::CreateFlatPlate());
+    }
+    return *airfoil_;
 }
 
 }  // namespace vlm

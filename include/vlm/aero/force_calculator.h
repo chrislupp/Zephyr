@@ -21,76 +21,74 @@ namespace vlm {
 /// where V_eff is the total velocity at the bound vortex (freestream +
 /// rotation + induced).
 class ForceCalculator {
- public:
-  ForceCalculator() = default;
+public:
+    ForceCalculator() = default;
 
-  /// Compute forces from a solved vortex lattice solution.
-  ///
-  /// @param aircraft The aircraft geometry (for reference quantities)
-  /// @param mesh The vortex lattice mesh
-  /// @param solution The converged circulation solution
-  /// @param condition The flight condition used in the solve
-  /// @return Complete aerodynamic results with forces and moments
-  AerodynamicResults ComputeForces(const Aircraft& aircraft,
-                                   const VortexLattice& mesh,
-                                   const SolutionState& solution,
-                                   const FlightCondition& condition) const;
+    /// Compute forces from a solved vortex lattice solution.
+    ///
+    /// @param aircraft The aircraft geometry (for reference quantities)
+    /// @param mesh The vortex lattice mesh
+    /// @param solution The converged circulation solution
+    /// @param condition The flight condition used in the solve
+    /// @return Complete aerodynamic results with forces and moments
+    AerodynamicResults ComputeForces(const Aircraft& aircraft,
+                                     const VortexLattice& mesh,
+                                     const SolutionState& solution,
+                                     const FlightCondition& condition) const;
 
-  /// Compute forces using reference quantities directly (mesh-based input).
-  AerodynamicResults ComputeForces(const ReferenceQuantities& ref,
-                                   const VortexLattice& mesh,
-                                   const SolutionState& solution,
-                                   const FlightCondition& condition) const;
+    /// Compute forces using reference quantities directly (mesh-based input).
+    AerodynamicResults ComputeForces(const ReferenceQuantities& ref,
+                                     const VortexLattice& mesh,
+                                     const SolutionState& solution,
+                                     const FlightCondition& condition) const;
 
-  /// Compute far-field (Trefftz plane) induced drag.
-  ///
-  /// Uses kinetic energy integral in the wake to compute induced drag.
-  /// More accurate than near-field integration for induced drag.
-  ///
-  /// @param mesh The vortex lattice mesh
-  /// @param solution The converged circulation solution
-  /// @param reference_area Reference wing area for coefficient normalization
-  /// @param reference_span Reference span for efficiency calculation
-  /// @param[out] CL_ff Far-field lift coefficient
-  /// @param[out] CY_ff Far-field side force coefficient
-  /// @param[out] CDi_ff Far-field induced drag coefficient
-  /// @param[out] span_efficiency Oswald span efficiency factor
-  void ComputeTrefftzPlaneDrag(const VortexLattice& mesh,
-                               const SolutionState& solution,
-                               Scalar reference_area,
-                               Scalar reference_span,
-                               Scalar& CL_ff,
-                               Scalar& CY_ff,
-                               Scalar& CDi_ff,
-                               Scalar& span_efficiency) const;
+    /// Compute far-field (Trefftz plane) induced drag.
+    ///
+    /// Uses kinetic energy integral in the wake to compute induced drag.
+    /// More accurate than near-field integration for induced drag.
+    ///
+    /// @param mesh The vortex lattice mesh
+    /// @param solution The converged circulation solution
+    /// @param reference_area Reference wing area for coefficient normalization
+    /// @param reference_span Reference span for efficiency calculation
+    /// @param[out] CL_ff Far-field lift coefficient
+    /// @param[out] CY_ff Far-field side force coefficient
+    /// @param[out] CDi_ff Far-field induced drag coefficient
+    /// @param[out] span_efficiency Oswald span efficiency factor
+    void ComputeTrefftzPlaneDrag(const VortexLattice& mesh,
+                                 const SolutionState& solution,
+                                 Scalar reference_area, Scalar reference_span,
+                                 Scalar& CL_ff, Scalar& CY_ff, Scalar& CDi_ff,
+                                 Scalar& span_efficiency) const;
 
-  /// Set whether to include induced velocity in force computation.
-  /// Default is true (include induced velocity for more accurate forces).
-  void SetIncludeInducedVelocity(bool include) {
-    include_induced_velocity_ = include;
-  }
+    /// Set whether to include induced velocity in force computation.
+    /// Default is true (include induced velocity for more accurate forces).
+    void SetIncludeInducedVelocity(bool include) {
+        include_induced_velocity_ = include;
+    }
 
-  /// Set core radius fractions for Trefftz plane induced velocity computation.
-  void SetTrefftzCoreRadius(Scalar chord_fraction, Scalar width_fraction) {
-    trefftz_core_chord_fraction_ = chord_fraction;
-    trefftz_core_width_fraction_ = width_fraction;
-  }
+    /// Set core radius fractions for Trefftz plane induced velocity
+    /// computation.
+    void SetTrefftzCoreRadius(Scalar chord_fraction, Scalar width_fraction) {
+        trefftz_core_chord_fraction_ = chord_fraction;
+        trefftz_core_width_fraction_ = width_fraction;
+    }
 
- private:
-  /// Compute strip-level forces and moments.
-  StripLoads ComputeStripLoads(const VortexLattice& mesh,
-                               const SolutionState& solution,
-                               const FlightCondition& condition,
-                               Index strip_index,
-                               Scalar reference_area) const;
+private:
+    /// Compute strip-level forces and moments.
+    StripLoads ComputeStripLoads(const VortexLattice& mesh,
+                                 const SolutionState& solution,
+                                 const FlightCondition& condition,
+                                 Index strip_index,
+                                 Scalar reference_area) const;
 
-  /// Transform body-axis forces to stability-axis forces.
-  void BodyToStabilityAxis(const Vec3& cf_body, Scalar alpha,
-                           Scalar& CL, Scalar& CD) const;
+    /// Transform body-axis forces to stability-axis forces.
+    void BodyToStabilityAxis(const Vec3& cf_body, Scalar alpha, Scalar& CL,
+                             Scalar& CD) const;
 
-  bool include_induced_velocity_{true};
-  Scalar trefftz_core_chord_fraction_{0.01};
-  Scalar trefftz_core_width_fraction_{0.1};
+    bool include_induced_velocity_{true};
+    Scalar trefftz_core_chord_fraction_{0.01};
+    Scalar trefftz_core_width_fraction_{0.1};
 };
 
 }  // namespace vlm

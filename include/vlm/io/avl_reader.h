@@ -4,9 +4,9 @@
 #ifndef VLM_IO_AVL_READER_H_
 #define VLM_IO_AVL_READER_H_
 
-#include <string>
-
 #include "vlm/geometry/aircraft.h"
+
+#include <string>
 
 namespace vlm {
 
@@ -34,29 +34,29 @@ namespace vlm {
 ///
 /// Reference: AVL User Guide by Mark Drela & Harold Youngren
 class AvlReader {
- public:
-  AvlReader() = default;
+public:
+    AvlReader() = default;
 
-  /// @brief Reads an AVL file and returns an Aircraft object.
-  ///
-  /// @param filename Path to the AVL file
-  /// @return Parsed Aircraft configuration
-  /// @throws std::runtime_error if file cannot be opened or parsed
-  Aircraft ReadFile(const std::string& filename) const;
+    /// @brief Reads an AVL file and returns an Aircraft object.
+    ///
+    /// @param filename Path to the AVL file
+    /// @return Parsed Aircraft configuration
+    /// @throws std::runtime_error if file cannot be opened or parsed
+    Aircraft ReadFile(const std::string& filename) const;
 
-  /// @brief Parses AVL content from a string.
-  ///
-  /// @param content AVL file content as a string
-  /// @param base_path Base path for resolving relative file references
-  /// @return Parsed Aircraft configuration
-  Aircraft ParseString(const std::string& content,
-                       const std::string& base_path = "") const;
+    /// @brief Parses AVL content from a string.
+    ///
+    /// @param content AVL file content as a string
+    /// @param base_path Base path for resolving relative file references
+    /// @return Parsed Aircraft configuration
+    Aircraft ParseString(const std::string& content,
+                         const std::string& base_path = "") const;
 
-  /// @brief Sets whether to print verbose parsing information.
-  void SetVerbose(bool verbose) { verbose_ = verbose; }
+    /// @brief Sets whether to print verbose parsing information.
+    void SetVerbose(bool verbose) { verbose_ = verbose; }
 
- private:
-  bool verbose_{false};
+private:
+    bool verbose_{false};
 };
 
 }  // namespace vlm

@@ -4,15 +4,15 @@
 #ifndef VLM_GEOMETRY_SURFACE_H_
 #define VLM_GEOMETRY_SURFACE_H_
 
+#include "vlm/core/types.h"
+#include "vlm/geometry/section.h"
+
 #include <array>
 #include <cmath>
 #include <memory>
 #include <optional>
 #include <string>
 #include <vector>
-
-#include "vlm/core/types.h"
-#include "vlm/geometry/section.h"
 
 namespace vlm {
 
@@ -25,238 +25,246 @@ namespace vlm {
 /// Surfaces can be mirrored (Y-duplicated) across a symmetry plane to
 /// model symmetric configurations efficiently.
 class Surface {
- public:
-  Surface() = default;
+public:
+    Surface() = default;
 
-  /// @brief Creates a surface with a name.
-  explicit Surface(const std::string& name);
+    /// @brief Creates a surface with a name.
+    explicit Surface(const std::string& name);
 
-  /// @name Basic Properties
-  /// @{
+    /// @name Basic Properties
+    /// @{
 
-  /// @brief Gets the surface name.
-  const std::string& GetName() const { return name_; }
+    /// @brief Gets the surface name.
+    const std::string& GetName() const { return name_; }
 
-  /// @brief Sets the surface name.
-  void SetName(const std::string& name) { name_ = name; }
+    /// @brief Sets the surface name.
+    void SetName(const std::string& name) { name_ = name; }
 
-  /// @brief Gets the component index.
-  ///
-  /// Surfaces on the same component share their bound vortex, which affects
-  /// the AIC matrix diagonal treatment.
-  int GetComponentIndex() const { return component_index_; }
+    /// @brief Gets the component index.
+    ///
+    /// Surfaces on the same component share their bound vortex, which affects
+    /// the AIC matrix diagonal treatment.
+    int GetComponentIndex() const { return component_index_; }
 
-  /// @brief Sets the component index.
-  void SetComponentIndex(int index) { component_index_ = index; }
+    /// @brief Sets the component index.
+    void SetComponentIndex(int index) { component_index_ = index; }
 
-  /// @}
+    /// @}
 
-  /// @name Sections
-  /// @{
+    /// @name Sections
+    /// @{
 
-  /// @brief Adds a section to the surface.
-  void AddSection(const Section& section) { sections_.push_back(section); }
+    /// @brief Adds a section to the surface.
+    void AddSection(const Section& section) { sections_.push_back(section); }
 
-  /// @brief Gets all sections.
-  const std::vector<Section>& GetSections() const { return sections_; }
+    /// @brief Gets all sections.
+    const std::vector<Section>& GetSections() const { return sections_; }
 
-  /// @brief Gets a mutable reference to sections.
-  std::vector<Section>& GetSectionsMutable() { return sections_; }
+    /// @brief Gets a mutable reference to sections.
+    std::vector<Section>& GetSectionsMutable() { return sections_; }
 
-  /// @brief Gets the number of sections.
-  size_t GetNumSections() const { return sections_.size(); }
+    /// @brief Gets the number of sections.
+    size_t GetNumSections() const { return sections_.size(); }
 
-  /// @brief Gets a section by index.
-  const Section& GetSection(size_t index) const { return sections_.at(index); }
-
-  /// @brief Gets a mutable section by index.
-  Section& GetSectionMutable(size_t index) { return sections_.at(index); }
-
-  /// @}
-
-  /// @name Paneling Parameters
-  /// @{
-
-  /// @brief Gets the number of chordwise panels.
-  int GetChordwisePanelCount() const { return chordwise_panel_count_; }
-
-  /// @brief Sets the number of chordwise panels.
-  void SetChordwisePanelCount(int count) { chordwise_panel_count_ = count; }
-
-  /// @brief Gets the chordwise spacing type.
-  SpacingType GetChordwiseSpacing() const { return chordwise_spacing_type_; }
-
-  /// @brief Sets the chordwise spacing type.
-  void SetChordwiseSpacing(SpacingType spacing) { chordwise_spacing_type_ = spacing; }
-
-  /// @brief Sets the chordwise spacing from a numeric parameter.
-  ///
-  /// Controls panel distribution along chord:
-  /// - 0: Uniform spacing
-  /// - 1: Full cosine (clustered at LE and TE)
-  /// - -1: Full sine (clustered at TE)
-  void SetChordwiseSpacing(Scalar spacing) {
-    if (std::abs(spacing) < 0.01) {
-      chordwise_spacing_type_ = SpacingType::kUniform;
-    } else if (spacing > 0) {
-      chordwise_spacing_type_ = SpacingType::kCosine;
-    } else {
-      chordwise_spacing_type_ = SpacingType::kSine;
+    /// @brief Gets a section by index.
+    const Section& GetSection(size_t index) const {
+        return sections_.at(index);
     }
-  }
 
-  /// @brief Gets the number of spanwise panels.
-  int GetSpanwisePanelCount() const { return spanwise_panel_count_; }
+    /// @brief Gets a mutable section by index.
+    Section& GetSectionMutable(size_t index) { return sections_.at(index); }
 
-  /// @brief Sets the number of spanwise panels.
-  void SetSpanwisePanelCount(int count) { spanwise_panel_count_ = count; }
+    /// @}
 
-  /// @brief Gets the spanwise spacing type.
-  SpacingType GetSpanwiseSpacing() const { return spanwise_spacing_type_; }
+    /// @name Paneling Parameters
+    /// @{
 
-  /// @brief Sets the spanwise spacing type.
-  void SetSpanwiseSpacing(SpacingType spacing) { spanwise_spacing_type_ = spacing; }
+    /// @brief Gets the number of chordwise panels.
+    int GetChordwisePanelCount() const { return chordwise_panel_count_; }
 
-  /// @brief Sets the spanwise spacing from a numeric parameter.
-  void SetSpanwiseSpacing(Scalar spacing) {
-    if (std::abs(spacing) < 0.01) {
-      spanwise_spacing_type_ = SpacingType::kUniform;
-    } else if (spacing > 0) {
-      spanwise_spacing_type_ = SpacingType::kCosine;
-    } else {
-      spanwise_spacing_type_ = SpacingType::kSine;
+    /// @brief Sets the number of chordwise panels.
+    void SetChordwisePanelCount(int count) { chordwise_panel_count_ = count; }
+
+    /// @brief Gets the chordwise spacing type.
+    SpacingType GetChordwiseSpacing() const { return chordwise_spacing_type_; }
+
+    /// @brief Sets the chordwise spacing type.
+    void SetChordwiseSpacing(SpacingType spacing) {
+        chordwise_spacing_type_ = spacing;
     }
-  }
 
-  /// @}
+    /// @brief Sets the chordwise spacing from a numeric parameter.
+    ///
+    /// Controls panel distribution along chord:
+    /// - 0: Uniform spacing
+    /// - 1: Full cosine (clustered at LE and TE)
+    /// - -1: Full sine (clustered at TE)
+    void SetChordwiseSpacing(Scalar spacing) {
+        if (std::abs(spacing) < 0.01) {
+            chordwise_spacing_type_ = SpacingType::kUniform;
+        } else if (spacing > 0) {
+            chordwise_spacing_type_ = SpacingType::kCosine;
+        } else {
+            chordwise_spacing_type_ = SpacingType::kSine;
+        }
+    }
 
-  /// @name Symmetry and Duplication
-  /// @{
+    /// @brief Gets the number of spanwise panels.
+    int GetSpanwisePanelCount() const { return spanwise_panel_count_; }
 
-  /// @brief Gets the Y-duplication value.
-  ///
-  /// If set, the surface is mirrored about this Y coordinate.
-  /// Typically 0.0 for symmetric aircraft.
-  std::optional<Scalar> GetYDuplicate() const { return y_duplicate_; }
+    /// @brief Sets the number of spanwise panels.
+    void SetSpanwisePanelCount(int count) { spanwise_panel_count_ = count; }
 
-  /// @brief Sets Y-duplication (mirrors surface about Y plane).
-  void SetYDuplicate(Scalar y_plane) { y_duplicate_ = y_plane; }
+    /// @brief Gets the spanwise spacing type.
+    SpacingType GetSpanwiseSpacing() const { return spanwise_spacing_type_; }
 
-  /// @brief Clears Y-duplication.
-  void ClearYDuplicate() { y_duplicate_.reset(); }
+    /// @brief Sets the spanwise spacing type.
+    void SetSpanwiseSpacing(SpacingType spacing) {
+        spanwise_spacing_type_ = spacing;
+    }
 
-  /// @brief Checks if surface is Y-duplicated.
-  bool IsYDuplicated() const { return y_duplicate_.has_value(); }
+    /// @brief Sets the spanwise spacing from a numeric parameter.
+    void SetSpanwiseSpacing(Scalar spacing) {
+        if (std::abs(spacing) < 0.01) {
+            spanwise_spacing_type_ = SpacingType::kUniform;
+        } else if (spacing > 0) {
+            spanwise_spacing_type_ = SpacingType::kCosine;
+        } else {
+            spanwise_spacing_type_ = SpacingType::kSine;
+        }
+    }
 
-  /// @}
+    /// @}
 
-  /// @name Coordinate Transformations
-  /// @{
+    /// @name Symmetry and Duplication
+    /// @{
 
-  /// @brief Gets the angle offset (added to section incidences).
-  Scalar GetAngleOffset() const { return angle_offset_deg_; }
+    /// @brief Gets the Y-duplication value.
+    ///
+    /// If set, the surface is mirrored about this Y coordinate.
+    /// Typically 0.0 for symmetric aircraft.
+    std::optional<Scalar> GetYDuplicate() const { return y_duplicate_; }
 
-  /// @brief Sets the angle offset in degrees.
-  void SetAngleOffset(Scalar angle_deg) { angle_offset_deg_ = angle_deg; }
+    /// @brief Sets Y-duplication (mirrors surface about Y plane).
+    void SetYDuplicate(Scalar y_plane) { y_duplicate_ = y_plane; }
 
-  /// @brief Gets the translation vector.
-  const Vec3& GetTranslation() const { return translation_; }
+    /// @brief Clears Y-duplication.
+    void ClearYDuplicate() { y_duplicate_.reset(); }
 
-  /// @brief Sets the translation vector.
-  void SetTranslation(const Vec3& translation) { translation_ = translation; }
+    /// @brief Checks if surface is Y-duplicated.
+    bool IsYDuplicated() const { return y_duplicate_.has_value(); }
 
-  /// @brief Gets the scale factors.
-  const Vec3& GetScale() const { return scale_; }
+    /// @}
 
-  /// @brief Sets the scale factors.
-  void SetScale(const Vec3& scale) { scale_ = scale; }
+    /// @name Coordinate Transformations
+    /// @{
 
-  /// @}
+    /// @brief Gets the angle offset (added to section incidences).
+    Scalar GetAngleOffset() const { return angle_offset_deg_; }
 
-  /// @name Aerodynamic Options
-  /// @{
+    /// @brief Sets the angle offset in degrees.
+    void SetAngleOffset(Scalar angle_deg) { angle_offset_deg_ = angle_deg; }
 
-  /// @brief Checks if surface has a wake.
-  bool HasWake() const { return has_wake_; }
+    /// @brief Gets the translation vector.
+    const Vec3& GetTranslation() const { return translation_; }
 
-  /// @brief Sets whether surface has a wake.
-  void SetHasWake(bool has_wake) { has_wake_ = has_wake; }
+    /// @brief Sets the translation vector.
+    void SetTranslation(const Vec3& translation) { translation_ = translation; }
 
-  /// @brief Checks if surface contributes to loads.
-  bool ContributesToLoads() const { return contributes_to_loads_; }
+    /// @brief Gets the scale factors.
+    const Vec3& GetScale() const { return scale_; }
 
-  /// @brief Sets whether surface contributes to loads.
-  void SetContributesToLoads(bool contributes) {
-    contributes_to_loads_ = contributes;
-  }
+    /// @brief Sets the scale factors.
+    void SetScale(const Vec3& scale) { scale_ = scale; }
 
-  /// @brief Checks if angle of attack/sideslip affect this surface.
-  bool IsAffectedByAlphaBeta() const { return affected_by_alpha_beta_; }
+    /// @}
 
-  /// @brief Sets whether angle of attack/sideslip affect this surface.
-  void SetAffectedByAlphaBeta(bool affected) {
-    affected_by_alpha_beta_ = affected;
-  }
+    /// @name Aerodynamic Options
+    /// @{
 
-  /// @}
+    /// @brief Checks if surface has a wake.
+    bool HasWake() const { return has_wake_; }
 
-  /// @name Viscous Drag Model
-  /// @{
+    /// @brief Sets whether surface has a wake.
+    void SetHasWake(bool has_wake) { has_wake_ = has_wake; }
 
-  /// @brief Gets the CL-CD polar coefficients.
-  ///
-  /// 6-element array defining parabolic drag polar:
-  /// CD = CD0 + CD1*(CL-CL_ref) + CD2*(CL-CL_ref)^2 + CD3*(CL-CL_ref)^3 + ...
-  const std::array<Scalar, 6>& GetClCdPolar() const { return cl_cd_polar_; }
+    /// @brief Checks if surface contributes to loads.
+    bool ContributesToLoads() const { return contributes_to_loads_; }
 
-  /// @brief Sets the CL-CD polar coefficients.
-  void SetClCdPolar(const std::array<Scalar, 6>& polar) { cl_cd_polar_ = polar; }
+    /// @brief Sets whether surface contributes to loads.
+    void SetContributesToLoads(bool contributes) {
+        contributes_to_loads_ = contributes;
+    }
 
-  /// @brief Checks if viscous drag model is active.
-  bool HasViscousDrag() const;
+    /// @brief Checks if angle of attack/sideslip affect this surface.
+    bool IsAffectedByAlphaBeta() const { return affected_by_alpha_beta_; }
 
-  /// @}
+    /// @brief Sets whether angle of attack/sideslip affect this surface.
+    void SetAffectedByAlphaBeta(bool affected) {
+        affected_by_alpha_beta_ = affected;
+    }
 
-  /// @name Utility Methods
-  /// @{
+    /// @}
 
-  /// @brief Computes the planform area.
-  Scalar ComputePlanformArea() const;
+    /// @name Viscous Drag Model
+    /// @{
 
-  /// @brief Computes the mean aerodynamic chord.
-  Scalar ComputeMeanAerodynamicChord() const;
+    /// @brief Gets the CL-CD polar coefficients.
+    ///
+    /// 6-element array defining parabolic drag polar:
+    /// CD = CD0 + CD1*(CL-CL_ref) + CD2*(CL-CL_ref)^2 + CD3*(CL-CL_ref)^3 + ...
+    const std::array<Scalar, 6>& GetClCdPolar() const { return cl_cd_polar_; }
 
-  /// @brief Computes the span (max Y extent).
-  Scalar ComputeSpan() const;
+    /// @brief Sets the CL-CD polar coefficients.
+    void SetClCdPolar(const std::array<Scalar, 6>& polar) {
+        cl_cd_polar_ = polar;
+    }
 
-  /// @}
+    /// @brief Checks if viscous drag model is active.
+    bool HasViscousDrag() const;
 
- private:
-  std::string name_;
-  int component_index_{0};
-  std::vector<Section> sections_;
+    /// @}
 
-  // Paneling
-  int chordwise_panel_count_{12};
-  SpacingType chordwise_spacing_type_{SpacingType::kCosine};
-  int spanwise_panel_count_{20};
-  SpacingType spanwise_spacing_type_{SpacingType::kCosine};
+    /// @name Utility Methods
+    /// @{
 
-  // Duplication
-  std::optional<Scalar> y_duplicate_;
+    /// @brief Computes the planform area.
+    Scalar ComputePlanformArea() const;
 
-  // Transformations
-  Scalar angle_offset_deg_{0.0};
-  Vec3 translation_{0, 0, 0};
-  Vec3 scale_{1, 1, 1};
+    /// @brief Computes the mean aerodynamic chord.
+    Scalar ComputeMeanAerodynamicChord() const;
 
-  // Aerodynamic flags
-  bool has_wake_{true};
-  bool contributes_to_loads_{true};
-  bool affected_by_alpha_beta_{true};
+    /// @brief Computes the span (max Y extent).
+    Scalar ComputeSpan() const;
 
-  // Viscous drag polar (CL-CD relationship)
-  std::array<Scalar, 6> cl_cd_polar_{0, 0, 0, 0, 0, 0};
+    /// @}
+
+private:
+    std::string name_;
+    int component_index_{0};
+    std::vector<Section> sections_;
+
+    // Paneling
+    int chordwise_panel_count_{12};
+    SpacingType chordwise_spacing_type_{SpacingType::kCosine};
+    int spanwise_panel_count_{20};
+    SpacingType spanwise_spacing_type_{SpacingType::kCosine};
+
+    // Duplication
+    std::optional<Scalar> y_duplicate_;
+
+    // Transformations
+    Scalar angle_offset_deg_{0.0};
+    Vec3 translation_{0, 0, 0};
+    Vec3 scale_{1, 1, 1};
+
+    // Aerodynamic flags
+    bool has_wake_{true};
+    bool contributes_to_loads_{true};
+    bool affected_by_alpha_beta_{true};
+
+    // Viscous drag polar (CL-CD relationship)
+    std::array<Scalar, 6> cl_cd_polar_{0, 0, 0, 0, 0, 0};
 };
 
 }  // namespace vlm

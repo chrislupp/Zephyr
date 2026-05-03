@@ -9,9 +9,9 @@
 /// Provides row and column gradient functions for the AIC matrix that are
 /// used by the adjoint method for geometry sensitivity computation.
 
-#include <cmath>
-
 #include "vlm/ad/analytical_biot_savart.h"
+
+#include <cmath>
 
 namespace vlm {
 namespace ad {
@@ -27,11 +27,12 @@ namespace ad {
 /// d(AIC)/d(rv1) = (dV/d(rv1))^T * normal
 /// d(AIC)/d(rv2) = (dV/d(rv2))^T * normal
 /// d(AIC)/d(normal) = V  [linear in normal]
-void analytical_aic_element_gradient(
-    const double* rv1, const double* rv2,
-    const double* rc, const double* normal,
-    double core_radius, double prandtl_glauert, bool include_bound,
-    double* d_rv1, double* d_rv2, double* d_rc, double* d_normal);
+void analytical_aic_element_gradient(const double* rv1, const double* rv2,
+                                     const double* rc, const double* normal,
+                                     double core_radius, double prandtl_glauert,
+                                     bool include_bound, double* d_rv1,
+                                     double* d_rv2, double* d_rc,
+                                     double* d_normal);
 
 // ============================================================================
 // AIC Row/Column Gradients (for adjoint method)
@@ -57,13 +58,11 @@ void analytical_aic_element_gradient(
 /// @param d_rc Output gradient w.r.t. control point [3]
 /// @param d_normal Output gradient w.r.t. normal [3]
 void analytical_aic_row_gradient_rc(
-    const double* rv1_all, const double* rv2_all,
-    const double* rc, const double* normal,
-    const double* chord_all, const int* component_idx_all,
+    const double* rv1_all, const double* rv2_all, const double* rc,
+    const double* normal, const double* chord_all, const int* component_idx_all,
     int num_vortices, int row_idx, int control_component_idx,
-    double core_chord_fraction, double core_width_fraction,
-    double beta, const double* weights,
-    double* d_rc, double* d_normal);
+    double core_chord_fraction, double core_width_fraction, double beta,
+    const double* weights, double* d_rc, double* d_normal);
 
 /// @brief Column gradient: d(sum_i weights[i]*AIC[i,j]) / d(rv1_j, rv2_j)
 ///
@@ -84,13 +83,11 @@ void analytical_aic_row_gradient_rc(
 /// @param d_rv1 Output gradient w.r.t. rv1 [3]
 /// @param d_rv2 Output gradient w.r.t. rv2 [3]
 void analytical_aic_column_gradient_rv(
-    const double* rv1_all, const double* rv2_all,
-    const double* rc_all, const double* normal_all,
-    const double* chord_all, const int* component_idx_all,
-    int num_vortices, int vortex_idx,
-    double core_chord_fraction, double core_width_fraction,
-    double beta, const double* weights,
-    double* d_rv1, double* d_rv2);
+    const double* rv1_all, const double* rv2_all, const double* rc_all,
+    const double* normal_all, const double* chord_all,
+    const int* component_idx_all, int num_vortices, int vortex_idx,
+    double core_chord_fraction, double core_width_fraction, double beta,
+    const double* weights, double* d_rv1, double* d_rv2);
 
 // ============================================================================
 // Velocity Kernel Gradients (for explicit force geometry term)
@@ -98,23 +95,20 @@ void analytical_aic_column_gradient_rv(
 
 /// @brief Velocity row gradient: d(sum_j dJ_dV . V[i,j] * gamma_j) / d(rc_i)
 void analytical_velocity_row_gradient_rc(
-    const double* rv1_all, const double* rv2_all,
-    const double* rc,
-    const double* chord_all, const int* component_idx_all,
-    int num_vortices, int row_idx, int control_component_idx,
-    double core_chord_fraction, double core_width_fraction,
-    double beta, const double* gamma, const double* dJ_dV,
-    double* d_rc);
+    const double* rv1_all, const double* rv2_all, const double* rc,
+    const double* chord_all, const int* component_idx_all, int num_vortices,
+    int row_idx, int control_component_idx, double core_chord_fraction,
+    double core_width_fraction, double beta, const double* gamma,
+    const double* dJ_dV, double* d_rc);
 
-/// @brief Velocity column gradient: d(sum_i dJ_dV_i . V[i,j] * gamma_j) / d(rv1_j, rv2_j)
+/// @brief Velocity column gradient: d(sum_i dJ_dV_i . V[i,j] * gamma_j) /
+/// d(rv1_j, rv2_j)
 void analytical_velocity_column_gradient_rv(
-    const double* rv1_all, const double* rv2_all,
-    const double* rc_all,
-    const double* chord_all, const int* component_idx_all,
-    int num_vortices, int vortex_idx,
-    double core_chord_fraction, double core_width_fraction,
-    double beta, double gamma_j, const double* dJ_dV_all,
-    double* d_rv1, double* d_rv2);
+    const double* rv1_all, const double* rv2_all, const double* rc_all,
+    const double* chord_all, const int* component_idx_all, int num_vortices,
+    int vortex_idx, double core_chord_fraction, double core_width_fraction,
+    double beta, double gamma_j, const double* dJ_dV_all, double* d_rv1,
+    double* d_rv2);
 
 }  // namespace ad
 }  // namespace vlm

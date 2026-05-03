@@ -20,32 +20,32 @@ namespace vlm {
 /// size ny+1 (one per spanwise station). The output is a flat mesh node
 /// array compatible with VlmDiscipline's surface input.
 class MeshDiscipline : public philote::ExplicitDiscipline {
- public:
-  MeshDiscipline() = default;
-  ~MeshDiscipline() = default;
+public:
+    MeshDiscipline() = default;
+    ~MeshDiscipline() = default;
 
- private:
-  void Initialize() override;
-  void SetOptions(const google::protobuf::Struct& options_struct) override;
-  void Setup() override;
-  void SetupPartials() override;
+private:
+    void Initialize() override;
+    void SetOptions(const google::protobuf::Struct& options_struct) override;
+    void Setup() override;
+    void SetupPartials() override;
 
-  void Compute(const philote::Variables& inputs,
-               philote::Variables& outputs) override;
+    void Compute(const philote::Variables& inputs,
+                 philote::Variables& outputs) override;
 
-  void ComputePartials(const philote::Variables& inputs,
-                       philote::Partials& partials) override;
+    void ComputePartials(const philote::Variables& inputs,
+                         philote::Partials& partials) override;
 
-  void PrecomputeChordFracs();
+    void PrecomputeChordFracs();
 
-  // Options
-  int64_t nx_ = 1;
-  int64_t ny_ = 1;
-  bool cosine_chordwise_spacing_ = false;
-  bool cosine_spanwise_spacing_ = false;
+    // Options
+    int64_t nx_ = 1;
+    int64_t ny_ = 1;
+    bool cosine_chordwise_spacing_ = false;
+    bool cosine_spanwise_spacing_ = false;
 
-  // Precomputed chordwise fractions [nx+1]
-  std::vector<double> chord_fracs_;
+    // Precomputed chordwise fractions [nx+1]
+    std::vector<double> chord_fracs_;
 };
 
 }  // namespace vlm
