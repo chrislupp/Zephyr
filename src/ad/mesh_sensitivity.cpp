@@ -25,8 +25,7 @@
 
 #include <cmath>
 
-namespace vlm {
-namespace ad {
+namespace vlm::ad {
 
 // ============================================================================
 // Mapping Construction
@@ -322,5 +321,4 @@ SectionGradients ComputeSectionGradientFromMesh(
     return result;
 }
 
-}  // namespace ad
-}  // namespace vlm
+}  // namespace vlm::ad

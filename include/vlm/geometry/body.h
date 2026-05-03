@@ -47,13 +47,13 @@ public:
     Body() = default;
 
     /// @brief Creates a body with a name.
-    explicit Body(const std::string& name);
+    explicit Body(std::string name);
 
     /// @name Basic Properties
     /// @{
 
     /// @brief Gets the body name.
-    const std::string& GetName() const { return name_; }
+    [[nodiscard]] const std::string& GetName() const { return name_; }
 
     /// @brief Sets the body name.
     void SetName(const std::string& name) { name_ = name; }
@@ -69,10 +69,12 @@ public:
     }
 
     /// @brief Gets all cross-sections.
-    const std::vector<BodySection>& GetSections() const { return sections_; }
+    [[nodiscard]] const std::vector<BodySection>& GetSections() const {
+        return sections_;
+    }
 
     /// @brief Gets the number of cross-sections.
-    size_t GetNumSections() const { return sections_.size(); }
+    [[nodiscard]] size_t GetNumSections() const { return sections_.size(); }
 
     /// @}
 
@@ -80,13 +82,13 @@ public:
     /// @{
 
     /// @brief Gets the number of source-doublet nodes.
-    int GetNodeCount() const { return node_count_; }
+    [[nodiscard]] int GetNodeCount() const { return node_count_; }
 
     /// @brief Sets the number of source-doublet nodes.
     void SetNodeCount(int count) { node_count_ = count; }
 
     /// @brief Gets the node spacing parameter.
-    Scalar GetNodeSpacing() const { return node_spacing_; }
+    [[nodiscard]] Scalar GetNodeSpacing() const { return node_spacing_; }
 
     /// @brief Sets the node spacing parameter.
     void SetNodeSpacing(Scalar spacing) { node_spacing_ = spacing; }
@@ -97,13 +99,13 @@ public:
     /// @{
 
     /// @brief Gets the translation vector.
-    const Vec3& GetTranslation() const { return translation_; }
+    [[nodiscard]] const Vec3& GetTranslation() const { return translation_; }
 
     /// @brief Sets the translation vector.
     void SetTranslation(const Vec3& translation) { translation_ = translation; }
 
     /// @brief Gets the scale factors.
-    const Vec3& GetScale() const { return scale_; }
+    [[nodiscard]] const Vec3& GetScale() const { return scale_; }
 
     /// @brief Sets the scale factors.
     void SetScale(const Vec3& scale) { scale_ = scale; }
@@ -114,7 +116,7 @@ public:
     /// @{
 
     /// @brief Checks if body is Y-duplicated.
-    bool IsYDuplicated() const { return y_duplicate_; }
+    [[nodiscard]] bool IsYDuplicated() const { return y_duplicate_; }
 
     /// @brief Sets Y-duplication flag.
     void SetYDuplicate(bool duplicate) { y_duplicate_ = duplicate; }

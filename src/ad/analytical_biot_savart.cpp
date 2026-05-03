@@ -20,8 +20,7 @@
 
 #include "vlm/ad/analytical_biot_savart.h"
 
-namespace vlm {
-namespace ad {
+namespace vlm::ad {
 
 // ============================================================================
 // Internal helpers for computing derivatives of sub-expressions
@@ -546,5 +545,4 @@ void horseshoe_velocity_vjp_bound_right(const double* field_point,
     // Trailing leg A does NOT depend on bound_right
 }
 
-}  // namespace ad
-}  // namespace vlm
+}  // namespace vlm::ad

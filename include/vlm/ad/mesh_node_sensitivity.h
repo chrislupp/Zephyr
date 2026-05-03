@@ -42,8 +42,7 @@
 #include <cmath>
 #include <vector>
 
-namespace vlm {
-namespace ad {
+namespace vlm::ad {
 
 /// @brief Gradients of aerodynamic outputs w.r.t. mesh node coordinates.
 ///
@@ -78,7 +77,7 @@ struct MeshNodeGradients {
 
     void Zero() { d_nodes.setZero(); }
 
-    Index NumNodes() const { return (nx + 1) * (ny + 1); }
+    [[nodiscard]] Index NumNodes() const { return (nx + 1) * (ny + 1); }
 };
 
 /// @brief All mesh node gradients for all aero outputs on one surface.
@@ -377,5 +376,4 @@ inline void PropagateMirrorMeshGradientsToNodes(const MeshGradients& mesh_grads,
     }
 }
 
-}  // namespace ad
-}  // namespace vlm
+}  // namespace vlm::ad

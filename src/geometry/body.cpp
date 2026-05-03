@@ -20,8 +20,10 @@
 
 #include "vlm/geometry/body.h"
 
+#include <utility>
+
 namespace vlm {
 
-Body::Body(const std::string& name) : name_(name) {}
+Body::Body(std::string name) : name_(std::move(name)) {}
 
 }  // namespace vlm

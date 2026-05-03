@@ -99,7 +99,7 @@ public:
     void SetOptions(const TrimOptions& options) { options_ = options; }
 
     /// Get current options
-    const TrimOptions& GetOptions() const { return options_; }
+    [[nodiscard]] const TrimOptions& GetOptions() const { return options_; }
 
     /// Solve for trim condition
     ///
@@ -115,14 +115,14 @@ public:
 
 private:
     /// Build the residual vector for current state
-    VecX BuildResidual(const AerodynamicResults& aero,
-                       const OperatingVariables& state,
-                       const TrimConstraints& constraints) const;
+    [[nodiscard]] VecX BuildResidual(const AerodynamicResults& aero,
+                                     const OperatingVariables& state,
+                                     const TrimConstraints& constraints) const;
 
     /// Build the Jacobian matrix
-    MatX BuildJacobian(const StabilityDerivatives& derivs,
-                       const OperatingVariables& state,
-                       const TrimConstraints& constraints) const;
+    [[nodiscard]] MatX BuildJacobian(const StabilityDerivatives& derivs,
+                                     const OperatingVariables& state,
+                                     const TrimConstraints& constraints) const;
 
     /// Apply constraints to build the system
     void BuildSystem(const AerodynamicResults& aero,
@@ -136,11 +136,12 @@ private:
                      const TrimConstraints& constraints) const;
 
     /// Check if state is within bounds
-    bool CheckBounds(const OperatingVariables& state) const;
+    [[nodiscard]] bool CheckBounds(const OperatingVariables& state) const;
 
     /// Get index of variable in state vector
-    Index GetVariableIndex(const TrimConstraints& constraints, int var_type,
-                           const std::string& control_name = "") const;
+    [[nodiscard]] Index GetVariableIndex(
+        const TrimConstraints& constraints, int var_type,
+        const std::string& control_name = "") const;
 
     TrimOptions options_;
 };

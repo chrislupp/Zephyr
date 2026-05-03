@@ -76,25 +76,27 @@ struct Eigenmode {
     ModeType type{ModeType::kUnknown};  ///< Classified mode type
 
     /// Real part (damping): negative = stable
-    Scalar GetDamping() const { return eigenvalue.real(); }
+    [[nodiscard]] Scalar GetDamping() const { return eigenvalue.real(); }
 
     /// Imaginary part (frequency in rad/s)
-    Scalar GetFrequency() const { return std::abs(eigenvalue.imag()); }
+    [[nodiscard]] Scalar GetFrequency() const {
+        return std::abs(eigenvalue.imag());
+    }
 
     /// Period in seconds (0 if non-oscillatory)
-    Scalar GetPeriod() const {
+    [[nodiscard]] Scalar GetPeriod() const {
         Scalar omega = GetFrequency();
         return omega > 0 ? 2.0 * kPi / omega : 0.0;
     }
 
     /// Time to half/double amplitude (positive = time to half)
-    Scalar GetTimeConstant() const {
+    [[nodiscard]] Scalar GetTimeConstant() const {
         Scalar sigma = GetDamping();
         return sigma != 0 ? -std::log(2.0) / sigma : 0.0;
     }
 
     /// Damping ratio (for oscillatory modes)
-    Scalar GetDampingRatio() const {
+    [[nodiscard]] Scalar GetDampingRatio() const {
         Scalar sigma = GetDamping();
         Scalar omega = GetFrequency();
         Scalar omega_n = std::sqrt(sigma * sigma + omega * omega);
@@ -102,10 +104,10 @@ struct Eigenmode {
     }
 
     /// Check if mode is stable (real part < 0)
-    bool IsStable() const { return eigenvalue.real() < 0; }
+    [[nodiscard]] bool IsStable() const { return eigenvalue.real() < 0; }
 
     /// Check if mode is oscillatory (has imaginary part)
-    bool IsOscillatory() const {
+    [[nodiscard]] bool IsOscillatory() const {
         return std::abs(eigenvalue.imag()) > kEpsilon;
     }
 };
@@ -129,7 +131,8 @@ struct EigenmodeResults {
     Scalar reference_chord{0.0};
 
     /// Find modes by type
-    std::vector<const Eigenmode*> FindModesByType(ModeType type) const {
+    [[nodiscard]] std::vector<const Eigenmode*> FindModesByType(
+        ModeType type) const {
         std::vector<const Eigenmode*> result;
         for (const auto& mode : modes) {
             if (mode.type == type) {
@@ -140,25 +143,25 @@ struct EigenmodeResults {
     }
 
     /// Get short period mode (if exists)
-    const Eigenmode* GetShortPeriod() const {
+    [[nodiscard]] const Eigenmode* GetShortPeriod() const {
         auto found = FindModesByType(ModeType::kShortPeriod);
         return found.empty() ? nullptr : found[0];
     }
 
     /// Get phugoid mode (if exists)
-    const Eigenmode* GetPhugoid() const {
+    [[nodiscard]] const Eigenmode* GetPhugoid() const {
         auto found = FindModesByType(ModeType::kPhugoid);
         return found.empty() ? nullptr : found[0];
     }
 
     /// Get Dutch roll mode (if exists)
-    const Eigenmode* GetDutchRoll() const {
+    [[nodiscard]] const Eigenmode* GetDutchRoll() const {
         auto found = FindModesByType(ModeType::kDutchRoll);
         return found.empty() ? nullptr : found[0];
     }
 
     /// Check if all modes are stable
-    bool IsStable() const {
+    [[nodiscard]] bool IsStable() const {
         for (const auto& mode : modes) {
             if (!mode.IsStable())
                 return false;
@@ -243,29 +246,28 @@ public:
 
 private:
     /// Build the full 12x12 system matrix
-    MatX BuildFullSystemMatrix(const Aircraft& aircraft,
-                               const MassProperties& mass_props,
-                               const StabilityDerivatives& derivs,
-                               const FlightState& flight) const;
+    [[nodiscard]] MatX BuildFullSystemMatrix(const Aircraft& aircraft,
+                                             const MassProperties& mass_props,
+                                             const StabilityDerivatives& derivs,
+                                             const FlightState& flight) const;
 
     /// Build longitudinal 4x4 system matrix [u, w, q, theta]
-    Mat4 BuildLongitudinalMatrix(const Aircraft& aircraft,
-                                 const MassProperties& mass_props,
-                                 const StabilityDerivatives& derivs,
-                                 const FlightState& flight) const;
+    [[nodiscard]] Mat4 BuildLongitudinalMatrix(
+        const Aircraft& aircraft, const MassProperties& mass_props,
+        const StabilityDerivatives& derivs, const FlightState& flight) const;
 
     /// Build lateral-directional 4x4 system matrix [v, p, r, phi]
-    Mat4 BuildLateralDirectionalMatrix(const Aircraft& aircraft,
-                                       const MassProperties& mass_props,
-                                       const StabilityDerivatives& derivs,
-                                       const FlightState& flight) const;
+    [[nodiscard]] Mat4 BuildLateralDirectionalMatrix(
+        const Aircraft& aircraft, const MassProperties& mass_props,
+        const StabilityDerivatives& derivs, const FlightState& flight) const;
 
     /// Compute eigenvalues and eigenvectors
     void ComputeEigenvalues(const MatX& system_matrix,
                             std::vector<Eigenmode>& modes) const;
 
     /// Classify mode type based on eigenvector content and frequency
-    ModeType ClassifyMode(const Eigenmode& mode, bool is_longitudinal) const;
+    [[nodiscard]] ModeType ClassifyMode(const Eigenmode& mode,
+                                        bool is_longitudinal) const;
 
     ApparentMass apparent_mass_;
 };

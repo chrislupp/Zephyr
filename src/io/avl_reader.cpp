@@ -109,7 +109,7 @@ public:
         return false;
     }
 
-    int GetLineNumber() const { return line_number_; }
+    [[nodiscard]] int GetLineNumber() const { return line_number_; }
 
 private:
     std::istream& stream_;
@@ -144,7 +144,7 @@ Aircraft AvlReader::ParseString(const std::string& content,
     }
     aircraft.SetTitle(Trim(line));
     if (verbose_) {
-        std::cout << "Configuration: " << aircraft.GetTitle() << std::endl;
+        std::cout << "Configuration: " << aircraft.GetTitle() << '\n';
     }
 
     // Line 2: Mach number
@@ -233,7 +233,7 @@ Aircraft AvlReader::ParseString(const std::string& content,
             }
             surface.SetName(Trim(line));
             if (verbose_) {
-                std::cout << "  Surface: " << surface.GetName() << std::endl;
+                std::cout << "  Surface: " << surface.GetName() << '\n';
             }
 
             // Paneling parameters (Nchord, Cspace, [Nspan, Sspace])
@@ -376,7 +376,7 @@ Aircraft AvlReader::ParseString(const std::string& content,
                             if (verbose_) {
                                 std::cerr
                                     << "Warning: could not load airfoil file: "
-                                    << airfoil_path << std::endl;
+                                    << airfoil_path << '\n';
                             }
                         }
                     }
@@ -430,7 +430,7 @@ Aircraft AvlReader::ParseString(const std::string& content,
             }
             body.SetName(Trim(line));
             if (verbose_) {
-                std::cout << "  Body: " << body.GetName() << std::endl;
+                std::cout << "  Body: " << body.GetName() << '\n';
             }
 
             // Paneling parameters
@@ -450,7 +450,7 @@ Aircraft AvlReader::ParseString(const std::string& content,
 
                 if (keyword == "SURF" || keyword == "BODY") {
                     // New surface or body
-                    aircraft.AddBody(std::move(body));
+                    aircraft.AddBody(body);
                     goto process_keyword;
                 } else if (keyword == "SCAL") {
                     if (reader.ReadLine(line)) {
@@ -486,7 +486,7 @@ Aircraft AvlReader::ParseString(const std::string& content,
             }
 
             // End of file
-            aircraft.AddBody(std::move(body));
+            aircraft.AddBody(body);
         }
     }
 

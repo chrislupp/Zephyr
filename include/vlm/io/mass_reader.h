@@ -63,13 +63,13 @@ struct MassFileData {
     /// total mass, CG location, and inertia tensor about the CG.
     ///
     /// @return Combined mass properties in SI units
-    MassProperties ComputeTotalProperties() const;
+    [[nodiscard]] MassProperties ComputeTotalProperties() const;
 
     /// @brief Gets the total mass (sum of all components).
-    Scalar GetTotalMass() const;
+    [[nodiscard]] Scalar GetTotalMass() const;
 
     /// @brief Gets the center of gravity position.
-    Vec3 GetCenterOfGravity() const;
+    [[nodiscard]] Vec3 GetCenterOfGravity() const;
 };
 
 /// @brief Parser for AVL-format mass property files (.mass).
@@ -99,14 +99,14 @@ public:
     /// @param filename Path to the .mass file
     /// @return Parsed mass file data
     /// @throws std::runtime_error if file cannot be opened or parsed
-    MassFileData ReadFile(const std::string& filename) const;
+    [[nodiscard]] MassFileData ReadFile(const std::string& filename) const;
 
     /// @brief Reads mass properties from a string.
     ///
     /// @param content The mass file content as a string
     /// @return Parsed mass file data
     /// @throws std::runtime_error if parsing fails
-    MassFileData ReadString(const std::string& content) const;
+    [[nodiscard]] MassFileData ReadString(const std::string& content) const;
 
 private:
     /// Parses a single line from the mass file.

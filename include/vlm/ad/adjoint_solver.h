@@ -41,8 +41,7 @@
 #include "vlm/geometry/mesh_input.h"
 #include "vlm/solver/vortex_lattice_solver.h"
 
-namespace vlm {
-namespace ad {
+namespace vlm::ad {
 
 /// @brief Adjoint solver for implicit differentiation of VLM linear system.
 ///
@@ -81,7 +80,7 @@ public:
     ///
     /// @param rhs Right-hand side vector (typically ∂J/∂Γ)
     /// @return Adjoint variable λ
-    VecX SolveAdjoint(const VecX& rhs) const;
+    [[nodiscard]] VecX SolveAdjoint(const VecX& rhs) const;
 
     /// @brief Solve multiple adjoint systems at once.
     ///
@@ -90,18 +89,18 @@ public:
     ///
     /// @param rhs Matrix where each column is a right-hand side
     /// @return Matrix where each column is the corresponding adjoint solution
-    MatX SolveAdjointMultiple(const MatX& rhs) const;
+    [[nodiscard]] MatX SolveAdjointMultiple(const MatX& rhs) const;
 
     /// @brief Check if the adjoint solver is valid (has valid AIC).
-    bool IsValid() const { return is_valid_; }
+    [[nodiscard]] bool IsValid() const { return is_valid_; }
 
     /// @brief Get the number of circulation unknowns.
-    Index GetNumUnknowns() const { return num_unknowns_; }
+    [[nodiscard]] Index GetNumUnknowns() const { return num_unknowns_; }
 
 private:
     const VortexLatticeSolver* solver_;
-    bool is_valid_;
-    Index num_unknowns_;
+    bool is_valid_{false};
+    Index num_unknowns_{0};
 };
 
 /// @brief Compute gradients of aerodynamic forces with respect to circulation.
@@ -160,5 +159,4 @@ double ComputeTotalDerivative(int objective, const VortexLatticeSolver& solver,
                               const FlightCondition& condition,
                               const Aircraft& aircraft);
 
-}  // namespace ad
-}  // namespace vlm
+}  // namespace vlm::ad

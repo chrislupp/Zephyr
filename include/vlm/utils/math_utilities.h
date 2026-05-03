@@ -237,7 +237,7 @@ inline std::vector<Scalar> GenerateCosineSpacing(Index num_points,
 inline Vec3 RotateAboutX(const Vec3& v, Scalar angle) {
     Scalar c = std::cos(angle);
     Scalar s = std::sin(angle);
-    return Vec3(v.x(), c * v.y() - s * v.z(), s * v.y() + c * v.z());
+    return {v.x(), c * v.y() - s * v.z(), s * v.y() + c * v.z()};
 }
 
 /// @brief Rotates a vector about the y-axis.
@@ -248,7 +248,7 @@ inline Vec3 RotateAboutX(const Vec3& v, Scalar angle) {
 inline Vec3 RotateAboutY(const Vec3& v, Scalar angle) {
     Scalar c = std::cos(angle);
     Scalar s = std::sin(angle);
-    return Vec3(c * v.x() + s * v.z(), v.y(), -s * v.x() + c * v.z());
+    return {c * v.x() + s * v.z(), v.y(), -s * v.x() + c * v.z()};
 }
 
 /// @brief Rotates a vector about the z-axis.
@@ -259,7 +259,7 @@ inline Vec3 RotateAboutY(const Vec3& v, Scalar angle) {
 inline Vec3 RotateAboutZ(const Vec3& v, Scalar angle) {
     Scalar c = std::cos(angle);
     Scalar s = std::sin(angle);
-    return Vec3(c * v.x() - s * v.y(), s * v.x() + c * v.y(), v.z());
+    return {c * v.x() - s * v.y(), s * v.x() + c * v.y(), v.z()};
 }
 
 /// @brief Computes rotation matrix for wind-to-body axis transformation.

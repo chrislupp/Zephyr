@@ -20,8 +20,7 @@
 
 #include "vlm/ad/analytical_forces.h"
 
-namespace vlm {
-namespace ad {
+namespace vlm::ad {
 
 // ============================================================================
 // Helper: Body-axis force/moment → output coefficients mapping
@@ -491,5 +490,4 @@ void analytical_force_geometry_gradient(
     d_result[5] = -d_cm_z;
 }
 
-}  // namespace ad
-}  // namespace vlm
+}  // namespace vlm::ad

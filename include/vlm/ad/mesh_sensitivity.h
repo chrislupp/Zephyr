@@ -56,15 +56,16 @@ namespace ad {
 ///   [first_strip_in_interval[section_idx],
 ///   first_strip_in_interval[section_idx+1])
 struct SectionStripMapping {
-    Index surface_index;
-    Index num_sections;
-    Index first_strip;                    ///< First strip for this surface
-    Index num_strips;                     ///< Total strips for this surface
+    Index surface_index{0};
+    Index num_sections{0};
+    Index first_strip{0};                 ///< First strip for this surface
+    Index num_strips{0};                  ///< Total strips for this surface
     std::vector<Index> strip_at_section;  ///< Strip edge index at each section
 
     /// Get the range of strips for a section interval [isec, isec+1]
     /// @return pair of (first_strip_in_interval, num_strips_in_interval)
-    std::pair<Index, Index> GetStripRange(Index section_idx) const {
+    [[nodiscard]] std::pair<Index, Index> GetStripRange(
+        Index section_idx) const {
         if (section_idx + 1 >= static_cast<Index>(strip_at_section.size())) {
             return {0, 0};
         }
@@ -118,14 +119,13 @@ struct MeshGradients {
 /// These are the final gradients w.r.t. geometry parameters.
 /// Matches OptVL's XYZLES_diff, CHORDS_diff, AINCS_diff.
 struct SectionGradients {
-    double d_le_x;   ///< d/d(leading edge x)
-    double d_le_y;   ///< d/d(leading edge y)
-    double d_le_z;   ///< d/d(leading edge z)
-    double d_chord;  ///< d/d(chord)
-    double d_twist;  ///< d/d(twist angle)
+    double d_le_x{0};   ///< d/d(leading edge x)
+    double d_le_y{0};   ///< d/d(leading edge y)
+    double d_le_z{0};   ///< d/d(leading edge z)
+    double d_chord{0};  ///< d/d(chord)
+    double d_twist{0};  ///< d/d(twist angle)
 
-    SectionGradients()
-        : d_le_x(0), d_le_y(0), d_le_z(0), d_chord(0), d_twist(0) {}
+    SectionGradients() = default;
 };
 
 // ============================================================================

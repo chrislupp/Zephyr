@@ -41,13 +41,13 @@ public:
     Aircraft() = default;
 
     /// @brief Creates an aircraft with a title.
-    explicit Aircraft(const std::string& title);
+    explicit Aircraft(std::string title);
 
     /// @name Identification
     /// @{
 
     /// @brief Gets the aircraft title/name.
-    const std::string& GetTitle() const { return title_; }
+    [[nodiscard]] const std::string& GetTitle() const { return title_; }
 
     /// @brief Sets the aircraft title.
     void SetTitle(const std::string& title) { title_ = title; }
@@ -58,25 +58,25 @@ public:
     /// @{
 
     /// @brief Gets the reference area.
-    Scalar GetReferenceArea() const { return reference_area_; }
+    [[nodiscard]] Scalar GetReferenceArea() const { return reference_area_; }
 
     /// @brief Sets the reference area.
     void SetReferenceArea(Scalar area) { reference_area_ = area; }
 
     /// @brief Gets the reference chord.
-    Scalar GetReferenceChord() const { return reference_chord_; }
+    [[nodiscard]] Scalar GetReferenceChord() const { return reference_chord_; }
 
     /// @brief Sets the reference chord.
     void SetReferenceChord(Scalar chord) { reference_chord_ = chord; }
 
     /// @brief Gets the reference span.
-    Scalar GetReferenceSpan() const { return reference_span_; }
+    [[nodiscard]] Scalar GetReferenceSpan() const { return reference_span_; }
 
     /// @brief Sets the reference span.
     void SetReferenceSpan(Scalar span) { reference_span_ = span; }
 
     /// @brief Gets the moment reference point.
-    const Vec3& GetMomentReferencePoint() const {
+    [[nodiscard]] const Vec3& GetMomentReferencePoint() const {
         return moment_reference_point_;
     }
 
@@ -91,7 +91,7 @@ public:
     /// @{
 
     /// @brief Gets the reference Mach number.
-    Scalar GetMachNumber() const { return mach_number_; }
+    [[nodiscard]] Scalar GetMachNumber() const { return mach_number_; }
 
     /// @brief Sets the reference Mach number.
     void SetMachNumber(Scalar mach) { mach_number_ = mach; }
@@ -99,7 +99,9 @@ public:
     /// @brief Gets the reference profile drag coefficient.
     ///
     /// Constant drag coefficient added to induced drag.
-    Scalar GetProfileDragCoefficient() const { return cd_profile_; }
+    [[nodiscard]] Scalar GetProfileDragCoefficient() const {
+        return cd_profile_;
+    }
 
     /// @brief Sets the reference profile drag coefficient.
     void SetProfileDragCoefficient(Scalar cd) { cd_profile_ = cd; }
@@ -110,19 +112,19 @@ public:
     /// @{
 
     /// @brief Gets the Y-axis (XZ plane) symmetry type.
-    SymmetryType GetYSymmetry() const { return y_symmetry_; }
+    [[nodiscard]] SymmetryType GetYSymmetry() const { return y_symmetry_; }
 
     /// @brief Sets the Y-axis symmetry type.
     void SetYSymmetry(SymmetryType sym) { y_symmetry_ = sym; }
 
     /// @brief Gets the Z-axis (XY plane) symmetry type.
-    SymmetryType GetZSymmetry() const { return z_symmetry_; }
+    [[nodiscard]] SymmetryType GetZSymmetry() const { return z_symmetry_; }
 
     /// @brief Sets the Z-axis symmetry type.
     void SetZSymmetry(SymmetryType sym) { z_symmetry_ = sym; }
 
     /// @brief Gets the Z symmetry plane location.
-    Scalar GetZSymmetryPlane() const { return z_symmetry_plane_; }
+    [[nodiscard]] Scalar GetZSymmetryPlane() const { return z_symmetry_plane_; }
 
     /// @brief Sets the Z symmetry plane location.
     void SetZSymmetryPlane(Scalar z) { z_symmetry_plane_ = z; }
@@ -141,22 +143,25 @@ public:
     }
 
     /// @brief Gets all lifting surfaces.
-    const std::vector<Surface>& GetSurfaces() const { return surfaces_; }
+    [[nodiscard]] const std::vector<Surface>& GetSurfaces() const {
+        return surfaces_;
+    }
 
     /// @brief Gets mutable reference to surfaces.
     std::vector<Surface>& GetSurfacesMutable() { return surfaces_; }
 
     /// @brief Gets the number of surfaces.
-    size_t GetNumSurfaces() const { return surfaces_.size(); }
+    [[nodiscard]] size_t GetNumSurfaces() const { return surfaces_.size(); }
 
     /// @brief Gets a surface by index.
-    const Surface& GetSurface(size_t index) const {
+    [[nodiscard]] const Surface& GetSurface(size_t index) const {
         return surfaces_.at(index);
     }
 
     /// @brief Gets a surface by name.
     /// @return Pointer to surface, or nullptr if not found
-    const Surface* FindSurfaceByName(const std::string& name) const;
+    [[nodiscard]] const Surface* FindSurfaceByName(
+        const std::string& name) const;
 
     /// @}
 
@@ -167,10 +172,10 @@ public:
     void AddBody(const Body& body) { bodies_.push_back(body); }
 
     /// @brief Gets all bodies.
-    const std::vector<Body>& GetBodies() const { return bodies_; }
+    [[nodiscard]] const std::vector<Body>& GetBodies() const { return bodies_; }
 
     /// @brief Gets the number of bodies.
-    size_t GetNumBodies() const { return bodies_.size(); }
+    [[nodiscard]] size_t GetNumBodies() const { return bodies_.size(); }
 
     /// @}
 
@@ -178,10 +183,10 @@ public:
     /// @{
 
     /// @brief Gets all control surface names across all surfaces.
-    std::vector<std::string> GetControlSurfaceNames() const;
+    [[nodiscard]] std::vector<std::string> GetControlSurfaceNames() const;
 
     /// @brief Gets the number of unique control surfaces.
-    size_t GetNumControlSurfaces() const;
+    [[nodiscard]] size_t GetNumControlSurfaces() const;
 
     /// @}
 
@@ -189,10 +194,10 @@ public:
     /// @{
 
     /// @brief Gets all design variable names across all surfaces.
-    std::vector<std::string> GetDesignVariableNames() const;
+    [[nodiscard]] std::vector<std::string> GetDesignVariableNames() const;
 
     /// @brief Gets the number of unique design variables.
-    size_t GetNumDesignVariables() const;
+    [[nodiscard]] size_t GetNumDesignVariables() const;
 
     /// @}
 
@@ -200,10 +205,10 @@ public:
     /// @{
 
     /// @brief Computes the total number of vortex elements.
-    int ComputeTotalVortexCount() const;
+    [[nodiscard]] int ComputeTotalVortexCount() const;
 
     /// @brief Computes the total number of spanwise strips.
-    int ComputeTotalStripCount() const;
+    [[nodiscard]] int ComputeTotalStripCount() const;
 
     /// @}
 
@@ -211,10 +216,10 @@ public:
     /// @{
 
     /// @brief Computes total planform area from all surfaces.
-    Scalar ComputeTotalPlanformArea() const;
+    [[nodiscard]] Scalar ComputeTotalPlanformArea() const;
 
     /// @brief Computes total span from all surfaces.
-    Scalar ComputeTotalSpan() const;
+    [[nodiscard]] Scalar ComputeTotalSpan() const;
 
     /// @}
 

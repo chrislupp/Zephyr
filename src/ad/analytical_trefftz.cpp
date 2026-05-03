@@ -20,8 +20,7 @@
 
 #include "vlm/ad/analytical_trefftz.h"
 
-namespace vlm {
-namespace ad {
+namespace vlm::ad {
 
 void analytical_trefftz_circulation_gradient(
     const double* strip_gamma, const double* strip_te_left,
@@ -197,5 +196,4 @@ void analytical_trefftz_circulation_gradient(
     delete[] geom;
 }
 
-}  // namespace ad
-}  // namespace vlm
+}  // namespace vlm::ad

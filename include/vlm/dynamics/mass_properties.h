@@ -55,7 +55,7 @@ struct MassProperties {
     Scalar Ixz{0.0};  ///< XZ product of inertia
 
     /// Get the full 3x3 inertia tensor
-    Mat3 GetInertiaTensor() const {
+    [[nodiscard]] Mat3 GetInertiaTensor() const {
         Mat3 I;
         I << Ixx, -Ixy, -Ixz, -Ixy, Iyy, -Iyz, -Ixz, -Iyz, Izz;
         return I;
@@ -72,12 +72,12 @@ struct MassProperties {
     }
 
     /// Check if mass properties are valid (positive mass and inertias)
-    bool IsValid() const {
+    [[nodiscard]] bool IsValid() const {
         return mass > 0.0 && Ixx > 0.0 && Iyy > 0.0 && Izz > 0.0;
     }
 
     /// Get the inverse of the inertia tensor
-    Mat3 GetInverseInertiaTensor() const {
+    [[nodiscard]] Mat3 GetInverseInertiaTensor() const {
         return GetInertiaTensor().inverse();
     }
 };
@@ -106,7 +106,7 @@ struct FlightState {
     Scalar gravity{9.81};   ///< Gravitational acceleration (m/s^2)
 
     /// Compute body-axis velocity components
-    Vec3 GetBodyVelocity() const {
+    [[nodiscard]] Vec3 GetBodyVelocity() const {
         Scalar ca = std::cos(alpha);
         Scalar sa = std::sin(alpha);
         Scalar cb = std::cos(beta);
@@ -115,7 +115,7 @@ struct FlightState {
     }
 
     /// Compute dynamic pressure
-    Scalar GetDynamicPressure() const {
+    [[nodiscard]] Scalar GetDynamicPressure() const {
         return 0.5 * density * velocity * velocity;
     }
 };

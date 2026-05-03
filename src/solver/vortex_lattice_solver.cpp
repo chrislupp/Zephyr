@@ -172,7 +172,7 @@ Vec3 VortexLatticeSolver::ComputeFreestreamDirection(
     Scalar sb = std::sin(condition.beta);
 
     // Unit freestream direction in body axes
-    return Vec3(ca * cb, sb, sa * cb);
+    return {ca * cb, sb, sa * cb};
 }
 
 VecX VortexLatticeSolver::CombineUnitResponses(

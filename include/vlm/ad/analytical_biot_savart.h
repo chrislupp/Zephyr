@@ -35,8 +35,7 @@
 
 #include <cmath>
 
-namespace vlm {
-namespace ad {
+namespace vlm::ad {
 
 constexpr double kPi4Inv = 0.079577471545947667884;  // 1/(4*pi)
 constexpr double kBSEps = 1e-12;
@@ -178,5 +177,4 @@ void horseshoe_velocity_vjp_bound_right(const double* field_point,
                                         double core_radius, bool include_bound,
                                         const double* seed, double* result);
 
-}  // namespace ad
-}  // namespace vlm
+}  // namespace vlm::ad

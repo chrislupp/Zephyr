@@ -124,12 +124,12 @@ public:
 
     /// @brief Gets reference quantities (set by SetMesh or extracted from
     /// Aircraft).
-    const ReferenceQuantities& GetReferenceQuantities() const {
+    [[nodiscard]] const ReferenceQuantities& GetReferenceQuantities() const {
         return ref_quantities_;
     }
 
     /// @brief Gets the generated mesh.
-    const VortexLattice& GetMesh() const { return mesh_; }
+    [[nodiscard]] const VortexLattice& GetMesh() const { return mesh_; }
 
     /// @brief Gets a mutable reference to the mesh.
     VortexLattice& GetMeshMutable() { return mesh_; }
@@ -138,13 +138,17 @@ public:
     void SetSymmetry(const SymmetryConfig& config);
 
     /// @brief Gets the symmetry configuration.
-    const SymmetryConfig& GetSymmetry() const { return symmetry_; }
+    [[nodiscard]] const SymmetryConfig& GetSymmetry() const {
+        return symmetry_;
+    }
 
     /// @brief Sets the reference point for moment calculations.
     void SetReferencePoint(const Vec3& ref) { reference_point_ = ref; }
 
     /// @brief Gets the reference point.
-    const Vec3& GetReferencePoint() const { return reference_point_; }
+    [[nodiscard]] const Vec3& GetReferencePoint() const {
+        return reference_point_;
+    }
 
     /// @}
 
@@ -167,10 +171,12 @@ public:
     void SolveUnitResponses();
 
     /// @brief Checks if AIC matrix is valid.
-    bool IsAICValid() const { return aic_valid_; }
+    [[nodiscard]] bool IsAICValid() const { return aic_valid_; }
 
     /// @brief Checks if unit responses are computed.
-    bool AreUnitResponsesValid() const { return unit_responses_valid_; }
+    [[nodiscard]] bool AreUnitResponsesValid() const {
+        return unit_responses_valid_;
+    }
 
     /// @}
 
@@ -184,7 +190,7 @@ public:
     SolutionState Solve(const FlightCondition& condition);
 
     /// @brief Gets the current solution state.
-    const SolutionState& GetSolution() const { return solution_; }
+    [[nodiscard]] const SolutionState& GetSolution() const { return solution_; }
 
     /// @brief Computes freestream velocity vector from flight condition.
     ///
@@ -198,10 +204,10 @@ public:
     /// @{
 
     /// @brief Gets the AIC matrix.
-    const MatX& GetAICMatrix() const { return aic_matrix_; }
+    [[nodiscard]] const MatX& GetAICMatrix() const { return aic_matrix_; }
 
     /// @brief Gets the velocity influence matrix.
-    const MatX& GetVelocityInfluenceMatrix() const {
+    [[nodiscard]] const MatX& GetVelocityInfluenceMatrix() const {
         return velocity_influence_matrix_;
     }
 
@@ -209,13 +215,14 @@ public:
 
 private:
     /// @brief Builds right-hand side for unit freestream component.
-    VecX BuildUnitFreestreamRHS(int component) const;
+    [[nodiscard]] VecX BuildUnitFreestreamRHS(int component) const;
 
     /// @brief Builds right-hand side for unit rotation component.
-    VecX BuildUnitRotationRHS(int component) const;
+    [[nodiscard]] VecX BuildUnitRotationRHS(int component) const;
 
     /// @brief Combines unit responses for flight condition.
-    VecX CombineUnitResponses(const FlightCondition& condition) const;
+    [[nodiscard]] VecX CombineUnitResponses(
+        const FlightCondition& condition) const;
 
     VortexLattice mesh_;
     SymmetryConfig symmetry_;

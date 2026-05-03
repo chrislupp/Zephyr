@@ -46,13 +46,13 @@ public:
     Surface() = default;
 
     /// @brief Creates a surface with a name.
-    explicit Surface(const std::string& name);
+    explicit Surface(std::string name);
 
     /// @name Basic Properties
     /// @{
 
     /// @brief Gets the surface name.
-    const std::string& GetName() const { return name_; }
+    [[nodiscard]] const std::string& GetName() const { return name_; }
 
     /// @brief Sets the surface name.
     void SetName(const std::string& name) { name_ = name; }
@@ -61,7 +61,7 @@ public:
     ///
     /// Surfaces on the same component share their bound vortex, which affects
     /// the AIC matrix diagonal treatment.
-    int GetComponentIndex() const { return component_index_; }
+    [[nodiscard]] int GetComponentIndex() const { return component_index_; }
 
     /// @brief Sets the component index.
     void SetComponentIndex(int index) { component_index_ = index; }
@@ -75,16 +75,18 @@ public:
     void AddSection(const Section& section) { sections_.push_back(section); }
 
     /// @brief Gets all sections.
-    const std::vector<Section>& GetSections() const { return sections_; }
+    [[nodiscard]] const std::vector<Section>& GetSections() const {
+        return sections_;
+    }
 
     /// @brief Gets a mutable reference to sections.
     std::vector<Section>& GetSectionsMutable() { return sections_; }
 
     /// @brief Gets the number of sections.
-    size_t GetNumSections() const { return sections_.size(); }
+    [[nodiscard]] size_t GetNumSections() const { return sections_.size(); }
 
     /// @brief Gets a section by index.
-    const Section& GetSection(size_t index) const {
+    [[nodiscard]] const Section& GetSection(size_t index) const {
         return sections_.at(index);
     }
 
@@ -97,13 +99,17 @@ public:
     /// @{
 
     /// @brief Gets the number of chordwise panels.
-    int GetChordwisePanelCount() const { return chordwise_panel_count_; }
+    [[nodiscard]] int GetChordwisePanelCount() const {
+        return chordwise_panel_count_;
+    }
 
     /// @brief Sets the number of chordwise panels.
     void SetChordwisePanelCount(int count) { chordwise_panel_count_ = count; }
 
     /// @brief Gets the chordwise spacing type.
-    SpacingType GetChordwiseSpacing() const { return chordwise_spacing_type_; }
+    [[nodiscard]] SpacingType GetChordwiseSpacing() const {
+        return chordwise_spacing_type_;
+    }
 
     /// @brief Sets the chordwise spacing type.
     void SetChordwiseSpacing(SpacingType spacing) {
@@ -127,13 +133,17 @@ public:
     }
 
     /// @brief Gets the number of spanwise panels.
-    int GetSpanwisePanelCount() const { return spanwise_panel_count_; }
+    [[nodiscard]] int GetSpanwisePanelCount() const {
+        return spanwise_panel_count_;
+    }
 
     /// @brief Sets the number of spanwise panels.
     void SetSpanwisePanelCount(int count) { spanwise_panel_count_ = count; }
 
     /// @brief Gets the spanwise spacing type.
-    SpacingType GetSpanwiseSpacing() const { return spanwise_spacing_type_; }
+    [[nodiscard]] SpacingType GetSpanwiseSpacing() const {
+        return spanwise_spacing_type_;
+    }
 
     /// @brief Sets the spanwise spacing type.
     void SetSpanwiseSpacing(SpacingType spacing) {
@@ -160,7 +170,9 @@ public:
     ///
     /// If set, the surface is mirrored about this Y coordinate.
     /// Typically 0.0 for symmetric aircraft.
-    std::optional<Scalar> GetYDuplicate() const { return y_duplicate_; }
+    [[nodiscard]] std::optional<Scalar> GetYDuplicate() const {
+        return y_duplicate_;
+    }
 
     /// @brief Sets Y-duplication (mirrors surface about Y plane).
     void SetYDuplicate(Scalar y_plane) { y_duplicate_ = y_plane; }
@@ -169,7 +181,9 @@ public:
     void ClearYDuplicate() { y_duplicate_.reset(); }
 
     /// @brief Checks if surface is Y-duplicated.
-    bool IsYDuplicated() const { return y_duplicate_.has_value(); }
+    [[nodiscard]] bool IsYDuplicated() const {
+        return y_duplicate_.has_value();
+    }
 
     /// @}
 
@@ -177,19 +191,19 @@ public:
     /// @{
 
     /// @brief Gets the angle offset (added to section incidences).
-    Scalar GetAngleOffset() const { return angle_offset_deg_; }
+    [[nodiscard]] Scalar GetAngleOffset() const { return angle_offset_deg_; }
 
     /// @brief Sets the angle offset in degrees.
     void SetAngleOffset(Scalar angle_deg) { angle_offset_deg_ = angle_deg; }
 
     /// @brief Gets the translation vector.
-    const Vec3& GetTranslation() const { return translation_; }
+    [[nodiscard]] const Vec3& GetTranslation() const { return translation_; }
 
     /// @brief Sets the translation vector.
     void SetTranslation(const Vec3& translation) { translation_ = translation; }
 
     /// @brief Gets the scale factors.
-    const Vec3& GetScale() const { return scale_; }
+    [[nodiscard]] const Vec3& GetScale() const { return scale_; }
 
     /// @brief Sets the scale factors.
     void SetScale(const Vec3& scale) { scale_ = scale; }
@@ -200,13 +214,15 @@ public:
     /// @{
 
     /// @brief Checks if surface has a wake.
-    bool HasWake() const { return has_wake_; }
+    [[nodiscard]] bool HasWake() const { return has_wake_; }
 
     /// @brief Sets whether surface has a wake.
     void SetHasWake(bool has_wake) { has_wake_ = has_wake; }
 
     /// @brief Checks if surface contributes to loads.
-    bool ContributesToLoads() const { return contributes_to_loads_; }
+    [[nodiscard]] bool ContributesToLoads() const {
+        return contributes_to_loads_;
+    }
 
     /// @brief Sets whether surface contributes to loads.
     void SetContributesToLoads(bool contributes) {
@@ -214,7 +230,9 @@ public:
     }
 
     /// @brief Checks if angle of attack/sideslip affect this surface.
-    bool IsAffectedByAlphaBeta() const { return affected_by_alpha_beta_; }
+    [[nodiscard]] bool IsAffectedByAlphaBeta() const {
+        return affected_by_alpha_beta_;
+    }
 
     /// @brief Sets whether angle of attack/sideslip affect this surface.
     void SetAffectedByAlphaBeta(bool affected) {
@@ -230,7 +248,9 @@ public:
     ///
     /// 6-element array defining parabolic drag polar:
     /// CD = CD0 + CD1*(CL-CL_ref) + CD2*(CL-CL_ref)^2 + CD3*(CL-CL_ref)^3 + ...
-    const std::array<Scalar, 6>& GetClCdPolar() const { return cl_cd_polar_; }
+    [[nodiscard]] const std::array<Scalar, 6>& GetClCdPolar() const {
+        return cl_cd_polar_;
+    }
 
     /// @brief Sets the CL-CD polar coefficients.
     void SetClCdPolar(const std::array<Scalar, 6>& polar) {
@@ -238,7 +258,7 @@ public:
     }
 
     /// @brief Checks if viscous drag model is active.
-    bool HasViscousDrag() const;
+    [[nodiscard]] bool HasViscousDrag() const;
 
     /// @}
 
@@ -246,13 +266,13 @@ public:
     /// @{
 
     /// @brief Computes the planform area.
-    Scalar ComputePlanformArea() const;
+    [[nodiscard]] Scalar ComputePlanformArea() const;
 
     /// @brief Computes the mean aerodynamic chord.
-    Scalar ComputeMeanAerodynamicChord() const;
+    [[nodiscard]] Scalar ComputeMeanAerodynamicChord() const;
 
     /// @brief Computes the span (max Y extent).
-    Scalar ComputeSpan() const;
+    [[nodiscard]] Scalar ComputeSpan() const;
 
     /// @}
 

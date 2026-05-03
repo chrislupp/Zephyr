@@ -57,7 +57,7 @@ struct OperatingVariables {
     std::vector<std::pair<std::string, Scalar>> control_deflections;
 
     /// Get number of total variables (5 base + controls)
-    Index GetNumVariables() const {
+    [[nodiscard]] Index GetNumVariables() const {
         return 5 + static_cast<Index>(control_deflections.size());
     }
 };
@@ -95,7 +95,7 @@ struct TrimConstraints {
     std::vector<std::pair<std::string, VariableConstraint>> control_constraints;
 
     /// Get number of constrained variables
-    Index GetNumConstraints() const {
+    [[nodiscard]] Index GetNumConstraints() const {
         Index count = 0;
         if (alpha.type != ConstraintType::kFree)
             ++count;

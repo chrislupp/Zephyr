@@ -97,56 +97,63 @@ public:
     void GenerateFromMesh(const MeshInput& input);
 
     /// @brief Gets the stored mesh input (valid only after GenerateFromMesh).
-    const MeshInput* GetMeshInput() const {
+    [[nodiscard]] const MeshInput* GetMeshInput() const {
         return has_mesh_input_ ? &mesh_input_ : nullptr;
     }
 
     /// @brief Gets the total number of horseshoe vortex elements.
-    Index GetNumVortices() const {
+    [[nodiscard]] Index GetNumVortices() const {
         return static_cast<Index>(vortices_.size());
     }
 
     /// @brief Gets the total number of spanwise strips.
-    Index GetNumStrips() const { return static_cast<Index>(strips_.size()); }
+    [[nodiscard]] Index GetNumStrips() const {
+        return static_cast<Index>(strips_.size());
+    }
 
     /// @brief Gets the number of surfaces in the mesh.
-    Index GetNumSurfaces() const {
+    [[nodiscard]] Index GetNumSurfaces() const {
         return static_cast<Index>(surface_info_.size());
     }
 
     /// @brief Gets a horseshoe vortex element by index.
-    const HorseshoeVortex& GetVortex(Index index) const {
+    [[nodiscard]] const HorseshoeVortex& GetVortex(Index index) const {
         return vortices_[index];
     }
     HorseshoeVortex& GetVortex(Index index) { return vortices_[index]; }
 
     /// @brief Gets a strip by index.
-    const Strip& GetStrip(Index index) const { return strips_[index]; }
+    [[nodiscard]] const Strip& GetStrip(Index index) const {
+        return strips_[index];
+    }
     Strip& GetStrip(Index index) { return strips_[index]; }
 
     /// @brief Gets mesh information for a surface.
-    const SurfaceMeshInfo& GetSurfaceInfo(Index index) const {
+    [[nodiscard]] const SurfaceMeshInfo& GetSurfaceInfo(Index index) const {
         return surface_info_[index];
     }
 
     /// @brief Gets all horseshoe vortex elements.
-    const std::vector<HorseshoeVortex>& GetVortices() const {
+    [[nodiscard]] const std::vector<HorseshoeVortex>& GetVortices() const {
         return vortices_;
     }
     std::vector<HorseshoeVortex>& GetVortices() { return vortices_; }
 
     /// @brief Gets all strips.
-    const std::vector<Strip>& GetStrips() const { return strips_; }
+    [[nodiscard]] const std::vector<Strip>& GetStrips() const {
+        return strips_;
+    }
     std::vector<Strip>& GetStrips() { return strips_; }
 
     /// @brief Gets control surface influences for all elements.
-    const std::vector<std::vector<ControlSurfaceInfluence>>&
+    [[nodiscard]] const std::vector<std::vector<ControlSurfaceInfluence>>&
     GetControlSurfaceInfluences() const {
         return control_influences_;
     }
 
     /// @brief Gets control surface names defined in the mesh.
-    const std::vector<std::string>& GetControlSurfaceNames() const {
+    [[nodiscard]] const std::vector<std::string>& GetControlSurfaceNames()
+        const {
         return control_surface_names_;
     }
 
@@ -157,7 +164,7 @@ public:
     void RecalculateNormals();
 
     /// @brief Gets the vortex core radius for control point calculations.
-    Scalar GetVortexCoreRadiusChordFraction() const {
+    [[nodiscard]] Scalar GetVortexCoreRadiusChordFraction() const {
         return vortex_core_radius_chord_fraction_;
     }
 
@@ -167,7 +174,7 @@ public:
     }
 
     /// @brief Gets the vortex core radius for wake calculations.
-    Scalar GetVortexCoreRadiusWidthFraction() const {
+    [[nodiscard]] Scalar GetVortexCoreRadiusWidthFraction() const {
         return vortex_core_radius_width_fraction_;
     }
 

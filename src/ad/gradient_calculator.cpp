@@ -32,8 +32,7 @@
 #include <cmath>
 #include <vector>
 
-namespace vlm {
-namespace ad {
+namespace vlm::ad {
 
 // ============================================================================
 // Implementation Class
@@ -98,6 +97,7 @@ public:
             case 2:  // roll rate - freestream direction doesn't depend on p
             case 3:  // pitch rate - freestream direction doesn't depend on q
             case 4:  // yaw rate - freestream direction doesn't depend on r
+            default:
                 // dV_dparam stays zero; the rotation contribution is handled
                 // below
                 break;
@@ -131,6 +131,8 @@ public:
                     case 4:
                         omega_dir = Vec3(0, 0, 1);
                         break;  // r (yaw)
+                    default:
+                        break;
                 }
 
                 // Rotation velocity: V_rot = ω × r
@@ -238,8 +240,8 @@ public:
             // forces is entirely captured through the implicit term (how Γ
             // changes when the RHS changes with rotation rate). The explicit
             // force term is zero.
-            for (int out_idx = 0; out_idx < 6; ++out_idx) {
-                d_result[out_idx] = 0.0;
+            for (double& out_idx : d_result) {
+                out_idx = 0.0;
             }
         }
 
@@ -2018,6 +2020,8 @@ GradientCalculator::ComputeMeshNodeGradients(const FlightCondition& condition) {
                 case 5:
                     target = &result[s].dCn;
                     break;
+                default:
+                    break;
             }
 
             // Propagate original surface vortex gradients to nodes
@@ -2044,5 +2048,4 @@ GradientCalculator::ComputeMeshNodeGradients(const FlightCondition& condition) {
     return result;
 }
 
-}  // namespace ad
-}  // namespace vlm
+}  // namespace vlm::ad

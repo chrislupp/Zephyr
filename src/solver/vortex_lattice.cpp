@@ -48,10 +48,10 @@ void VortexLattice::GenerateFromAircraft(const Aircraft& aircraft) {
         GenerateSurfaceMesh(surface, i, aircraft);
 
         // Handle y-duplication
-        if (surface.IsYDuplicated()) {
+        auto y_dup = surface.GetYDuplicate();
+        if (y_dup.has_value()) {
             GenerateDuplicateSurfaceMesh(
-                static_cast<Index>(surface_info_.size()) - 1,
-                surface.GetYDuplicate().value());
+                static_cast<Index>(surface_info_.size()) - 1, *y_dup);
         }
     }
 
@@ -645,9 +645,7 @@ void VortexLattice::CalculateNormals() {
 }
 
 void VortexLattice::RecalculateNormals() {
-    for (Index j = 0; j < static_cast<Index>(strips_.size()); ++j) {
-        Strip& strip = strips_[j];
-
+    for (auto& strip : strips_) {
         // Get first and last vortex in strip for strip normal calculation
         if (strip.num_vortices == 0)
             continue;

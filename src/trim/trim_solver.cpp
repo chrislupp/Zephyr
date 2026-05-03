@@ -267,8 +267,7 @@ void TrimSolver::BuildSystem(const AerodynamicResults& aero,
     }
 
     // Process control surface constraints
-    for (size_t i = 0; i < constraints.control_constraints.size(); ++i) {
-        const auto& [name, constraint] = constraints.control_constraints[i];
+    for (const auto& [name, constraint] : constraints.control_constraints) {
         if (constraint.type == ConstraintType::kFree)
             continue;
 

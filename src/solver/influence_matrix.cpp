@@ -106,7 +106,7 @@ Vec3 ComputeHorseshoeVortexVelocity(const Vec3& field_point,
     }
 
     // Apply 1/(4*pi) factor and Prandtl-Glauert correction to U
-    return Vec3(U * kPi4Inv / prandtl_glauert_factor, V * kPi4Inv, W * kPi4Inv);
+    return {U * kPi4Inv / prandtl_glauert_factor, V * kPi4Inv, W * kPi4Inv};
 }
 
 InfluenceMatrixBuilder::InfluenceMatrixBuilder(const VortexLattice& mesh)
@@ -160,7 +160,7 @@ Vec3 InfluenceMatrixBuilder::ComputeVelocityWithYImage(
     const HorseshoeVortex& vor = mesh_.GetVortex(vortex_index);
 
     Scalar y_offset = 2.0 * symmetry_.y_symmetry_plane;
-    Scalar y_sign = static_cast<Scalar>(static_cast<int>(symmetry_.y_symmetry));
+    auto y_sign = static_cast<Scalar>(static_cast<int>(symmetry_.y_symmetry));
 
     // Y-image vortex: reflect about y-plane, swap left/right to maintain sign
     Vec3 image_left(vor.bound_vortex_right.x(),
@@ -193,7 +193,7 @@ Vec3 InfluenceMatrixBuilder::ComputeVelocityWithZImage(
     const HorseshoeVortex& vor = mesh_.GetVortex(vortex_index);
 
     Scalar z_offset = 2.0 * symmetry_.z_symmetry_plane;
-    Scalar z_sign = static_cast<Scalar>(static_cast<int>(symmetry_.z_symmetry));
+    auto z_sign = static_cast<Scalar>(static_cast<int>(symmetry_.z_symmetry));
 
     // Z-image vortex: reflect about z-plane, swap left/right
     Vec3 image_left(vor.bound_vortex_right.x(), vor.bound_vortex_right.y(),

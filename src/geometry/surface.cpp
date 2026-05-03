@@ -21,10 +21,11 @@
 #include "vlm/geometry/surface.h"
 
 #include <cmath>
+#include <utility>
 
 namespace vlm {
 
-Surface::Surface(const std::string& name) : name_(name) {}
+Surface::Surface(std::string name) : name_(std::move(name)) {}
 
 bool Surface::HasViscousDrag() const {
     // Check if any polar coefficient is non-zero

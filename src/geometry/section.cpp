@@ -20,6 +20,8 @@
 
 #include "vlm/geometry/section.h"
 
+#include <utility>
+
 namespace vlm {
 
 namespace {
@@ -27,12 +29,12 @@ namespace {
 Airfoil g_flat_plate = Airfoil::CreateFlatPlate();
 }  // namespace
 
-Section::Section(const Vec3& leading_edge_position, Scalar chord,
-                 Scalar twist_angle, std::shared_ptr<Airfoil> airfoil)
-    : leading_edge_position_(leading_edge_position),
+Section::Section(Vec3 leading_edge_position, Scalar chord, Scalar twist_angle,
+                 std::shared_ptr<Airfoil> airfoil)
+    : leading_edge_position_(std::move(leading_edge_position)),
       chord_(chord),
       twist_angle_deg_(twist_angle),
-      airfoil_(airfoil) {}
+      airfoil_(std::move(std::move(airfoil))) {}
 
 const Airfoil& Section::GetAirfoil() const {
     if (airfoil_) {

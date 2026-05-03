@@ -22,10 +22,11 @@
 
 #include <algorithm>
 #include <set>
+#include <utility>
 
 namespace vlm {
 
-Aircraft::Aircraft(const std::string& title) : title_(title) {}
+Aircraft::Aircraft(std::string title) : title_(std::move(title)) {}
 
 const Surface* Aircraft::FindSurfaceByName(const std::string& name) const {
     for (const auto& surface : surfaces_) {
@@ -45,7 +46,7 @@ std::vector<std::string> Aircraft::GetControlSurfaceNames() const {
             }
         }
     }
-    return std::vector<std::string>(names.begin(), names.end());
+    return {names.begin(), names.end()};
 }
 
 size_t Aircraft::GetNumControlSurfaces() const {
@@ -61,7 +62,7 @@ std::vector<std::string> Aircraft::GetDesignVariableNames() const {
             }
         }
     }
-    return std::vector<std::string>(names.begin(), names.end());
+    return {names.begin(), names.end()};
 }
 
 size_t Aircraft::GetNumDesignVariables() const {

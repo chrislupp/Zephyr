@@ -29,8 +29,7 @@
 
 #include <cmath>
 
-namespace vlm {
-namespace ad {
+namespace vlm::ad {
 
 constexpr double kHalfPiInvTrefftz = 0.15915494309189533577;  // 1/(2*pi)
 constexpr double kEpsTrefftz = 1e-12;
@@ -136,5 +135,4 @@ void analytical_trefftz_circulation_gradient(
     double reference_span, double core_chord_fraction,
     double core_width_fraction, int output_index, double* d_gamma);
 
-}  // namespace ad
-}  // namespace vlm
+}  // namespace vlm::ad

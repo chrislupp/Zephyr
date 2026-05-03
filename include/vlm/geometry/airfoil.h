@@ -90,41 +90,47 @@ public:
     /// @brief Evaluates camber line height at a given chord location.
     /// @param x Chordwise location (0 = LE, 1 = TE)
     /// @return Camber line height (y/c)
-    Scalar EvaluateCamber(Scalar x) const;
+    [[nodiscard]] Scalar EvaluateCamber(Scalar x) const;
 
     /// @brief Evaluates camber line slope (dy/dx) at a given chord location.
     /// @param x Chordwise location
     /// @return Camber line slope
-    Scalar EvaluateCamberSlope(Scalar x) const;
+    [[nodiscard]] Scalar EvaluateCamberSlope(Scalar x) const;
 
     /// @brief Evaluates thickness at a given chord location.
     /// @param x Chordwise location
     /// @return Thickness (t/c)
-    Scalar EvaluateThickness(Scalar x) const;
+    [[nodiscard]] Scalar EvaluateThickness(Scalar x) const;
 
     /// @brief Returns the camber line x-coordinates.
-    const std::vector<Scalar>& GetCamberX() const { return camber_x_; }
+    [[nodiscard]] const std::vector<Scalar>& GetCamberX() const {
+        return camber_x_;
+    }
 
     /// @brief Returns the camber line y-coordinates.
-    const std::vector<Scalar>& GetCamberY() const { return camber_y_; }
+    [[nodiscard]] const std::vector<Scalar>& GetCamberY() const {
+        return camber_y_;
+    }
 
     /// @brief Returns the maximum camber value.
-    Scalar GetMaxCamber() const { return max_camber_; }
+    [[nodiscard]] Scalar GetMaxCamber() const { return max_camber_; }
 
     /// @brief Returns the chordwise position of maximum camber.
-    Scalar GetMaxCamberPosition() const { return max_camber_position_; }
+    [[nodiscard]] Scalar GetMaxCamberPosition() const {
+        return max_camber_position_;
+    }
 
     /// @brief Returns the maximum thickness.
-    Scalar GetMaxThickness() const { return max_thickness_; }
+    [[nodiscard]] Scalar GetMaxThickness() const { return max_thickness_; }
 
     /// @brief Returns the airfoil name/designation.
-    const std::string& GetName() const { return name_; }
+    [[nodiscard]] const std::string& GetName() const { return name_; }
 
     /// @brief Sets the airfoil name.
     void SetName(const std::string& name) { name_ = name; }
 
     /// @brief Checks if the airfoil has been initialized.
-    bool IsValid() const { return !camber_x_.empty(); }
+    [[nodiscard]] bool IsValid() const { return !camber_x_.empty(); }
 
 private:
     /// @brief Builds the camber spline from stored coordinates.

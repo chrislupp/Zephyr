@@ -148,12 +148,12 @@ struct AerodynamicResults {
     // =========================================================================
 
     /// Get aspect ratio from reference dimensions
-    Scalar GetAspectRatio() const {
+    [[nodiscard]] Scalar GetAspectRatio() const {
         return reference_span * reference_span / reference_area;
     }
 
     /// Get induced drag coefficient from ideal elliptic loading
-    Scalar GetIdealInducedDrag() const {
+    [[nodiscard]] Scalar GetIdealInducedDrag() const {
         Scalar AR = GetAspectRatio();
         return CL * CL / (kPi * AR);
     }

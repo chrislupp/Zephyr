@@ -28,6 +28,7 @@
 #include <cmath>
 #include <memory>
 #include <string>
+#include <utility>
 #include <vector>
 
 namespace vlm {
@@ -72,15 +73,14 @@ public:
     /// @param chord Chord length
     /// @param twist_angle Angle of incidence in degrees (positive = LE up)
     /// @param airfoil Optional airfoil (defaults to flat plate)
-    Section(const Vec3& leading_edge_position, Scalar chord,
-            Scalar twist_angle = 0.0,
+    Section(Vec3 leading_edge_position, Scalar chord, Scalar twist_angle = 0.0,
             std::shared_ptr<Airfoil> airfoil = nullptr);
 
     /// @name Basic Geometry
     /// @{
 
     /// @brief Gets the leading edge position.
-    const Vec3& GetLeadingEdgePosition() const {
+    [[nodiscard]] const Vec3& GetLeadingEdgePosition() const {
         return leading_edge_position_;
     }
 
@@ -90,19 +90,19 @@ public:
     }
 
     /// @brief Gets the chord length.
-    Scalar GetChord() const { return chord_; }
+    [[nodiscard]] Scalar GetChord() const { return chord_; }
 
     /// @brief Sets the chord length.
     void SetChord(Scalar chord) { chord_ = chord; }
 
     /// @brief Gets the twist angle in degrees.
-    Scalar GetTwistAngle() const { return twist_angle_deg_; }
+    [[nodiscard]] Scalar GetTwistAngle() const { return twist_angle_deg_; }
 
     /// @brief Sets the twist angle in degrees.
     void SetTwistAngle(Scalar angle_deg) { twist_angle_deg_ = angle_deg; }
 
     /// @brief Gets the twist angle in radians.
-    Scalar GetTwistAngleRadians() const {
+    [[nodiscard]] Scalar GetTwistAngleRadians() const {
         return twist_angle_deg_ * kDegreesToRadians;
     }
 
@@ -112,16 +112,18 @@ public:
     /// @{
 
     /// @brief Gets the airfoil.
-    const Airfoil& GetAirfoil() const;
+    [[nodiscard]] const Airfoil& GetAirfoil() const;
 
     /// @brief Gets the airfoil (non-const).
     Airfoil& GetAirfoilMutable();
 
     /// @brief Sets the airfoil.
-    void SetAirfoil(std::shared_ptr<Airfoil> airfoil) { airfoil_ = airfoil; }
+    void SetAirfoil(std::shared_ptr<Airfoil> airfoil) {
+        airfoil_ = std::move(airfoil);
+    }
 
     /// @brief Checks if a custom airfoil is set.
-    bool HasAirfoil() const { return airfoil_ != nullptr; }
+    [[nodiscard]] bool HasAirfoil() const { return airfoil_ != nullptr; }
 
     /// @}
 
@@ -132,7 +134,7 @@ public:
     ///
     /// Factor to scale the section lift curve slope. Default is 1.0.
     /// Values less than 1.0 can model flow separation or 3D effects.
-    Scalar GetClAlphaFactor() const { return cl_alpha_factor_; }
+    [[nodiscard]] Scalar GetClAlphaFactor() const { return cl_alpha_factor_; }
 
     /// @brief Sets the CL-alpha scaling factor.
     void SetClAlphaFactor(Scalar factor) { cl_alpha_factor_ = factor; }
@@ -148,12 +150,15 @@ public:
     }
 
     /// @brief Gets all control surface definitions.
-    const std::vector<ControlSurfaceDefinition>& GetControlSurfaces() const {
+    [[nodiscard]] const std::vector<ControlSurfaceDefinition>&
+    GetControlSurfaces() const {
         return control_surfaces_;
     }
 
     /// @brief Gets the number of control surfaces.
-    size_t GetNumControlSurfaces() const { return control_surfaces_.size(); }
+    [[nodiscard]] size_t GetNumControlSurfaces() const {
+        return control_surfaces_.size();
+    }
 
     /// @}
 
@@ -166,7 +171,8 @@ public:
     }
 
     /// @brief Gets all design variable definitions.
-    const std::vector<DesignVariableDefinition>& GetDesignVariables() const {
+    [[nodiscard]] const std::vector<DesignVariableDefinition>&
+    GetDesignVariables() const {
         return design_variables_;
     }
 
@@ -177,13 +183,17 @@ public:
 
     /// @brief Gets the spanwise panel count override.
     /// @return Panel count, or 0 if using surface default
-    int GetSpanwisePanelCount() const { return spanwise_panel_count_; }
+    [[nodiscard]] int GetSpanwisePanelCount() const {
+        return spanwise_panel_count_;
+    }
 
     /// @brief Sets the spanwise panel count override.
     void SetSpanwisePanelCount(int count) { spanwise_panel_count_ = count; }
 
     /// @brief Gets the spanwise spacing type.
-    SpacingType GetSpanwiseSpacing() const { return spanwise_spacing_type_; }
+    [[nodiscard]] SpacingType GetSpanwiseSpacing() const {
+        return spanwise_spacing_type_;
+    }
 
     /// @brief Sets the spanwise spacing type.
     void SetSpanwiseSpacing(SpacingType spacing) {
@@ -194,10 +204,6 @@ public:
     void SetSpanwiseSpacing(Scalar spacing) {
         if (std::abs(spacing) < 0.01) {
             spanwise_spacing_type_ = SpacingType::kUniform;
-        } else if (spacing > 0.99) {
-            spanwise_spacing_type_ = SpacingType::kCosine;
-        } else if (spacing < -0.99) {
-            spanwise_spacing_type_ = SpacingType::kSine;
         } else if (spacing > 0) {
             spanwise_spacing_type_ = SpacingType::kCosine;
         } else {
@@ -213,7 +219,7 @@ public:
     /// @brief Gets the viscous polar coefficients.
     ///
     /// 6-element array defining parabolic drag polar at this section.
-    const std::array<Scalar, 6>& GetViscousPolar() const {
+    [[nodiscard]] const std::array<Scalar, 6>& GetViscousPolar() const {
         return viscous_polar_;
     }
 

@@ -37,8 +37,7 @@
 
 #include <functional>
 
-namespace vlm {
-namespace ad {
+namespace vlm::ad {
 
 /// @brief Flight condition gradient structure.
 ///
@@ -111,7 +110,9 @@ struct SectionGeometryGradients {
 struct GeometryGradients {
     std::vector<SectionGeometryGradients> section_gradients;
 
-    Index TotalDesignVariables() const { return section_gradients.size() * 5; }
+    [[nodiscard]] Index TotalDesignVariables() const {
+        return section_gradients.size() * 5;
+    }
 
     VecX GetChordGradientsFor(
         const std::function<Scalar(const AeroGradients&)>& selector) const {
@@ -228,5 +229,4 @@ private:
     std::unique_ptr<Impl> impl_;
 };
 
-}  // namespace ad
-}  // namespace vlm
+}  // namespace vlm::ad

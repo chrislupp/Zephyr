@@ -228,8 +228,6 @@ bool MassReader::ParseUnitLine(const std::string& line,
     //         Munit = value [unit_name]
     //         Tunit = value [unit_name]
 
-    std::string lower = ToLower(line);
-
     size_t eq_pos = line.find('=');
     if (eq_pos == std::string::npos)
         return false;

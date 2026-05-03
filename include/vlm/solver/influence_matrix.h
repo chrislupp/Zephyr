@@ -80,16 +80,20 @@ public:
     void SetMachNumber(Scalar mach);
 
     /// @brief Gets the current Mach number.
-    Scalar GetMachNumber() const { return mach_number_; }
+    [[nodiscard]] Scalar GetMachNumber() const { return mach_number_; }
 
     /// @brief Gets the Prandtl-Glauert compressibility factor.
-    Scalar GetPrandtlGlauertFactor() const { return prandtl_glauert_factor_; }
+    [[nodiscard]] Scalar GetPrandtlGlauertFactor() const {
+        return prandtl_glauert_factor_;
+    }
 
     /// @brief Sets symmetry configuration.
     void SetSymmetry(const SymmetryConfig& config) { symmetry_ = config; }
 
     /// @brief Gets the symmetry configuration.
-    const SymmetryConfig& GetSymmetry() const { return symmetry_; }
+    [[nodiscard]] const SymmetryConfig& GetSymmetry() const {
+        return symmetry_;
+    }
 
     /// @brief Sets vortex core radius as fraction of local chord.
     void SetCoreRadiusChordFraction(Scalar fraction) {
@@ -113,7 +117,7 @@ public:
     /// horseshoe vortex j.
     ///
     /// @return Velocity influence matrix (3*num_vortices x num_vortices)
-    MatX BuildVelocityInfluenceMatrix() const;
+    [[nodiscard]] MatX BuildVelocityInfluenceMatrix() const;
 
     /// @brief Builds the normalwash (AIC) influence matrix.
     ///
@@ -121,7 +125,7 @@ public:
     /// aerodynamic influence coefficient matrix.
     ///
     /// @return AIC matrix (num_vortices x num_vortices)
-    MatX BuildNormalwashMatrix() const;
+    [[nodiscard]] MatX BuildNormalwashMatrix() const;
 
     /// @brief Builds AIC matrix with optional velocity matrix output.
     ///
@@ -140,8 +144,8 @@ public:
     /// @param field_point Point where velocity is computed
     /// @param circulation Vector of circulation strengths
     /// @return Induced velocity vector
-    Vec3 ComputeInducedVelocity(const Vec3& field_point,
-                                const VecX& circulation) const;
+    [[nodiscard]] Vec3 ComputeInducedVelocity(const Vec3& field_point,
+                                              const VecX& circulation) const;
 
     /// @brief Computes induced velocity from a single horseshoe vortex.
     ///
@@ -149,25 +153,28 @@ public:
     /// @param vortex_index Index of the horseshoe vortex
     /// @param include_bound Whether to include bound vortex contribution
     /// @return Induced velocity vector (per unit circulation)
-    Vec3 ComputeSingleVortexVelocity(const Vec3& field_point,
-                                     Index vortex_index,
-                                     bool include_bound = true) const;
+    [[nodiscard]] Vec3 ComputeSingleVortexVelocity(
+        const Vec3& field_point, Index vortex_index,
+        bool include_bound = true) const;
 
     /// @}
 
 private:
     /// @brief Computes core radius for a vortex element.
-    Scalar ComputeCoreRadius(Index vortex_index, bool same_component) const;
+    [[nodiscard]] Scalar ComputeCoreRadius(Index vortex_index,
+                                           bool same_component) const;
 
     /// @brief Computes velocity from vortex with Y-symmetry image.
-    Vec3 ComputeVelocityWithYImage(const Vec3& field_point, Index vortex_index,
-                                   bool include_bound,
-                                   Scalar core_radius) const;
+    [[nodiscard]] Vec3 ComputeVelocityWithYImage(const Vec3& field_point,
+                                                 Index vortex_index,
+                                                 bool include_bound,
+                                                 Scalar core_radius) const;
 
     /// @brief Computes velocity from vortex with Z-symmetry image.
-    Vec3 ComputeVelocityWithZImage(const Vec3& field_point, Index vortex_index,
-                                   bool include_bound,
-                                   Scalar core_radius) const;
+    [[nodiscard]] Vec3 ComputeVelocityWithZImage(const Vec3& field_point,
+                                                 Index vortex_index,
+                                                 bool include_bound,
+                                                 Scalar core_radius) const;
 
     const VortexLattice& mesh_;
     Scalar mach_number_{0.0};

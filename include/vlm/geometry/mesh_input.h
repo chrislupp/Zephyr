@@ -79,7 +79,7 @@ struct SurfaceMesh {
     Scalar y_duplicate_plane = 0.0;
 
     /// Access node (i, j) as a 3D point
-    Vec3 GetNode(Index i, Index j) const {
+    [[nodiscard]] Vec3 GetNode(Index i, Index j) const {
         Index row = i * (ny + 1) + j;
         return nodes.row(row).transpose();
     }
@@ -91,10 +91,10 @@ struct SurfaceMesh {
     }
 
     /// Total number of nodes
-    Index NumNodes() const { return (nx + 1) * (ny + 1); }
+    [[nodiscard]] Index NumNodes() const { return (nx + 1) * (ny + 1); }
 
     /// Total number of panels
-    Index NumPanels() const { return nx * ny; }
+    [[nodiscard]] Index NumPanels() const { return nx * ny; }
 };
 
 /// @brief Complete mesh-based input for VLM analysis.

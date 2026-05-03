@@ -48,16 +48,14 @@ public:
     /// @param solution The converged circulation solution
     /// @param condition The flight condition used in the solve
     /// @return Complete aerodynamic results with forces and moments
-    AerodynamicResults ComputeForces(const Aircraft& aircraft,
-                                     const VortexLattice& mesh,
-                                     const SolutionState& solution,
-                                     const FlightCondition& condition) const;
+    [[nodiscard]] AerodynamicResults ComputeForces(
+        const Aircraft& aircraft, const VortexLattice& mesh,
+        const SolutionState& solution, const FlightCondition& condition) const;
 
     /// Compute forces using reference quantities directly (mesh-based input).
-    AerodynamicResults ComputeForces(const ReferenceQuantities& ref,
-                                     const VortexLattice& mesh,
-                                     const SolutionState& solution,
-                                     const FlightCondition& condition) const;
+    [[nodiscard]] AerodynamicResults ComputeForces(
+        const ReferenceQuantities& ref, const VortexLattice& mesh,
+        const SolutionState& solution, const FlightCondition& condition) const;
 
     /// Compute far-field (Trefftz plane) induced drag.
     ///
@@ -93,11 +91,11 @@ public:
 
 private:
     /// Compute strip-level forces and moments.
-    StripLoads ComputeStripLoads(const VortexLattice& mesh,
-                                 const SolutionState& solution,
-                                 const FlightCondition& condition,
-                                 Index strip_index,
-                                 Scalar reference_area) const;
+    [[nodiscard]] StripLoads ComputeStripLoads(const VortexLattice& mesh,
+                                               const SolutionState& solution,
+                                               const FlightCondition& condition,
+                                               Index strip_index,
+                                               Scalar reference_area) const;
 
     /// Transform body-axis forces to stability-axis forces.
     void BodyToStabilityAxis(const Vec3& cf_body, Scalar alpha, Scalar& CL,

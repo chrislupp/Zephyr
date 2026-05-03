@@ -30,8 +30,7 @@
 
 #include <cmath>
 
-namespace vlm {
-namespace ad {
+namespace vlm::ad {
 
 // ============================================================================
 // AIC Element Gradient
@@ -127,5 +126,4 @@ void analytical_velocity_column_gradient_rv(
     double beta, double gamma_j, const double* dJ_dV_all, double* d_rv1,
     double* d_rv2);
 
-}  // namespace ad
-}  // namespace vlm
+}  // namespace vlm::ad

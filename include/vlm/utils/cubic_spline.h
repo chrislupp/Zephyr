@@ -87,19 +87,19 @@ public:
     ///
     /// @param s_eval Parameter value at which to evaluate
     /// @return Interpolated value x(s_eval)
-    Scalar Evaluate(Scalar s_eval) const;
+    [[nodiscard]] Scalar Evaluate(Scalar s_eval) const;
 
     /// @brief Evaluates the first derivative dx/ds at a given parameter value.
     ///
     /// @param s_eval Parameter value at which to evaluate
     /// @return First derivative dx/ds at s_eval
-    Scalar EvaluateDerivative(Scalar s_eval) const;
+    [[nodiscard]] Scalar EvaluateDerivative(Scalar s_eval) const;
 
     /// @brief Evaluates the second derivative d^2x/ds^2 at a given parameter.
     ///
     /// @param s_eval Parameter value at which to evaluate
     /// @return Second derivative d^2x/ds^2 at s_eval
-    Scalar EvaluateSecondDerivative(Scalar s_eval) const;
+    [[nodiscard]] Scalar EvaluateSecondDerivative(Scalar s_eval) const;
 
     /// @brief Evaluates value and all derivatives at once (more efficient).
     ///
@@ -111,16 +111,20 @@ public:
                      Scalar& second_deriv) const;
 
     /// @brief Returns the number of data points.
-    Index Size() const { return static_cast<Index>(s_.size()); }
+    [[nodiscard]] Index Size() const { return static_cast<Index>(s_.size()); }
 
     /// @brief Checks if the spline has been built with data.
-    bool IsValid() const { return !s_.empty(); }
+    [[nodiscard]] bool IsValid() const { return !s_.empty(); }
 
     /// @brief Returns the minimum parameter value.
-    Scalar MinParameter() const { return s_.empty() ? 0.0 : s_.front(); }
+    [[nodiscard]] Scalar MinParameter() const {
+        return s_.empty() ? 0.0 : s_.front();
+    }
 
     /// @brief Returns the maximum parameter value.
-    Scalar MaxParameter() const { return s_.empty() ? 0.0 : s_.back(); }
+    [[nodiscard]] Scalar MaxParameter() const {
+        return s_.empty() ? 0.0 : s_.back();
+    }
 
 private:
     /// @brief Finds the interval index for a given parameter value.
@@ -129,7 +133,7 @@ private:
     ///
     /// @param s_eval Parameter value to locate
     /// @return Index i of the upper bound of the containing interval
-    Index FindInterval(Scalar s_eval) const;
+    [[nodiscard]] Index FindInterval(Scalar s_eval) const;
 
     /// @brief Solves the tridiagonal system for spline slopes.
     ///

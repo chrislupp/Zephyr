@@ -45,7 +45,7 @@ void CubicSpline::Build(const std::vector<Scalar>& s,
             "CubicSpline::Build: need at least 2 data points");
     }
 
-    const Index n = static_cast<Index>(s.size());
+    const auto n = static_cast<Index>(s.size());
     s_ = s;
     x_ = x;
     xs_.resize(n);
@@ -133,7 +133,7 @@ Index CubicSpline::FindInterval(Scalar s_eval) const {
     // Returns i such that s_[i-1] <= s_eval < s_[i]
     // For values outside the range, clamp to valid interval
 
-    const Index n = static_cast<Index>(s_.size());
+    const auto n = static_cast<Index>(s_.size());
 
     if (s_eval <= s_[0]) {
         return 1;
@@ -246,7 +246,7 @@ void CubicSpline::SolveTridiagonal(std::vector<Scalar>& a,
                                    const std::vector<Scalar>& b,
                                    std::vector<Scalar>& c,
                                    std::vector<Scalar>& d) {
-    const Index n = static_cast<Index>(a.size());
+    const auto n = static_cast<Index>(a.size());
 
     // Forward elimination
     for (Index k = 1; k < n; ++k) {

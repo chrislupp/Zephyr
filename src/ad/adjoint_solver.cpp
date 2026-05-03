@@ -27,15 +27,14 @@
 #include <cmath>
 #include <vector>
 
-namespace vlm {
-namespace ad {
+namespace vlm::ad {
 
 // ============================================================================
 // AdjointSolver Implementation
 // ============================================================================
 
 AdjointSolver::AdjointSolver(const VortexLatticeSolver& solver)
-    : solver_(&solver), is_valid_(false), num_unknowns_(0) {
+    : solver_(&solver) {
     if (solver.IsAICValid()) {
         is_valid_ = true;
         num_unknowns_ = solver.GetAICMatrix().rows();
@@ -412,5 +411,4 @@ double ComputeTotalDerivative(int objective, const VortexLatticeSolver& solver,
     return implicit_term;
 }
 
-}  // namespace ad
-}  // namespace vlm
+}  // namespace vlm::ad

@@ -28,8 +28,7 @@
 
 #include <cmath>
 
-namespace vlm {
-namespace ad {
+namespace vlm::ad {
 
 // ============================================================================
 // Freestream Direction and its Gradients (already analytical)
@@ -190,5 +189,4 @@ void analytical_force_geometry_gradient(
     double reference_area, const double* d_bound_left,
     const double* d_bound_right, const double* d_moment_arm, double* d_result);
 
-}  // namespace ad
-}  // namespace vlm
+}  // namespace vlm::ad

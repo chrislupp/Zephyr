@@ -22,8 +22,7 @@
 
 #include <cmath>
 
-namespace vlm {
-namespace ad {
+namespace vlm::ad {
 
 namespace {
 
@@ -271,5 +270,4 @@ void analytical_velocity_column_gradient_rv(
     }
 }
 
-}  // namespace ad
-}  // namespace vlm
+}  // namespace vlm::ad
