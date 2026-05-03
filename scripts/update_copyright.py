@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Update copyright year ranges and version numbers in source files.
 
-Scans .cpp, .h, and .hpp files for copyright headers and updates:
+Scans .cpp, .h, .hpp, .cmake, and CMakeLists.txt files for copyright headers and updates:
 - Copyright year ranges (end year to current year)
 - Version numbers (to match the project version)
 Skips build/, _deps/, docs/, and node_modules/ directories.
@@ -19,7 +19,8 @@ COPYRIGHT_PATTERN = re.compile(
 VERSION_PATTERN = re.compile(
     r"(Version\s+)\d+\.\d+\.\d+"
 )
-SOURCE_EXTENSIONS = {".cpp", ".h", ".hpp"}
+SOURCE_EXTENSIONS = {".cpp", ".h", ".hpp", ".cmake"}
+CMAKE_FILENAME = "CMakeLists.txt"
 SKIP_DIRS = {"build", "_deps", "docs", "node_modules"}
 
 
@@ -80,7 +81,7 @@ def main():
     for path in sorted(root.rglob("*")):
         if any(part in SKIP_DIRS for part in path.parts):
             continue
-        if path.suffix not in SOURCE_EXTENSIONS:
+        if path.suffix not in SOURCE_EXTENSIONS and path.name != CMAKE_FILENAME:
             continue
         scanned += 1
         if update_file(path, args.year, args.version, args.dry_run):
