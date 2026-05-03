@@ -1,10 +1,29 @@
-// Copyright (c) 2024 VLM Authors
-// SPDX-License-Identifier: AGPL-3.0-or-later
+/*
+    Project Pegasus
+    Version 0.0.0
 
-#include "vlm/geometry/body.h"
+    Copyright 2024, Christopher A. Lupp
 
-namespace vlm {
+    This program is free software: you can redistribute it and/or modify
+    it under the terms of the GNU General Public License as published
+    by the Free Software Foundation, either version 3 of the License, or
+    (at your option) any later version.
 
-Body::Body(const std::string& name) : name_(name) {}
+    This program is distributed in the hope that it will be useful,
+    but WITHOUT ANY WARRANTY; without even the implied warranty of
+    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+    GNU General Public License for more details.
 
-}  // namespace vlm
+    You should have received a copy of the GNU General Public License
+    along with this program.  If not, see <https://www.gnu.org/licenses/>.
+*/
+
+#include "pegasus/geometry/body.h"
+
+#include <utility>
+
+namespace pegasus {
+
+Body::Body(std::string name) : name_(std::move(name)) {}
+
+}  // namespace pegasus

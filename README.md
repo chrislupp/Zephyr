@@ -1,4 +1,7 @@
-# VLM - Vortex Lattice Method Library
+# Pegasus - Vortex Lattice Method Library
+
+[![Build and Tests](https://github.com/chrislupp/Pegasus/actions/workflows/build.yml/badge.svg?branch=main)](https://github.com/chrislupp/Pegasus/actions/workflows/build.yml)
+[![codecov](https://codecov.io/gh/chrislupp/Pegasus/branch/main/graph/badge.svg)](https://codecov.io/gh/chrislupp/Pegasus)
 
 A modern C++17 implementation of the Vortex Lattice Method for aerodynamic analysis, ported from OptVL with enhancements for automatic differentiation and MDO integration.
 
@@ -16,7 +19,7 @@ A modern C++17 implementation of the Vortex Lattice Method for aerodynamic analy
 
 - CMake 3.16+
 - C++17 compiler (GCC 8+, Clang 7+, MSVC 2019+)
-- Eigen 3.3+ (automatically found or specify `EIGEN3_ROOT`)
+- Eigen 5.0+ (automatically found or specify `CMAKE_PREFIX_PATH`)
 
 ## Building
 
@@ -30,13 +33,12 @@ make -j4
 
 | Option | Default | Description |
 |--------|---------|-------------|
-| `VLM_BUILD_TESTS` | ON | Build unit and integration tests |
-| `VLM_BUILD_EXAMPLES` | ON | Build example programs |
-| `VLM_ENABLE_OPENMP` | ON | Enable OpenMP parallelization |
+| `PEGASUS_BUILD_TESTS` | ON | Build unit and integration tests |
+| `PEGASUS_BUILD_EXAMPLES` | ON | Build example programs |
 
 ```bash
 # Example: Release build without tests
-cmake -DCMAKE_BUILD_TYPE=Release -DVLM_BUILD_TESTS=OFF ..
+cmake -DCMAKE_BUILD_TYPE=Release -DPEGASUS_BUILD_TESTS=OFF ..
 ```
 
 ### Running Tests
@@ -45,8 +47,8 @@ cmake -DCMAKE_BUILD_TYPE=Release -DVLM_BUILD_TESTS=OFF ..
 cd build
 ctest --output-on-failure
 # Or run directly:
-./tests/vlm_unit_tests
-./tests/vlm_integration_tests
+./tests/pegasus_unit_tests
+./tests/pegasus_integration_tests
 ```
 
 ## Quick Start
@@ -54,9 +56,9 @@ ctest --output-on-failure
 ### Basic Analysis
 
 ```cpp
-#include "vlm/vlm.h"
+#include "pegasus/pegasus.h"
 
-using namespace vlm;
+using namespace pegasus;
 
 int main() {
     // Create a rectangular wing
@@ -102,9 +104,9 @@ int main() {
 ### Loading AVL Files
 
 ```cpp
-#include "vlm/vlm.h"
+#include "pegasus/pegasus.h"
 
-using namespace vlm;
+using namespace pegasus;
 
 int main() {
     AvlReader reader;
@@ -132,9 +134,9 @@ int main() {
 ### Stability Derivatives
 
 ```cpp
-#include "vlm/vlm.h"
+#include "pegasus/pegasus.h"
 
-using namespace vlm;
+using namespace pegasus;
 
 int main() {
     // ... set up aircraft and solver ...
@@ -158,9 +160,9 @@ int main() {
 ### Trim Analysis
 
 ```cpp
-#include "vlm/vlm.h"
+#include "pegasus/pegasus.h"
 
-using namespace vlm;
+using namespace pegasus;
 
 int main() {
     // ... set up aircraft and solver ...
@@ -183,9 +185,9 @@ int main() {
 ### Eigenmode Analysis
 
 ```cpp
-#include "vlm/vlm.h"
+#include "pegasus/pegasus.h"
 
-using namespace vlm;
+using namespace pegasus;
 
 int main() {
     // ... compute stability derivatives ...
@@ -220,21 +222,21 @@ int main() {
 ## Project Structure
 
 ```
-VLM/
-├── include/vlm/
-│   ├── vlm.h                 # Main facade header
-│   ├── core/                 # Types, constants
-│   ├── geometry/             # Airfoil, Section, Surface, Aircraft
-│   ├── io/                   # AVL/mass file readers
-│   ├── solver/               # VLM solver, influence matrix
-│   ├── aero/                 # Forces, stability derivatives
-│   ├── trim/                 # Trim solver
-│   ├── dynamics/             # Eigenmode analysis
-│   ├── ad/                   # Automatic differentiation
-│   └── utils/                # Cubic spline, math utilities
-├── src/                      # Implementation files
-├── tests/                    # Unit and integration tests
-├── examples/                 # Example programs
+Pegasus/
+├── include/pegasus/
+│   ├── pegasus.h               # Main facade header
+│   ├── core/                   # Types, constants
+│   ├── geometry/               # Airfoil, Section, Surface, Aircraft
+│   ├── io/                     # AVL/mass file readers
+│   ├── solver/                 # VLM solver, influence matrix
+│   ├── aero/                   # Forces, stability derivatives
+│   ├── trim/                   # Trim solver
+│   ├── dynamics/               # Eigenmode analysis
+│   ├── gradients/              # Analytical gradients
+│   └── utils/                  # Cubic spline, math utilities
+├── src/                        # Implementation files
+├── tests/                      # Unit and integration tests
+├── examples/                   # Example programs
 └── CMakeLists.txt
 ```
 
@@ -282,9 +284,13 @@ Run examples from the build directory:
 | `TrimResult` | Trim solution state |
 | `EigenmodeResults` | Dynamic mode eigenvalues |
 
+## Documentation
+
+Full documentation is available at [https://chrislupp.github.io/Pegasus/](https://chrislupp.github.io/Pegasus/).
+
 ## License
 
-AGPL-3.0-or-later
+GPL-3.0-or-later
 
 ## Acknowledgments
 
