@@ -7,6 +7,7 @@
 #include "vlm/aero/aerodynamic_results.h"
 #include "vlm/core/types.h"
 #include "vlm/geometry/aircraft.h"
+#include "vlm/geometry/mesh_input.h"
 #include "vlm/solver/vortex_lattice.h"
 #include "vlm/solver/vortex_lattice_solver.h"
 
@@ -31,6 +32,12 @@ class ForceCalculator {
   /// @param condition The flight condition used in the solve
   /// @return Complete aerodynamic results with forces and moments
   AerodynamicResults ComputeForces(const Aircraft& aircraft,
+                                   const VortexLattice& mesh,
+                                   const SolutionState& solution,
+                                   const FlightCondition& condition) const;
+
+  /// Compute forces using reference quantities directly (mesh-based input).
+  AerodynamicResults ComputeForces(const ReferenceQuantities& ref,
                                    const VortexLattice& mesh,
                                    const SolutionState& solution,
                                    const FlightCondition& condition) const;

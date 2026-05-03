@@ -714,4 +714,204 @@ void VortexLattice::CalculateChordwiseSpacing(Index num_chordwise,
   }
 }
 
+// ============================================================================
+// Direct Mesh Input
+// ============================================================================
+
+void VortexLattice::GenerateFromMesh(const MeshInput& input) {
+  Clear();
+  has_mesh_input_ = true;
+  mesh_input_ = input;
+
+  for (Index s = 0; s < static_cast<Index>(input.surfaces.size()); ++s) {
+    const SurfaceMesh& surface_mesh = input.surfaces[s];
+    GenerateSurfaceFromMesh(surface_mesh, s);
+
+    if (surface_mesh.y_duplicated) {
+      GenerateDuplicateSurfaceMesh(
+          static_cast<Index>(surface_info_.size()) - 1,
+          surface_mesh.y_duplicate_plane);
+    }
+  }
+}
+
+void VortexLattice::GenerateSurfaceFromMesh(const SurfaceMesh& surface_mesh,
+                                            [[maybe_unused]] Index surface_index) {
+  const Index nx = surface_mesh.nx;
+  const Index ny = surface_mesh.ny;
+
+  if (nx < 1 || ny < 1) {
+    throw std::runtime_error(
+        "VortexLattice::GenerateSurfaceFromMesh: Need at least 1x1 panels");
+  }
+
+  SurfaceMeshInfo surf_info;
+  surf_info.name = surface_mesh.name;
+  surf_info.first_vortex_index = static_cast<Index>(vortices_.size());
+  surf_info.first_strip_index = static_cast<Index>(strips_.size());
+  surf_info.num_chordwise = nx;
+  surf_info.num_spanwise = ny;
+  surf_info.is_y_duplicated = false;
+
+  // Helper to access mesh nodes
+  auto N = [&](Index i, Index j) -> Vec3 {
+    return surface_mesh.GetNode(i, j);
+  };
+
+  // Generate strips and vortices
+  for (Index j = 0; j < ny; ++j) {
+    Strip strip;
+    strip.surface_index = static_cast<Index>(surface_info_.size());
+
+    // Leading edge positions from i=0 nodes
+    strip.leading_edge_left = N(0, j);
+    strip.leading_edge_right = N(0, j + 1);
+    strip.leading_edge_center = 0.5 * (strip.leading_edge_left +
+                                        strip.leading_edge_right);
+
+    // Trailing edge positions from i=nx nodes
+    Vec3 te_left = N(nx, j);
+    Vec3 te_right = N(nx, j + 1);
+
+    // Chord lengths (LE to TE distance)
+    strip.chord_left = (te_left - strip.leading_edge_left).norm();
+    strip.chord_right = (te_right - strip.leading_edge_right).norm();
+    strip.chord_center = 0.5 * (strip.chord_left + strip.chord_right);
+
+    // Strip width from 1/4-chord edge positions
+    Vec3 qc_left = 0.75 * N(0, j) + 0.25 * N(1, j);
+    Vec3 qc_right = 0.75 * N(0, j + 1) + 0.25 * N(1, j + 1);
+    strip.width = (qc_right - qc_left).norm();
+
+    // Sweep slopes
+    Scalar dy_le = strip.leading_edge_right.y() - strip.leading_edge_left.y();
+    Scalar dz_le = strip.leading_edge_right.z() - strip.leading_edge_left.z();
+    Scalar ds = std::sqrt(dy_le * dy_le + dz_le * dz_le);
+    if (ds > kEpsilon) {
+      strip.leading_edge_sweep_slope =
+          (strip.leading_edge_right.x() - strip.leading_edge_left.x()) / ds;
+      strip.trailing_edge_sweep_slope =
+          (te_right.x() - te_left.x()) / ds;
+    }
+
+    // Twist angle: angle of LE→TE vector with x-axis in the chord plane
+    Vec3 chord_vec_center = 0.5 * (te_left + te_right) -
+                            0.5 * (strip.leading_edge_left + strip.leading_edge_right);
+    if (chord_vec_center.norm() > kEpsilon) {
+      // Project to get twist: angle between chord vector and x-axis
+      // twist = atan2(z_component_in_chord_plane, x_component)
+      strip.twist_angle = std::atan2(chord_vec_center.z(), chord_vec_center.x());
+    }
+    // Left/right twist
+    Vec3 chord_vec_left = te_left - strip.leading_edge_left;
+    Vec3 chord_vec_right = te_right - strip.leading_edge_right;
+    strip.twist_angle_left = std::atan2(chord_vec_left.z(), chord_vec_left.x());
+    strip.twist_angle_right = std::atan2(chord_vec_right.z(), chord_vec_right.x());
+
+    // Trefftz plane normal (from LE left→right in y-z plane)
+    Scalar yz_mag = std::sqrt(dy_le * dy_le + dz_le * dz_le);
+    if (yz_mag > kEpsilon) {
+      strip.trefftz_normal_y = dy_le / yz_mag;
+      strip.trefftz_normal_z = dz_le / yz_mag;
+    } else {
+      strip.trefftz_normal_y = 0.0;
+      strip.trefftz_normal_z = 1.0;
+    }
+
+    // Reference point at strip quarter chord center
+    strip.reference_point = strip.leading_edge_center;
+    strip.reference_point.x() += 0.25 * strip.chord_center;
+
+    strip.first_vortex_index = static_cast<Index>(vortices_.size());
+    strip.num_vortices = nx;
+    strip.is_active = true;
+    strip.has_viscous_data = false;
+
+    // Generate horseshoe vortex elements for each chordwise panel
+    for (Index i = 0; i < nx; ++i) {
+      HorseshoeVortex vor;
+
+      // Panel corners
+      Vec3 n00 = N(i, j);
+      Vec3 n10 = N(i + 1, j);
+      Vec3 n01 = N(i, j + 1);
+      Vec3 n11 = N(i + 1, j + 1);
+
+      // Bound vortex at 1/4 chord of each edge
+      vor.bound_vortex_left = 0.75 * n00 + 0.25 * n10;
+      vor.bound_vortex_right = 0.75 * n01 + 0.25 * n11;
+      vor.bound_vortex_center = 0.5 * (vor.bound_vortex_left +
+                                        vor.bound_vortex_right);
+
+      // Control point at 3/4 chord, midspan
+      Vec3 cp_left = 0.25 * n00 + 0.75 * n10;
+      Vec3 cp_right = 0.25 * n01 + 0.75 * n11;
+      vor.control_point = 0.5 * (cp_left + cp_right);
+
+      // Normal from panel cross product
+      Vec3 d1 = n11 - n00;
+      Vec3 d2 = n10 - n01;
+      Vec3 raw_normal = d1.cross(d2);
+      Scalar raw_mag = raw_normal.norm();
+      if (raw_mag > kEpsilon) {
+        vor.normal_at_control_point = raw_normal / raw_mag;
+        vor.normal_at_vortex = vor.normal_at_control_point;
+      } else {
+        vor.normal_at_control_point = Vec3(0, 0, 1);
+        vor.normal_at_vortex = Vec3(0, 0, 1);
+      }
+
+      // No camber slope — camber is captured in the mesh normals
+      vor.camber_slope_at_control_point = 0.0;
+      vor.camber_slope_at_vortex = 0.0;
+
+      // Chordwise width and local chord
+      Scalar panel_chord_left = (n10 - n00).norm();
+      Scalar panel_chord_right = (n11 - n01).norm();
+      vor.chordwise_width = 0.5 * (panel_chord_left + panel_chord_right);
+      vor.local_chord = strip.chord_center;
+
+      vor.strip_index = static_cast<Index>(strips_.size());
+      vor.surface_index = static_cast<Index>(surface_info_.size());
+      vor.component_index = surface_mesh.component_index;
+      vor.affected_by_freestream = surface_mesh.affected_by_freestream;
+      vor.enforce_flow_tangency = true;
+      vor.circulation = 0.0;
+      vor.delta_cp = 0.0;
+
+      vortices_.push_back(vor);
+      control_influences_.emplace_back();  // No control surfaces for mesh input
+    }
+
+    // Compute spanwise unit vector for the strip
+    Vec3 dx_le_strip = vortices_[strip.first_vortex_index].bound_vortex_right -
+                       vortices_[strip.first_vortex_index].bound_vortex_left;
+    Scalar dx_mag = dx_le_strip.norm();
+    if (dx_mag > kEpsilon) {
+      strip.spanwise_unit_vector = dx_le_strip / dx_mag;
+    }
+
+    strips_.push_back(strip);
+  }
+
+  // Fill surface info
+  surf_info.num_vortices = nx * ny;
+  surf_info.num_strips = ny;
+
+  // Compute wetted area and average chord
+  Scalar total_area = 0.0;
+  Scalar total_chord_area = 0.0;
+  for (Index j = 0; j < ny; ++j) {
+    const Strip& strip = strips_[surf_info.first_strip_index + j];
+    Scalar strip_area = strip.chord_center * strip.width;
+    total_area += strip_area;
+    total_chord_area += strip.chord_center * strip_area;
+  }
+  surf_info.wetted_area = total_area;
+  surf_info.average_chord = (total_area > kEpsilon) ?
+      total_chord_area / total_area : 0.0;
+
+  surface_info_.push_back(surf_info);
+}
+
 }  // namespace vlm

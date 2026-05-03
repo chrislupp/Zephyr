@@ -18,6 +18,8 @@ add_executable(vlm_unit_tests
     unit/gradient_calculator_test.cpp
     unit/adjoint_solver_test.cpp
     unit/optvl_gradient_validation_test.cpp
+    unit/mesh_input_test.cpp
+    unit/mesh_node_gradient_test.cpp
 )
 
 target_link_libraries(vlm_unit_tests

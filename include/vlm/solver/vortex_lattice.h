@@ -8,6 +8,7 @@
 
 #include "vlm/core/types.h"
 #include "vlm/geometry/aircraft.h"
+#include "vlm/geometry/mesh_input.h"
 #include "vlm/solver/horseshoe_vortex.h"
 
 namespace vlm {
@@ -68,6 +69,20 @@ class VortexLattice {
   /// @param aircraft The aircraft geometry to discretize
   /// @throws std::runtime_error if mesh generation fails
   void GenerateFromAircraft(const Aircraft& aircraft);
+
+  /// @brief Generates the vortex lattice mesh from a direct mesh input.
+  ///
+  /// Each SurfaceMesh in the input defines a structured grid of node
+  /// coordinates. Panels are formed from adjacent nodes, with bound
+  /// vortices at 1/4-chord and control points at 3/4-chord.
+  ///
+  /// @param input The mesh input containing surface node grids
+  void GenerateFromMesh(const MeshInput& input);
+
+  /// @brief Gets the stored mesh input (valid only after GenerateFromMesh).
+  const MeshInput* GetMeshInput() const {
+    return has_mesh_input_ ? &mesh_input_ : nullptr;
+  }
 
   /// @brief Gets the total number of horseshoe vortex elements.
   Index GetNumVortices() const { return static_cast<Index>(vortices_.size()); }
@@ -139,9 +154,13 @@ class VortexLattice {
   }
 
  private:
-  /// Generates mesh for a single surface.
+  /// Generates mesh for a single surface from Aircraft sections.
   void GenerateSurfaceMesh(const Surface& surface, Index surface_index,
                            const Aircraft& aircraft);
+
+  /// Generates mesh for a single surface from a structured mesh grid.
+  void GenerateSurfaceFromMesh(const SurfaceMesh& surface_mesh,
+                               Index surface_index);
 
   /// Generates a y-duplicated (mirrored) surface mesh.
   void GenerateDuplicateSurfaceMesh(Index original_surface_index,
@@ -179,6 +198,10 @@ class VortexLattice {
 
   /// Spanwise axis fraction for perpendicular velocity definition
   Scalar spanwise_axis_fraction_{0.25};
+
+  /// Stored mesh input for gradient computation
+  MeshInput mesh_input_;
+  bool has_mesh_input_{false};
 };
 
 }  // namespace vlm

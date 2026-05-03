@@ -20,6 +20,7 @@
 /// of design variables, making it efficient for optimization.
 
 #include "vlm/core/types.h"
+#include "vlm/geometry/mesh_input.h"
 #include "vlm/solver/vortex_lattice_solver.h"
 
 namespace vlm {
@@ -119,6 +120,13 @@ ForceGradients ComputeForceGradients(
     const SolutionState& solution,
     const FlightCondition& condition,
     const Aircraft& aircraft);
+
+/// @brief Compute force gradients using reference quantities directly.
+ForceGradients ComputeForceGradients(
+    const VortexLattice& mesh,
+    const SolutionState& solution,
+    const FlightCondition& condition,
+    const ReferenceQuantities& ref);
 
 /// @brief Compute total derivative of objective w.r.t. flight condition.
 ///
