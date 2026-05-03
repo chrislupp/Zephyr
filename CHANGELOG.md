@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.0] - 2026-05-03
+
 ### Added
 - Analytical adjoint derivatives replacing Enzyme AD — exact VJPs for Biot-Savart, AIC matrix, force kernel, and Trefftz plane
 - Direct mesh input API (`MeshInput`) as alternative to section-based Aircraft geometry
@@ -31,4 +33,5 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 - Docs homepage redirect to use relative path instead of absolute (avoiding baseUrl bypass)
 
-[Unreleased]: https://github.com/chrislupp/Pegasus/compare/main...HEAD
+[Unreleased]: https://github.com/chrislupp/Pegasus/compare/v0.1.0...HEAD
+[0.1.0]: https://github.com/chrislupp/Pegasus/releases/tag/v0.1.0

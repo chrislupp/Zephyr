@@ -1,8 +1,8 @@
 /*
     Project Pegasus
-    Version 0.0.0
+    Version 0.1.0
 
-    Copyright 2024, Christopher A. Lupp
+    Copyright 2024-2026, Christopher A. Lupp
 
     This program is free software: you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published
