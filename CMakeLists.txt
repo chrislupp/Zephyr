@@ -110,15 +110,25 @@ if(VLM_BUILD_PHILOTE)
     endif()
     find_package(gRPC CONFIG REQUIRED)
     find_package(PhiloteCpp REQUIRED)
+    # Ensure correct protobuf headers are found before any Homebrew system includes
+    get_target_property(_proto_inc protobuf::libprotobuf INTERFACE_INCLUDE_DIRECTORIES)
+
     add_executable(vlm_philote_server
         src/philote/vlm_discipline.cpp
         src/philote/vlm_server.cpp
     )
     target_link_libraries(vlm_philote_server PRIVATE vlm PhiloteCpp::PhiloteCpp)
-    # Ensure correct protobuf headers are found before any Homebrew system includes
-    get_target_property(_proto_inc protobuf::libprotobuf INTERFACE_INCLUDE_DIRECTORIES)
     if(_proto_inc)
         target_include_directories(vlm_philote_server BEFORE PRIVATE ${_proto_inc})
+    endif()
+
+    add_executable(mesh_philote_server
+        src/philote/mesh_discipline.cpp
+        src/philote/mesh_server.cpp
+    )
+    target_link_libraries(mesh_philote_server PRIVATE vlm PhiloteCpp::PhiloteCpp)
+    if(_proto_inc)
+        target_include_directories(mesh_philote_server BEFORE PRIVATE ${_proto_inc})
     endif()
 endif()
 
