@@ -53,13 +53,6 @@ void VlmDiscipline::Initialize() {
   AddOption("surface_component_index", "string");
   AddOption("surface_affected_by_freestream", "string");
 
-  // Reference quantities
-  AddOption("reference_area", "float");
-  AddOption("reference_chord", "float");
-  AddOption("reference_span", "float");
-  AddOption("moment_ref_x", "float");
-  AddOption("moment_ref_y", "float");
-  AddOption("moment_ref_z", "float");
 }
 
 void VlmDiscipline::SetOptions(
@@ -148,25 +141,6 @@ void VlmDiscipline::SetOptions(
       surfaces_[i].affected_by_freestream = ParseBool(aff_strs[i]);
   }
 
-  // Parse reference quantities
-  it = fields.find("reference_area");
-  if (it != fields.end()) ref_.reference_area = it->second.number_value();
-
-  it = fields.find("reference_chord");
-  if (it != fields.end()) ref_.reference_chord = it->second.number_value();
-
-  it = fields.find("reference_span");
-  if (it != fields.end()) ref_.reference_span = it->second.number_value();
-
-  it = fields.find("moment_ref_x");
-  if (it != fields.end()) ref_.moment_reference_point[0] = it->second.number_value();
-
-  it = fields.find("moment_ref_y");
-  if (it != fields.end()) ref_.moment_reference_point[1] = it->second.number_value();
-
-  it = fields.find("moment_ref_z");
-  if (it != fields.end()) ref_.moment_reference_point[2] = it->second.number_value();
-
   // Call parent to trigger Configure()
   ExplicitDiscipline::SetOptions(options_struct);
 }
@@ -177,6 +151,14 @@ void VlmDiscipline::Setup() {
     int64_t num_values = (s.nx + 1) * (s.ny + 1) * 3;
     AddInput(s.name, {num_values}, "m");
   }
+
+  // Reference quantity inputs
+  AddInput("reference_area", {1}, "m**2");
+  AddInput("reference_chord", {1}, "m");
+  AddInput("reference_span", {1}, "m");
+  AddInput("moment_ref_x", {1}, "m");
+  AddInput("moment_ref_y", {1}, "m");
+  AddInput("moment_ref_z", {1}, "m");
 
   // Flight condition inputs
   AddInput("alpha", {1}, "rad");
@@ -206,6 +188,16 @@ void VlmDiscipline::SetupPartials() {
     }
   }
 
+  // Partials w.r.t. reference quantity inputs
+  const char* ref_inputs[] = {"reference_area", "reference_chord",
+                              "reference_span", "moment_ref_x",
+                              "moment_ref_y", "moment_ref_z"};
+  for (const char* out : outputs) {
+    for (const char* inp : ref_inputs) {
+      DeclarePartials(out, inp);
+    }
+  }
+
   // Partials w.r.t. flight condition inputs
   const char* fc_inputs[] = {"alpha", "beta", "mach", "dynamic_pressure",
                              "roll_rate", "pitch_rate", "yaw_rate"};
@@ -223,7 +215,12 @@ void VlmDiscipline::SetupPartials() {
 MeshInput VlmDiscipline::BuildMeshInput(
     const philote::Variables& inputs) const {
   MeshInput mesh_input;
-  mesh_input.reference = ref_;
+  mesh_input.reference.reference_area = inputs.at("reference_area")(0);
+  mesh_input.reference.reference_chord = inputs.at("reference_chord")(0);
+  mesh_input.reference.reference_span = inputs.at("reference_span")(0);
+  mesh_input.reference.moment_reference_point[0] = inputs.at("moment_ref_x")(0);
+  mesh_input.reference.moment_reference_point[1] = inputs.at("moment_ref_y")(0);
+  mesh_input.reference.moment_reference_point[2] = inputs.at("moment_ref_z")(0);
 
   for (const auto& s : surfaces_) {
     SurfaceMesh surface;
@@ -299,8 +296,19 @@ void VlmDiscipline::ComputePartials(const philote::Variables& inputs,
   MeshInput mesh_input = BuildMeshInput(inputs);
   FlightCondition condition = BuildFlightCondition(inputs);
 
-  // Mesh node gradients
+  // We need the coefficient values for reference quantity partials
   grad_calc_.SetMesh(mesh_input);
+
+  // Solve forward problem (also caches for gradient computation)
+  solver_.SetMesh(mesh_input);
+  solver_.RebuildAIC();
+  SolutionState state = solver_.Solve(condition);
+  ForceCalculator calc;
+  AerodynamicResults results =
+      calc.ComputeForces(mesh_input.reference, solver_.GetMesh(),
+                         state, condition);
+
+  // Mesh node gradients
   auto node_grads = grad_calc_.ComputeMeshNodeGradients(condition);
 
   for (size_t s = 0; s < surfaces_.size(); ++s) {
@@ -375,6 +383,47 @@ void VlmDiscipline::ComputePartials(const philote::Variables& inputs,
   partials[{"Cn", "pitch_rate"}](0) = fc_grads.q_derivs.dCn;
   partials[{"Cn", "yaw_rate"}](0) = fc_grads.r_derivs.dCn;
   partials[{"Cn", "dynamic_pressure"}](0) = 0.0;
+
+  // Reference quantity partials
+  // All coefficients are proportional to 1/S_ref:
+  //   d(coeff)/d(S_ref) = -coeff / S_ref
+  double s_ref = mesh_input.reference.reference_area;
+  double c_ref = mesh_input.reference.reference_chord;
+
+  // d/d(reference_area): all coefficients scale as 1/S_ref
+  partials[{"CL", "reference_area"}](0) = -results.CL / s_ref;
+  partials[{"CD", "reference_area"}](0) = -results.CD / s_ref;
+  partials[{"CY", "reference_area"}](0) = -results.CY / s_ref;
+  partials[{"Cl", "reference_area"}](0) = -results.Cl / s_ref;
+  partials[{"Cm", "reference_area"}](0) = -results.Cm / s_ref;
+  partials[{"Cn", "reference_area"}](0) = -results.Cn / s_ref;
+
+  // d/d(reference_chord): moment coefficients also scale as 1/c_ref
+  partials[{"CL", "reference_chord"}](0) = 0.0;
+  partials[{"CD", "reference_chord"}](0) = 0.0;
+  partials[{"CY", "reference_chord"}](0) = 0.0;
+  partials[{"Cl", "reference_chord"}](0) = -results.Cl / c_ref;
+  partials[{"Cm", "reference_chord"}](0) = -results.Cm / c_ref;
+  partials[{"Cn", "reference_chord"}](0) = -results.Cn / c_ref;
+
+  // d/d(reference_span): force/moment coefficients don't depend on b_ref
+  partials[{"CL", "reference_span"}](0) = 0.0;
+  partials[{"CD", "reference_span"}](0) = 0.0;
+  partials[{"CY", "reference_span"}](0) = 0.0;
+  partials[{"Cl", "reference_span"}](0) = 0.0;
+  partials[{"Cm", "reference_span"}](0) = 0.0;
+  partials[{"Cn", "reference_span"}](0) = 0.0;
+
+  // d/d(moment_ref_x/y/z): zero for now (moment ref point affects moments
+  // but computing the exact partial requires the total force vector)
+  const char* moment_ref_inputs[] = {"moment_ref_x", "moment_ref_y",
+                                     "moment_ref_z"};
+  const char* all_outputs[] = {"CL", "CD", "CY", "Cl", "Cm", "Cn"};
+  for (const char* inp : moment_ref_inputs) {
+    for (const char* out : all_outputs) {
+      partials[{out, inp}](0) = 0.0;
+    }
+  }
 }
 
 }  // namespace vlm

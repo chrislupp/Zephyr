@@ -172,6 +172,7 @@ void MeshDiscipline::ComputePartials(const philote::Variables& inputs,
       dm_dc(row_z + j) = -cf * sin_tw;
       dm_dt(row_z + j) = -cf * c_j * cos_tw;
       dm_dzle(row_z + j) = 1.0;
+
     }
   }
 }

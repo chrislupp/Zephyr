@@ -74,15 +74,11 @@ model.add_subsystem(
         surface_y_duplicate_plane="0.0",
         surface_component_index="0",
         surface_affected_by_freestream="true",
-        reference_area=ref_area,
-        reference_chord=ref_chord,
-        reference_span=ref_span,
-        moment_ref_x=0.25 * chord_val,
-        moment_ref_y=0.0,
-        moment_ref_z=0.0,
     ),
     promotes_inputs=["alpha", "beta", "mach", "dynamic_pressure",
-                     "roll_rate", "pitch_rate", "yaw_rate"],
+                     "roll_rate", "pitch_rate", "yaw_rate",
+                     "reference_area", "reference_chord", "reference_span",
+                     "moment_ref_x", "moment_ref_y", "moment_ref_z"],
     promotes_outputs=["CL", "CD", "CY", "Cl", "Cm", "Cn"],
 )
 
@@ -97,6 +93,14 @@ prob["twist"] = twist_arr
 prob["xle"] = xle_arr
 prob["yle"] = yle
 prob["zle"] = zle_arr
+
+# Set reference quantities
+prob["reference_area"] = ref_area
+prob["reference_chord"] = ref_chord
+prob["reference_span"] = ref_span
+prob["moment_ref_x"] = 0.25 * chord_val
+prob["moment_ref_y"] = 0.0
+prob["moment_ref_z"] = 0.0
 
 # Set flight condition inputs
 prob["alpha"] = np.deg2rad(alpha_deg)

@@ -259,5 +259,99 @@ inline void PropagateMeshGradientsToNodes(
   }
 }
 
+/// @brief Propagate mirror surface MeshGradients to original surface node gradients.
+///
+/// For a y-duplicated surface, the solver creates mirror vortices from the
+/// original nodes with left/right swapped and y-reflected. This function
+/// reverse-mode propagates the mirror vortex mesh gradients back to the
+/// original surface's node coordinates.
+///
+/// Mirror mapping (for panel (i,j)):
+///   mirror_rv1 = reflect_y(original_rv2) → depends on N(i,j+1), N(i+1,j+1)
+///   mirror_rv2 = reflect_y(original_rv1) → depends on N(i,j), N(i+1,j)
+///   mirror_rc  = reflect_y(original_rc)  → depends on all 4 corners
+///   mirror_normal computed from reflected corners (nonlinear)
+///
+/// @param mesh_grads Full mesh gradients (including mirror vortex entries)
+/// @param surface_mesh Original surface mesh (for node coordinates)
+/// @param mirror_first_vortex First vortex index of the mirror surface
+/// @param y_duplicate_plane Y-plane about which the surface is mirrored
+/// @param nx Chordwise panels
+/// @param ny Spanwise panels
+/// @param out Output node gradients for the original surface (accumulated)
+inline void PropagateMirrorMeshGradientsToNodes(
+    const MeshGradients& mesh_grads,
+    const SurfaceMesh& surface_mesh,
+    Index mirror_first_vortex,
+    double y_duplicate_plane,
+    Index nx, Index ny,
+    MeshNodeGradients& out) {
+  double y_off = 2.0 * y_duplicate_plane;
+
+  for (Index j = 0; j < ny; ++j) {
+    for (Index i = 0; i < nx; ++i) {
+      Index v = mirror_first_vortex + j * nx + i;
+
+      const double* d_rv1 = &mesh_grads.d_rv1[3 * v];
+      const double* d_rv2 = &mesh_grads.d_rv2[3 * v];
+      const double* d_rc = &mesh_grads.d_rc[3 * v];
+      const double* d_normal = &mesh_grads.d_normal[3 * v];
+
+      // mirror_rv1 = reflect_y(orig_rv2) = reflect_y(0.75*N(i,j+1) + 0.25*N(i+1,j+1))
+      double d_rv1_r[3] = {d_rv1[0], -d_rv1[1], d_rv1[2]};
+      out.AddToNode(i, j + 1, d_rv1_r, 0.75);
+      out.AddToNode(i + 1, j + 1, d_rv1_r, 0.25);
+
+      // mirror_rv2 = reflect_y(orig_rv1) = reflect_y(0.75*N(i,j) + 0.25*N(i+1,j))
+      double d_rv2_r[3] = {d_rv2[0], -d_rv2[1], d_rv2[2]};
+      out.AddToNode(i, j, d_rv2_r, 0.75);
+      out.AddToNode(i + 1, j, d_rv2_r, 0.25);
+
+      // mirror_rc = reflect_y(orig_rc) — same coefficient distribution
+      double d_rc_r[3] = {d_rc[0], -d_rc[1], d_rc[2]};
+      out.AddToNode(i, j, d_rc_r, 0.125);
+      out.AddToNode(i + 1, j, d_rc_r, 0.375);
+      out.AddToNode(i, j + 1, d_rc_r, 0.125);
+      out.AddToNode(i + 1, j + 1, d_rc_r, 0.375);
+
+      // Normal: mirror normal is computed from reflected, swapped corners.
+      // mirror_n00 = reflect_y(N(i, j+1))   [left/right swap]
+      // mirror_n10 = reflect_y(N(i+1, j+1))
+      // mirror_n01 = reflect_y(N(i, j))
+      // mirror_n11 = reflect_y(N(i+1, j))
+      Vec3 p_ij   = surface_mesh.GetNode(i, j);
+      Vec3 p_i1j  = surface_mesh.GetNode(i + 1, j);
+      Vec3 p_ij1  = surface_mesh.GetNode(i, j + 1);
+      Vec3 p_i1j1 = surface_mesh.GetNode(i + 1, j + 1);
+
+      double mn00[3] = {p_ij1.x(),  -p_ij1.y() + y_off,  p_ij1.z()};
+      double mn10[3] = {p_i1j1.x(), -p_i1j1.y() + y_off, p_i1j1.z()};
+      double mn01[3] = {p_ij.x(),   -p_ij.y() + y_off,   p_ij.z()};
+      double mn11[3] = {p_i1j.x(),  -p_i1j.y() + y_off,  p_i1j.z()};
+
+      double d_mn00[3] = {0, 0, 0};
+      double d_mn10[3] = {0, 0, 0};
+      double d_mn01[3] = {0, 0, 0};
+      double d_mn11[3] = {0, 0, 0};
+
+      PropagateNormalGradientToNodes(d_normal, mn00, mn10, mn01, mn11,
+                                     d_mn00, d_mn10, d_mn01, d_mn11);
+
+      // Map back to original nodes with y-flip:
+      // d_mn00 → N(i, j+1), d_mn10 → N(i+1, j+1)
+      // d_mn01 → N(i, j),   d_mn11 → N(i+1, j)
+      double d_ij[3]   = {d_mn01[0], -d_mn01[1], d_mn01[2]};
+      double d_i1j[3]  = {d_mn11[0], -d_mn11[1], d_mn11[2]};
+      double d_ij1[3]  = {d_mn00[0], -d_mn00[1], d_mn00[2]};
+      double d_i1j1[3] = {d_mn10[0], -d_mn10[1], d_mn10[2]};
+
+      out.AddToNode(i, j, d_ij);
+      out.AddToNode(i + 1, j, d_i1j);
+      out.AddToNode(i, j + 1, d_ij1);
+      out.AddToNode(i + 1, j + 1, d_i1j1);
+    }
+  }
+}
+
 }  // namespace ad
 }  // namespace vlm

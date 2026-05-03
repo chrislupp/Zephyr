@@ -51,7 +51,6 @@ class VlmDiscipline : public philote::ExplicitDiscipline {
   static bool ParseBool(const std::string& str);
 
   std::vector<SurfaceConfig> surfaces_;
-  ReferenceQuantities ref_;
   VortexLatticeSolver solver_;
   ad::GradientCalculator grad_calc_;
 };
