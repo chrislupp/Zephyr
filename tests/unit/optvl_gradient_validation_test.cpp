@@ -359,47 +359,41 @@ TEST_F(OptVLGradientValidationTest, AdjointGeometryGradientMatchesFD) {
   // Test on wing surface (surface 0)
   Index surface_idx = 0;
 
-  // FD step and tolerance
-  // Adjoint vs FD can have more error than pure FD vs FD
-  const double rel_tol = 0.05;  // 5% relative tolerance
+  // Tolerances: position gradients (Xle/Yle/Zle) are exact to machine precision.
+  // Chord/twist have ~1% residual error from missing secondary paths (CLAF
+  // chordwise redistribution, reference area dependency).
+  const double rel_tol = 0.02;  // 2% relative tolerance
   const double abs_tol = 1e-4;  // Absolute tolerance for near-zero values
+
+  auto check_gradient = [&](const char* name, double adjoint_val, double fd_val,
+                            int var_int, Index sec_idx) {
+    if (std::abs(fd_val) > abs_tol || std::abs(adjoint_val) > abs_tol) {
+      double rel_err = RelativeError(adjoint_val, fd_val, abs_tol);
+      EXPECT_LT(rel_err, rel_tol)
+          << name << " gradient mismatch for var=" << var_int
+          << " section=" << sec_idx
+          << ": adjoint=" << adjoint_val << " fd=" << fd_val
+          << " rel_err=" << rel_err;
+    }
+  };
 
   for (auto var : vars) {
     for (Index section_idx = 0; section_idx < 2; ++section_idx) {
-      // Get adjoint gradient (this is what we're testing)
       ad::AeroGradients adjoint = grad_calc_.ComputeSectionGradient(
           condition, surface_idx, section_idx, var);
-
-      // Get FD gradient for comparison
       ad::AeroGradients fd = ComputeSectionGradientFD(
           condition, surface_idx, section_idx, var);
 
-      // Check CL gradient
-      if (std::abs(fd.dCL) > abs_tol || std::abs(adjoint.dCL) > abs_tol) {
-        double rel_err = RelativeError(adjoint.dCL, fd.dCL, abs_tol);
-        EXPECT_LT(rel_err, rel_tol)
-            << "CL gradient mismatch for var=" << static_cast<int>(var)
-            << " section=" << section_idx
-            << ": adjoint=" << adjoint.dCL << " fd=" << fd.dCL;
-      }
-
-      // Check CD gradient
-      if (std::abs(fd.dCD) > abs_tol || std::abs(adjoint.dCD) > abs_tol) {
-        double rel_err = RelativeError(adjoint.dCD, fd.dCD, abs_tol);
-        EXPECT_LT(rel_err, rel_tol)
-            << "CD gradient mismatch for var=" << static_cast<int>(var)
-            << " section=" << section_idx
-            << ": adjoint=" << adjoint.dCD << " fd=" << fd.dCD;
-      }
-
-      // Check Cm gradient
-      if (std::abs(fd.dCm) > abs_tol || std::abs(adjoint.dCm) > abs_tol) {
-        double rel_err = RelativeError(adjoint.dCm, fd.dCm, abs_tol);
-        EXPECT_LT(rel_err, rel_tol)
-            << "Cm gradient mismatch for var=" << static_cast<int>(var)
-            << " section=" << section_idx
-            << ": adjoint=" << adjoint.dCm << " fd=" << fd.dCm;
-      }
+      int var_int = static_cast<int>(var);
+      check_gradient("CL", adjoint.dCL, fd.dCL, var_int, section_idx);
+      check_gradient("CD", adjoint.dCD, fd.dCD, var_int, section_idx);
+      check_gradient("CY", adjoint.dCY, fd.dCY, var_int, section_idx);
+      check_gradient("Cl", adjoint.dCl, fd.dCl, var_int, section_idx);
+      check_gradient("Cm", adjoint.dCm, fd.dCm, var_int, section_idx);
+      // NOTE: Cn (yawing moment) gradient is NOT validated here. The adjoint
+      // force gradient for Cn has a known systematic error (body-to-stability
+      // axis rotation for lateral moments is incomplete). Errors exceed 100%
+      // for most geometry variables. This requires a fix in ComputeForceGradients.
     }
   }
 }
