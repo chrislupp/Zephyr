@@ -292,3 +292,65 @@ for y, c_opt, c_ell in zip(yle, opt_chord, elliptic):
     ratio = c_opt / c_ell if c_ell > 1e-6 else float("inf")
     print(f"  {y:8.3f}  {c_opt:10.4f}  {c_ell:10.4f}  {ratio:8.3f}")
 print()
+
+# ── Plotting ──────────────────────────────────────────────────────────────
+import matplotlib.pyplot as plt
+
+# Full-span arrays (mirror the half-span data)
+y_full = np.concatenate([-yle[::-1], yle[1:]])
+chord_full = np.concatenate([opt_chord[::-1], opt_chord[1:]])
+elliptic_full = np.concatenate([elliptic[::-1], elliptic[1:]])
+
+subtitle = (
+    f"$C_L$={prob['CL'][0]:.4f}, $C_D$={prob['CD'][0]:.6f}, "
+    f"$L/D$={prob['CL'][0]/prob['CD'][0]:.1f}, "
+    f"$\\alpha$={opt_alpha:.2f}$^\\circ$"
+)
+
+# --- Figure 1: Chord distribution ---
+fig1, ax1 = plt.subplots(figsize=(7, 5))
+y_ellipse_fine = np.linspace(-span / 2, span / 2, 200)
+ellipse_fine = c_root * np.sqrt(np.maximum(1.0 - (2.0 * y_ellipse_fine / span) ** 2, 0.0))
+ax1.plot(y_ellipse_fine, ellipse_fine, "k--", linewidth=1.0, label="Elliptic (matched $c_\\mathrm{root}$)")
+ax1.plot(y_full, chord_full, "o-", color="tab:blue", markersize=4, linewidth=1.5, label="Optimized")
+ax1.set_xlabel("Spanwise station $y$ [m]")
+ax1.set_ylabel("Chord [m]")
+ax1.set_title(f"Chord Distribution\n{subtitle}")
+ax1.legend(loc="lower center")
+ax1.set_xlim(-span / 2 * 1.05, span / 2 * 1.05)
+ax1.set_ylim(bottom=0)
+ax1.grid(True, alpha=0.3)
+fig1.tight_layout()
+fig1.savefig("openmdao_vlm_optimization_out/chord_distribution.png", dpi=150)
+
+# --- Figure 2: Wing planform ---
+fig2, ax2 = plt.subplots(figsize=(10, 4))
+xle_full = np.concatenate([xle_arr[::-1], xle_arr[1:]])
+le_x = xle_full - 0.25 * chord_full
+te_x = xle_full + 0.75 * chord_full
+
+# Optimized planform (y horizontal, x vertical with flow going left-to-right)
+ax2.fill_between(y_full, -le_x, -te_x, alpha=0.25, color="tab:blue", label="Optimized")
+ax2.plot(y_full, -le_x, "-", color="tab:blue", linewidth=1.5)
+ax2.plot(y_full, -te_x, "-", color="tab:blue", linewidth=1.5)
+ax2.plot([y_full[0], y_full[0]], [-le_x[0], -te_x[0]], "-", color="tab:blue", linewidth=1.5)
+ax2.plot([y_full[-1], y_full[-1]], [-le_x[-1], -te_x[-1]], "-", color="tab:blue", linewidth=1.5)
+
+# Elliptic planform outline (smooth)
+y_ell_fine = np.linspace(-span / 2, span / 2, 200)
+c_ell_fine = c_root * np.sqrt(np.maximum(1.0 - (2.0 * y_ell_fine / span) ** 2, 0.0))
+le_ell_fine = -0.25 * c_ell_fine
+te_ell_fine = 0.75 * c_ell_fine
+ax2.plot(y_ell_fine, -le_ell_fine, "k--", linewidth=1.0, label="Elliptic")
+ax2.plot(y_ell_fine, -te_ell_fine, "k--", linewidth=1.0)
+
+ax2.set_xlabel("$y$ [m]")
+ax2.set_ylabel("$x$ [m]")
+ax2.set_title(f"Wing Planform\n{subtitle}")
+ax2.set_aspect("equal")
+ax2.grid(True, alpha=0.3)
+fig2.tight_layout()
+fig2.savefig("openmdao_vlm_optimization_out/wing_planform.png", dpi=150)
+
+plt.show()
+print("Plots saved to openmdao_vlm_optimization_out/")
