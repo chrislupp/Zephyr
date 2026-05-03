@@ -13,8 +13,6 @@ jobs:
   format:
     runs-on: ubuntu-24.04
 
-    name: Format
-
     steps:
     - uses: actions/checkout@v4
 
@@ -71,7 +69,7 @@ jobs:
           - { cc: gcc-14, cxx: g++-14, name: GCC 14 }
         build_type: [Release]
 
-    name: ${{ matrix.compiler.name }} / ${{ matrix.build_type }}
+    name: build
 
     env:
       CC: ${{ matrix.compiler.cc }}
