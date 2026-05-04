@@ -38,6 +38,52 @@ namespace pegasus::gradients {
 // Implementation Class
 // ============================================================================
 
+/// Set a field on AeroGradients by output index (0=CL..5=Cn).
+inline void SetAeroGradient(AeroGradients& g, int idx, Scalar v) {
+    switch (idx) {
+        case 0:
+            g.dCL = v;
+            break;
+        case 1:
+            g.dCD = v;
+            break;
+        case 2:
+            g.dCY = v;
+            break;
+        case 3:
+            g.dCl = v;
+            break;
+        case 4:
+            g.dCm = v;
+            break;
+        case 5:
+            g.dCn = v;
+            break;
+        default:
+            break;
+    }
+}
+
+/// Get a dCX_dGamma vector from ForceGradients by output index.
+inline const VecX& GetForceGradient(const ForceGradients& fg, int idx) {
+    switch (idx) {
+        case 0:
+            return fg.dCL_dGamma;
+        case 1:
+            return fg.dCD_dGamma;
+        case 2:
+            return fg.dCY_dGamma;
+        case 3:
+            return fg.dCl_dGamma;
+        case 4:
+            return fg.dCm_dGamma;
+        case 5:
+            return fg.dCn_dGamma;
+        default:
+            return fg.dCL_dGamma;
+    }
+}
+
 class GradientCalculator::Impl {
 public:
     Aircraft aircraft_{"GradientCalc"};
@@ -48,6 +94,7 @@ public:
     bool use_adjoint_{true};
     MeshInput mesh_input_;
     ReferenceQuantities ref_quantities_;
+    OutputSelection output_selection_;
 
     // Cached solution for adjoint computations
     SolutionState cached_solution_;
@@ -270,25 +317,28 @@ public:
             SolveAndCache(condition);
         }
 
-        // Step 2: Compute force gradients ∂J/∂Γ for all outputs
-        ForceGradients force_grads = ComputeForceGradients(
-            solver_.GetMesh(), cached_solution_, condition, aircraft_);
+        // Step 2: Compute force gradients ∂J/∂Γ for enabled outputs
+        ForceGradients force_grads =
+            ComputeForceGradients(solver_.GetMesh(), cached_solution_,
+                                  condition, aircraft_, output_selection_);
 
-        // Step 3: Solve adjoint for each output
+        // Step 3: Solve adjoint for enabled outputs only
         AdjointSolver adjoint(solver_);
         if (!adjoint.IsValid()) {
             return AeroGradients{};
         }
 
-        // Solve all adjoints at once
+        auto indices = output_selection_.EnabledIndices();
+        int num_out = static_cast<int>(indices.size());
+        if (num_out == 0) {
+            return AeroGradients{};
+        }
+
         const Index n = cached_solution_.circulation.size();
-        MatX rhs(n, 6);  // CL, CD, CY, Cl, Cm, Cn
-        rhs.col(0) = force_grads.dCL_dGamma;
-        rhs.col(1) = force_grads.dCD_dGamma;
-        rhs.col(2) = force_grads.dCY_dGamma;
-        rhs.col(3) = force_grads.dCl_dGamma;
-        rhs.col(4) = force_grads.dCm_dGamma;
-        rhs.col(5) = force_grads.dCn_dGamma;
+        MatX rhs(n, num_out);
+        for (int c = 0; c < num_out; ++c) {
+            rhs.col(c) = GetForceGradient(force_grads, indices[c]);
+        }
 
         MatX lambda = adjoint.SolveAdjointMultiple(rhs);
 
@@ -297,24 +347,49 @@ public:
 
         // Step 5: Compute implicit terms λᵀ·(∂b/∂param)
         AeroGradients implicit_grads;
-        implicit_grads.dCL = lambda.col(0).dot(db_dparam);
-        implicit_grads.dCD = lambda.col(1).dot(db_dparam);
-        implicit_grads.dCY = lambda.col(2).dot(db_dparam);
-        implicit_grads.dCl = lambda.col(3).dot(db_dparam);
-        implicit_grads.dCm = lambda.col(4).dot(db_dparam);
-        implicit_grads.dCn = lambda.col(5).dot(db_dparam);
+        for (int c = 0; c < num_out; ++c) {
+            SetAeroGradient(implicit_grads, indices[c],
+                            lambda.col(c).dot(db_dparam));
+        }
 
         // Step 6: Compute explicit terms ∂J/∂param|_Γ
         AeroGradients explicit_grads = ComputeExplicitDerivatives(param_index);
 
         // Step 7: Total derivative = explicit + implicit
         AeroGradients total;
-        total.dCL = explicit_grads.dCL + implicit_grads.dCL;
-        total.dCD = explicit_grads.dCD + implicit_grads.dCD;
-        total.dCY = explicit_grads.dCY + implicit_grads.dCY;
-        total.dCl = explicit_grads.dCl + implicit_grads.dCl;
-        total.dCm = explicit_grads.dCm + implicit_grads.dCm;
-        total.dCn = explicit_grads.dCn + implicit_grads.dCn;
+        for (int c = 0; c < num_out; ++c) {
+            int idx = indices[c];
+            Scalar expl = 0.0, impl = 0.0;
+            switch (idx) {
+                case 0:
+                    expl = explicit_grads.dCL;
+                    impl = implicit_grads.dCL;
+                    break;
+                case 1:
+                    expl = explicit_grads.dCD;
+                    impl = implicit_grads.dCD;
+                    break;
+                case 2:
+                    expl = explicit_grads.dCY;
+                    impl = implicit_grads.dCY;
+                    break;
+                case 3:
+                    expl = explicit_grads.dCl;
+                    impl = implicit_grads.dCl;
+                    break;
+                case 4:
+                    expl = explicit_grads.dCm;
+                    impl = implicit_grads.dCm;
+                    break;
+                case 5:
+                    expl = explicit_grads.dCn;
+                    impl = implicit_grads.dCn;
+                    break;
+                default:
+                    break;
+            }
+            SetAeroGradient(total, idx, expl + impl);
+        }
         total.dCDi = explicit_grads.dCDi;
 
         return total;
@@ -338,6 +413,10 @@ void GradientCalculator::SetAircraft(const Aircraft& aircraft) {
 
 void GradientCalculator::SetReferencePoint(const Vec3& ref) {
     impl_->solver_.SetReferencePoint(ref);
+}
+
+void GradientCalculator::SetOutputSelection(const OutputSelection& selection) {
+    impl_->output_selection_ = selection;
 }
 
 void GradientCalculator::SetFiniteDiffStep(Scalar) {
@@ -1479,7 +1558,8 @@ AeroGradients ComputeSectionGradientAdjoint(const Aircraft& aircraft,
                                             const FlightCondition& condition,
                                             Index surface_idx,
                                             Index section_idx,
-                                            GeometryVariable variable) {
+                                            GeometryVariable variable,
+                                            const OutputSelection& selection) {
     VortexLatticeSolver solver;
     solver.SetAircraft(aircraft);
     SolutionState solution = solver.Solve(condition);
@@ -1491,9 +1571,9 @@ AeroGradients ComputeSectionGradientAdjoint(const Aircraft& aircraft,
         return AeroGradients{};
     }
 
-    // Step 1: Compute force gradients ∂J/∂Γ
+    // Step 1: Compute force gradients ∂J/∂Γ for enabled outputs
     ForceGradients force_grads =
-        ComputeForceGradients(mesh, solution, condition, aircraft);
+        ComputeForceGradients(mesh, solution, condition, aircraft, selection);
 
     // Step 2: Solve adjoint system Aᵀλ = ∂J/∂Γ
     AdjointSolver adjoint(solver);
@@ -1501,13 +1581,16 @@ AeroGradients ComputeSectionGradientAdjoint(const Aircraft& aircraft,
         return AeroGradients{};
     }
 
-    MatX rhs(n, 6);
-    rhs.col(0) = force_grads.dCL_dGamma;
-    rhs.col(1) = force_grads.dCD_dGamma;
-    rhs.col(2) = force_grads.dCY_dGamma;
-    rhs.col(3) = force_grads.dCl_dGamma;
-    rhs.col(4) = force_grads.dCm_dGamma;
-    rhs.col(5) = force_grads.dCn_dGamma;
+    auto indices = selection.EnabledIndices();
+    int num_out = static_cast<int>(indices.size());
+    if (num_out == 0) {
+        return AeroGradients{};
+    }
+
+    MatX rhs(n, num_out);
+    for (int c = 0; c < num_out; ++c) {
+        rhs.col(c) = GetForceGradient(force_grads, indices[c]);
+    }
 
     MatX lambda = adjoint.SolveAdjointMultiple(rhs);
 
@@ -1517,50 +1600,27 @@ AeroGradients ComputeSectionGradientAdjoint(const Aircraft& aircraft,
 
     // Step 4: Compute implicit term λᵀ·(∂b/∂θ)
     AeroGradients implicit_rhs;
-    implicit_rhs.dCL = lambda.col(0).dot(db_dtheta);
-    implicit_rhs.dCD = lambda.col(1).dot(db_dtheta);
-    implicit_rhs.dCY = lambda.col(2).dot(db_dtheta);
-    implicit_rhs.dCl = lambda.col(3).dot(db_dtheta);
-    implicit_rhs.dCm = lambda.col(4).dot(db_dtheta);
-    implicit_rhs.dCn = lambda.col(5).dot(db_dtheta);
-    implicit_rhs.dCDi = 0.0;
+    for (int c = 0; c < num_out; ++c) {
+        SetAeroGradient(implicit_rhs, indices[c], lambda.col(c).dot(db_dtheta));
+    }
 
     // Step 5: Compute AIC sensitivity term -λᵀ·(∂A/∂θ)·Γ
     AeroGradients aic_sens;
-    aic_sens.dCL = -ComputeAICGeometrySensitivity(
-        mesh, aircraft, lambda.col(0), solution.circulation, condition,
-        surface_idx, section_idx, variable);
-    aic_sens.dCD = -ComputeAICGeometrySensitivity(
-        mesh, aircraft, lambda.col(1), solution.circulation, condition,
-        surface_idx, section_idx, variable);
-    aic_sens.dCY = -ComputeAICGeometrySensitivity(
-        mesh, aircraft, lambda.col(2), solution.circulation, condition,
-        surface_idx, section_idx, variable);
-    aic_sens.dCl = -ComputeAICGeometrySensitivity(
-        mesh, aircraft, lambda.col(3), solution.circulation, condition,
-        surface_idx, section_idx, variable);
-    aic_sens.dCm = -ComputeAICGeometrySensitivity(
-        mesh, aircraft, lambda.col(4), solution.circulation, condition,
-        surface_idx, section_idx, variable);
-    aic_sens.dCn = -ComputeAICGeometrySensitivity(
-        mesh, aircraft, lambda.col(5), solution.circulation, condition,
-        surface_idx, section_idx, variable);
-    aic_sens.dCDi = 0.0;
+    for (int c = 0; c < num_out; ++c) {
+        SetAeroGradient(aic_sens, indices[c],
+                        -ComputeAICGeometrySensitivity(
+                            mesh, aircraft, lambda.col(c), solution.circulation,
+                            condition, surface_idx, section_idx, variable));
+    }
 
     // Step 6: Compute explicit term ∂J/∂θ|_Γ,V
     AeroGradients explicit_term =
         ComputeExplicitForceTerm(mesh, aircraft, solution, condition,
                                  surface_idx, section_idx, variable);
 
-    // Step 7: Compute velocity kernel geometry sensitivity (∂J/∂V)·(∂K/∂θ)·Γ
+    // Step 7: Compute velocity kernel geometry sensitivity
+    // (∂J/∂V)·(∂K/∂θ)·Γ
     AeroGradients velocity_kernel_sens;
-    velocity_kernel_sens.dCL = 0.0;
-    velocity_kernel_sens.dCD = 0.0;
-    velocity_kernel_sens.dCY = 0.0;
-    velocity_kernel_sens.dCl = 0.0;
-    velocity_kernel_sens.dCm = 0.0;
-    velocity_kernel_sens.dCn = 0.0;
-    velocity_kernel_sens.dCDi = 0.0;
 
     {
         Vec3 moment_ref = aircraft.GetMomentReferencePoint();
@@ -1591,41 +1651,71 @@ AeroGradients ComputeSectionGradientAdjoint(const Aircraft& aircraft,
 
         double ref_area = aircraft.GetReferenceArea();
 
-        auto compute_velocity_kernel_term = [&](int output_index) -> Scalar {
+        auto compute_vel_kern = [&](int output_index) -> Scalar {
             std::vector<double> dJ_dV(3 * n, 0.0);
             analytical_force_induced_velocity_gradient(
                 condition.alpha, condition.beta, circulation.data(),
                 induced_velocity.data(), bound_left.data(), bound_right.data(),
                 nullptr, moment_arm.data(), static_cast<int>(n), ref_area,
                 output_index, dJ_dV.data());
-
             return ComputeVelocityKernelGeometrySensitivity(
                 mesh, aircraft, dJ_dV, solution.circulation, condition,
                 surface_idx, section_idx, variable);
         };
 
-        velocity_kernel_sens.dCL = compute_velocity_kernel_term(0);
-        velocity_kernel_sens.dCD = compute_velocity_kernel_term(1);
-        velocity_kernel_sens.dCY = compute_velocity_kernel_term(2);
-        velocity_kernel_sens.dCl = compute_velocity_kernel_term(3);
-        velocity_kernel_sens.dCm = compute_velocity_kernel_term(4);
-        velocity_kernel_sens.dCn = compute_velocity_kernel_term(5);
+        for (int c = 0; c < num_out; ++c) {
+            SetAeroGradient(velocity_kernel_sens, indices[c],
+                            compute_vel_kern(indices[c]));
+        }
     }
 
-    // Total gradient = explicit + velocity_kernel + implicit_rhs + aic_sens
+    // Total gradient = explicit + velocity_kernel + implicit + aic
     AeroGradients result;
-    result.dCL = explicit_term.dCL + velocity_kernel_sens.dCL +
-                 implicit_rhs.dCL + aic_sens.dCL;
-    result.dCD = explicit_term.dCD + velocity_kernel_sens.dCD +
-                 implicit_rhs.dCD + aic_sens.dCD;
-    result.dCY = explicit_term.dCY + velocity_kernel_sens.dCY +
-                 implicit_rhs.dCY + aic_sens.dCY;
-    result.dCl = explicit_term.dCl + velocity_kernel_sens.dCl +
-                 implicit_rhs.dCl + aic_sens.dCl;
-    result.dCm = explicit_term.dCm + velocity_kernel_sens.dCm +
-                 implicit_rhs.dCm + aic_sens.dCm;
-    result.dCn = explicit_term.dCn + velocity_kernel_sens.dCn +
-                 implicit_rhs.dCn + aic_sens.dCn;
+    for (int c = 0; c < num_out; ++c) {
+        int idx = indices[c];
+        Scalar expl = 0.0, vel = 0.0, impl = 0.0, aic = 0.0;
+        switch (idx) {
+            case 0:
+                expl = explicit_term.dCL;
+                vel = velocity_kernel_sens.dCL;
+                impl = implicit_rhs.dCL;
+                aic = aic_sens.dCL;
+                break;
+            case 1:
+                expl = explicit_term.dCD;
+                vel = velocity_kernel_sens.dCD;
+                impl = implicit_rhs.dCD;
+                aic = aic_sens.dCD;
+                break;
+            case 2:
+                expl = explicit_term.dCY;
+                vel = velocity_kernel_sens.dCY;
+                impl = implicit_rhs.dCY;
+                aic = aic_sens.dCY;
+                break;
+            case 3:
+                expl = explicit_term.dCl;
+                vel = velocity_kernel_sens.dCl;
+                impl = implicit_rhs.dCl;
+                aic = aic_sens.dCl;
+                break;
+            case 4:
+                expl = explicit_term.dCm;
+                vel = velocity_kernel_sens.dCm;
+                impl = implicit_rhs.dCm;
+                aic = aic_sens.dCm;
+                break;
+            case 5:
+                expl = explicit_term.dCn;
+                vel = velocity_kernel_sens.dCn;
+                impl = implicit_rhs.dCn;
+                aic = aic_sens.dCn;
+                break;
+            default:
+                break;
+        }
+        SetAeroGradient(result, idx, expl + vel + impl + aic);
+    }
     result.dCDi = 0.0;  // TODO: Add Trefftz plane gradient
 
 #ifndef NDEBUG
@@ -1659,8 +1749,9 @@ AeroGradients GradientCalculator::ComputeSectionGradient(
         return AeroGradients{};
     }
 
-    return ComputeSectionGradientAdjoint(
-        impl_->aircraft_, condition, surface_index, section_index, variable);
+    return ComputeSectionGradientAdjoint(impl_->aircraft_, condition,
+                                         surface_index, section_index, variable,
+                                         impl_->output_selection_);
 }
 
 GeometryGradients GradientCalculator::ComputeGeometryGradients(
@@ -1746,22 +1837,25 @@ GradientCalculator::ComputeMeshNodeGradients(const FlightCondition& condition) {
     if (n == 0)
         return result;
 
-    // Step 2: Compute force gradients dJ/dGamma for all 6 outputs
+    // Step 2: Compute force gradients dJ/dGamma for enabled outputs
+    const OutputSelection& selection = impl_->output_selection_;
     ForceGradients force_grads =
-        ComputeForceGradients(mesh, solution, condition, ref);
+        ComputeForceGradients(mesh, solution, condition, ref, selection);
 
     // Step 3: Solve adjoint systems A^T * lambda = dJ/dGamma
     AdjointSolver adjoint(impl_->solver_);
     if (!adjoint.IsValid())
         return result;
 
-    MatX rhs(n, 6);
-    rhs.col(0) = force_grads.dCL_dGamma;
-    rhs.col(1) = force_grads.dCD_dGamma;
-    rhs.col(2) = force_grads.dCY_dGamma;
-    rhs.col(3) = force_grads.dCl_dGamma;
-    rhs.col(4) = force_grads.dCm_dGamma;
-    rhs.col(5) = force_grads.dCn_dGamma;
+    auto indices = selection.EnabledIndices();
+    int num_out = static_cast<int>(indices.size());
+    if (num_out == 0)
+        return result;
+
+    MatX rhs(n, num_out);
+    for (int c = 0; c < num_out; ++c) {
+        rhs.col(c) = GetForceGradient(force_grads, indices[c]);
+    }
 
     MatX lambda = adjoint.SolveAdjointMultiple(rhs);
 
@@ -1801,10 +1895,11 @@ GradientCalculator::ComputeMeshNodeGradients(const FlightCondition& condition) {
         circulation[i] = solution.circulation(i);
     }
 
-    // Step 4: For each objective, accumulate full MeshGradients then chain-rule
-    // to nodes We compute for all 6 objectives
-    for (int obj = 0; obj < 6; ++obj) {
-        VecX lam = lambda.col(obj);
+    // Step 4: For each enabled objective, accumulate full
+    // MeshGradients then chain-rule to nodes
+    for (int ci = 0; ci < num_out; ++ci) {
+        int obj = indices[ci];
+        VecX lam = lambda.col(ci);
 
         MeshGradients mesh_grads;
         mesh_grads.Resize(n);
@@ -1984,7 +2079,7 @@ GradientCalculator::ComputeMeshNodeGradients(const FlightCondition& condition) {
 
         // Step 5: Chain-rule MeshGradients -> MeshNodeGradients per surface
         // On first objective, initialize the result structures
-        if (obj == 0) {
+        if (ci == 0) {
             result.resize(mesh_input.surfaces.size());
             for (size_t s = 0; s < mesh_input.surfaces.size(); ++s) {
                 const auto& sm = mesh_input.surfaces[s];

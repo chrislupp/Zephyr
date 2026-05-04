@@ -184,7 +184,7 @@ void ApplyVelocityKernelTranspose(const VortexLattice& mesh,
 static ForceGradients ComputeForceGradientsImpl(
     const VortexLattice& mesh, const SolutionState& solution,
     const FlightCondition& condition, const Vec3& moment_ref,
-    double reference_area) {
+    double reference_area, const OutputSelection& selection) {
     const Index n = solution.circulation.size();
 
     ForceGradients grads;
@@ -219,107 +219,37 @@ static ForceGradients ComputeForceGradientsImpl(
     std::vector<double> d_induced_velocity(3 * n);
     VecX velocity_kernel_term;
 
-    // CL gradient
-    analytical_force_circulation_gradient(
-        condition.alpha, condition.beta, circulation.data(),
-        induced_velocity.data(), bound_left.data(), bound_right.data(),
-        control_points.data(), moment_arm.data(), static_cast<int>(n),
-        reference_area, 0, d_circulation.data());
-    analytical_force_induced_velocity_gradient(
-        condition.alpha, condition.beta, circulation.data(),
-        induced_velocity.data(), bound_left.data(), bound_right.data(),
-        control_points.data(), moment_arm.data(), static_cast<int>(n),
-        reference_area, 0, d_induced_velocity.data());
-    ApplyVelocityKernelTranspose(mesh, condition, d_induced_velocity,
-                                 velocity_kernel_term);
-    for (Index i = 0; i < n; ++i) {
-        grads.dCL_dGamma(i) = d_circulation[i] + velocity_kernel_term(i);
-    }
+    // Helper lambda to compute one output's dJ/dGamma
+    auto compute_output = [&](int output_idx, VecX& target) {
+        analytical_force_circulation_gradient(
+            condition.alpha, condition.beta, circulation.data(),
+            induced_velocity.data(), bound_left.data(), bound_right.data(),
+            control_points.data(), moment_arm.data(), static_cast<int>(n),
+            reference_area, output_idx, d_circulation.data());
+        analytical_force_induced_velocity_gradient(
+            condition.alpha, condition.beta, circulation.data(),
+            induced_velocity.data(), bound_left.data(), bound_right.data(),
+            control_points.data(), moment_arm.data(), static_cast<int>(n),
+            reference_area, output_idx, d_induced_velocity.data());
+        ApplyVelocityKernelTranspose(mesh, condition, d_induced_velocity,
+                                     velocity_kernel_term);
+        for (Index i = 0; i < n; ++i) {
+            target(i) = d_circulation[i] + velocity_kernel_term(i);
+        }
+    };
 
-    // CD gradient
-    analytical_force_circulation_gradient(
-        condition.alpha, condition.beta, circulation.data(),
-        induced_velocity.data(), bound_left.data(), bound_right.data(),
-        control_points.data(), moment_arm.data(), static_cast<int>(n),
-        reference_area, 1, d_circulation.data());
-    analytical_force_induced_velocity_gradient(
-        condition.alpha, condition.beta, circulation.data(),
-        induced_velocity.data(), bound_left.data(), bound_right.data(),
-        control_points.data(), moment_arm.data(), static_cast<int>(n),
-        reference_area, 1, d_induced_velocity.data());
-    ApplyVelocityKernelTranspose(mesh, condition, d_induced_velocity,
-                                 velocity_kernel_term);
-    for (Index i = 0; i < n; ++i) {
-        grads.dCD_dGamma(i) = d_circulation[i] + velocity_kernel_term(i);
-    }
-
-    // CY gradient
-    analytical_force_circulation_gradient(
-        condition.alpha, condition.beta, circulation.data(),
-        induced_velocity.data(), bound_left.data(), bound_right.data(),
-        control_points.data(), moment_arm.data(), static_cast<int>(n),
-        reference_area, 2, d_circulation.data());
-    analytical_force_induced_velocity_gradient(
-        condition.alpha, condition.beta, circulation.data(),
-        induced_velocity.data(), bound_left.data(), bound_right.data(),
-        control_points.data(), moment_arm.data(), static_cast<int>(n),
-        reference_area, 2, d_induced_velocity.data());
-    ApplyVelocityKernelTranspose(mesh, condition, d_induced_velocity,
-                                 velocity_kernel_term);
-    for (Index i = 0; i < n; ++i) {
-        grads.dCY_dGamma(i) = d_circulation[i] + velocity_kernel_term(i);
-    }
-
-    // Cl gradient
-    analytical_force_circulation_gradient(
-        condition.alpha, condition.beta, circulation.data(),
-        induced_velocity.data(), bound_left.data(), bound_right.data(),
-        control_points.data(), moment_arm.data(), static_cast<int>(n),
-        reference_area, 3, d_circulation.data());
-    analytical_force_induced_velocity_gradient(
-        condition.alpha, condition.beta, circulation.data(),
-        induced_velocity.data(), bound_left.data(), bound_right.data(),
-        control_points.data(), moment_arm.data(), static_cast<int>(n),
-        reference_area, 3, d_induced_velocity.data());
-    ApplyVelocityKernelTranspose(mesh, condition, d_induced_velocity,
-                                 velocity_kernel_term);
-    for (Index i = 0; i < n; ++i) {
-        grads.dCl_dGamma(i) = d_circulation[i] + velocity_kernel_term(i);
-    }
-
-    // Cm gradient
-    analytical_force_circulation_gradient(
-        condition.alpha, condition.beta, circulation.data(),
-        induced_velocity.data(), bound_left.data(), bound_right.data(),
-        control_points.data(), moment_arm.data(), static_cast<int>(n),
-        reference_area, 4, d_circulation.data());
-    analytical_force_induced_velocity_gradient(
-        condition.alpha, condition.beta, circulation.data(),
-        induced_velocity.data(), bound_left.data(), bound_right.data(),
-        control_points.data(), moment_arm.data(), static_cast<int>(n),
-        reference_area, 4, d_induced_velocity.data());
-    ApplyVelocityKernelTranspose(mesh, condition, d_induced_velocity,
-                                 velocity_kernel_term);
-    for (Index i = 0; i < n; ++i) {
-        grads.dCm_dGamma(i) = d_circulation[i] + velocity_kernel_term(i);
-    }
-
-    // Cn gradient
-    analytical_force_circulation_gradient(
-        condition.alpha, condition.beta, circulation.data(),
-        induced_velocity.data(), bound_left.data(), bound_right.data(),
-        control_points.data(), moment_arm.data(), static_cast<int>(n),
-        reference_area, 5, d_circulation.data());
-    analytical_force_induced_velocity_gradient(
-        condition.alpha, condition.beta, circulation.data(),
-        induced_velocity.data(), bound_left.data(), bound_right.data(),
-        control_points.data(), moment_arm.data(), static_cast<int>(n),
-        reference_area, 5, d_induced_velocity.data());
-    ApplyVelocityKernelTranspose(mesh, condition, d_induced_velocity,
-                                 velocity_kernel_term);
-    for (Index i = 0; i < n; ++i) {
-        grads.dCn_dGamma(i) = d_circulation[i] + velocity_kernel_term(i);
-    }
+    if (selection.CL)
+        compute_output(0, grads.dCL_dGamma);
+    if (selection.CD)
+        compute_output(1, grads.dCD_dGamma);
+    if (selection.CY)
+        compute_output(2, grads.dCY_dGamma);
+    if (selection.Cl)
+        compute_output(3, grads.dCl_dGamma);
+    if (selection.Cm)
+        compute_output(4, grads.dCm_dGamma);
+    if (selection.Cn)
+        compute_output(5, grads.dCn_dGamma);
 
     return grads;
 }
@@ -328,20 +258,22 @@ static ForceGradients ComputeForceGradientsImpl(
 ForceGradients ComputeForceGradients(const VortexLattice& mesh,
                                      const SolutionState& solution,
                                      const FlightCondition& condition,
-                                     const Aircraft& aircraft) {
+                                     const Aircraft& aircraft,
+                                     const OutputSelection& selection) {
     return ComputeForceGradientsImpl(mesh, solution, condition,
                                      aircraft.GetMomentReferencePoint(),
-                                     aircraft.GetReferenceArea());
+                                     aircraft.GetReferenceArea(), selection);
 }
 
 /// Compute force gradients using ReferenceQuantities (mesh-based API)
 ForceGradients ComputeForceGradients(const VortexLattice& mesh,
                                      const SolutionState& solution,
                                      const FlightCondition& condition,
-                                     const ReferenceQuantities& ref) {
+                                     const ReferenceQuantities& ref,
+                                     const OutputSelection& selection) {
     return ComputeForceGradientsImpl(mesh, solution, condition,
                                      ref.moment_reference_point,
-                                     ref.reference_area);
+                                     ref.reference_area, selection);
 }
 
 // ============================================================================

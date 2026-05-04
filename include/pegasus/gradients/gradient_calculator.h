@@ -33,6 +33,7 @@
 #include "pegasus/geometry/aircraft.h"
 #include "pegasus/geometry/mesh_input.h"
 #include "pegasus/gradients/mesh_node_sensitivity.h"
+#include "pegasus/gradients/output_selection.h"
 #include "pegasus/solver/vortex_lattice_solver.h"
 
 #include <functional>
@@ -160,6 +161,13 @@ public:
 
     /// @brief Set the reference point for moment calculations.
     void SetReferencePoint(const Vec3& ref);
+
+    /// @brief Select which outputs to compute gradients for.
+    ///
+    /// Disabling unneeded outputs reduces the number of adjoint
+    /// solves and related O(n^2) operations. By default all
+    /// outputs are enabled.
+    void SetOutputSelection(const OutputSelection& selection);
 
     /// @brief Compute derivatives with respect to all flight conditions.
     FullGradients ComputeFlightConditionDerivatives(
