@@ -15,7 +15,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Optimization convergence history plot (CD vs major iteration) in OpenMDAO optimization example
 
 ### Changed
-- `MeshDiscipline` replaces absolute `yle` input with scalar `halfspan` and normalized `eta` array parameterization, making wingspan a first-class design variable for optimization
+- `MeshDiscipline` replaces absolute `yle` input with scalar `halfspan` and normalized `eta` array parameterization, adding wingspan as a design variable for gradient-based optimization with analytical partials
 - License changed from AGPL-3.0-or-later to GPL-3.0-or-later
 
 ### Removed
