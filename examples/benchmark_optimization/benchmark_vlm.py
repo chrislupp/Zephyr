@@ -13,44 +13,6 @@ import openmdao.api as om
 import philote_mdo.openmdao as pmom
 
 
-class PlanformArea(om.ExplicitComponent):
-    def initialize(self):
-        self.options.declare("n_stations", types=int)
-
-    def setup(self):
-        n = self.options["n_stations"]
-        self.add_input("chord", shape=(n,), units="m")
-        self.add_input("yle", shape=(n,), units="m")
-        self.add_output("planform_area", shape=(1,), units="m**2")
-
-    def setup_partials(self):
-        n = self.options["n_stations"]
-        self.declare_partials("planform_area", "chord",
-                              rows=np.zeros(n, dtype=int), cols=np.arange(n))
-        self.declare_partials("planform_area", "yle",
-                              rows=np.zeros(n, dtype=int), cols=np.arange(n))
-
-    def compute(self, inputs, outputs):
-        c, y = inputs["chord"], inputs["yle"]
-        outputs["planform_area"] = 2.0 * np.sum(0.5 * (c[:-1] + c[1:]) * np.diff(y))
-
-    def compute_partials(self, inputs, partials):
-        c, y = inputs["chord"], inputs["yle"]
-        dy = np.diff(y)
-        n = len(c)
-        da_dc = np.zeros(n)
-        for j in range(n):
-            if j > 0:   da_dc[j] += dy[j - 1]
-            if j < n-1:  da_dc[j] += dy[j]
-        partials["planform_area", "chord"] = da_dc
-        da_dy = np.zeros(n)
-        for j in range(n - 1):
-            avg_c = 0.5 * (c[j] + c[j + 1])
-            da_dy[j] -= 2.0 * avg_c
-            da_dy[j + 1] += 2.0 * avg_c
-        partials["planform_area", "yle"] = da_dy
-
-
 class AkimaChord(om.ExplicitComponent):
     def initialize(self):
         self.options.declare("n_cp", types=int)
@@ -108,8 +70,10 @@ model.add_subsystem("chord_interp",
 mesh_channel = grpc.insecure_channel("localhost:50052")
 model.add_subsystem("mesh_comp",
     pmom.RemoteExplicitComponent(channel=mesh_channel, nx=nx, ny=ny,
-        cosine_chordwise_spacing="true", cosine_spanwise_spacing="false"),
-    promotes_inputs=["chord", "twist", "xle", "yle", "zle"])
+        cosine_chordwise_spacing="true", cosine_spanwise_spacing="false",
+        y_duplicated="true"),
+    promotes_inputs=["chord", "twist", "xle", "yle", "zle"],
+    promotes_outputs=["reference_area", "reference_span", "reference_chord"])
 
 vlm_channel = grpc.insecure_channel("localhost:50051")
 model.add_subsystem("vlm",
@@ -125,10 +89,6 @@ model.add_subsystem("vlm",
                      "moment_ref_x", "moment_ref_y", "moment_ref_z"],
     promotes_outputs=["CL", "CD", "CY", "Cl", "Cm", "Cn"])
 
-model.add_subsystem("area_comp",
-    PlanformArea(n_stations=n_stations),
-    promotes_inputs=["chord", "yle"], promotes_outputs=["planform_area"])
-
 model.connect("mesh_comp.mesh", "vlm.wing")
 
 prob.driver = om.ScipyOptimizeDriver()
@@ -140,7 +100,7 @@ model.add_design_var("chord_cp", lower=0.1, upper=3.0)
 model.add_design_var("alpha", lower=np.deg2rad(-10.0), upper=np.deg2rad(15.0))
 model.add_objective("CD")
 model.add_constraint("CL", equals=CL_target)
-model.add_constraint("planform_area", equals=ref_area)
+model.add_constraint("reference_area", equals=ref_area)
 
 prob.setup()
 
@@ -149,9 +109,7 @@ prob["twist"] = np.zeros(n_stations)
 prob["xle"] = np.zeros(n_stations)
 prob["yle"] = yle
 prob["zle"] = np.zeros(n_stations)
-prob["reference_area"] = ref_area
-prob["reference_chord"] = chord_init
-prob["reference_span"] = span
+# reference_area, reference_chord, reference_span computed by mesh_comp
 prob["moment_ref_x"] = 0.25 * chord_init
 prob["moment_ref_y"] = 0.0
 prob["moment_ref_z"] = 0.0
@@ -178,7 +136,7 @@ print(f"  CL = {prob['CL'][0]:.6f}  (target: {CL_target})")
 print(f"  CD = {prob['CD'][0]:.6f}")
 print(f"  L/D = {prob['CL'][0] / prob['CD'][0]:.2f}")
 print(f"  alpha = {np.rad2deg(prob['alpha'][0]):.3f} deg")
-print(f"  planform area = {prob['planform_area'][0]:.4f} m^2")
+print(f"  planform area = {prob['reference_area'][0]:.4f} m^2")
 print(f"\n  Iterations: {n_iter}")
 print(f"  Total time: {t_total:.3f} s")
 print(f"  Time/iteration: {t_total / n_iter * 1000:.1f} ms")
