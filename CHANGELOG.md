@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-05-04
+
 ### Added
 - `OutputSelection` struct and `GradientCalculator::SetOutputSelection()` to select which aerodynamic outputs (CL, CD, CY, Cl, Cm, Cn, CDi) have gradients computed, reducing adjoint solves and O(n²) velocity-kernel operations for unused outputs
 - `MeshDiscipline` now computes `reference_area`, `reference_span`, and `reference_chord` (MAC) as outputs with analytical partials
@@ -51,5 +53,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 - Docs homepage redirect to use relative path instead of absolute (avoiding baseUrl bypass)
 
-[Unreleased]: https://github.com/chrislupp/Pegasus/compare/v0.1.0...HEAD
 [0.1.0]: https://github.com/chrislupp/Pegasus/releases/tag/v0.1.0
+[Unreleased]: https://github.com/chrislupp/Pegasus/compare/v0.2.0...HEAD
+[0.2.0]: https://github.com/chrislupp/Pegasus/releases/tag/v0.2.0

@@ -1,5 +1,5 @@
 # Project Pegasus
-# Version 0.1.0
+# Version 0.2.0
 #
 # Copyright 2024-2026, Christopher A. Lupp
 #
@@ -18,7 +18,7 @@
 
 cmake_minimum_required(VERSION 3.16)
 project(Pegasus
-    VERSION 0.1.0
+    VERSION 0.2.0
     DESCRIPTION "Vortex Lattice Method Aerodynamics Library"
     LANGUAGES CXX
 )
