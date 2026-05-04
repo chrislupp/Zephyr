@@ -1,5 +1,5 @@
 # Copyright (c) 2024 VLM Authors
-# SPDX-License-Identifier: AGPL-3.0-or-later
+# SPDX-License-Identifier: GPL-3.0-or-later
 #
 # OpenMDAO chord optimization using Philote MDO disciplines.
 #
