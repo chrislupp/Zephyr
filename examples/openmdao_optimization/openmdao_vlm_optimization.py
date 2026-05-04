@@ -163,6 +163,12 @@ prob.driver.options["optimizer"] = "SLSQP"
 prob.driver.options["tol"] = 1e-8
 prob.driver.options["maxiter"] = 200
 
+# Record optimization iterations to sqlite
+recorder = om.SqliteRecorder("openmdao_vlm_optimization_out/opt_history.sql")
+prob.driver.add_recorder(recorder)
+prob.driver.recording_options["includes"] = ["CD"]
+prob.driver.recording_options["record_derivatives"] = True
+
 # Design variable: chord control points
 model.add_design_var("chord_cp", lower=0.1, upper=3.0)
 
@@ -201,6 +207,7 @@ prob["yaw_rate"] = 0.0
 
 # Run optimization
 prob.run_driver()
+prob.cleanup()
 
 # Print results
 opt_chord = prob["chord"]
@@ -288,6 +295,52 @@ ax2.set_aspect("equal")
 ax2.grid(True, alpha=0.3)
 fig2.tight_layout()
 fig2.savefig("openmdao_vlm_optimization_out/wing_planform.png", dpi=150)
+
+# --- Figure 3: Optimization convergence history ---
+import sqlite3
+
+db_path = "openmdao_vlm_optimization_out/opt_history.sql"
+conn = sqlite3.connect(db_path)
+
+# Get iteration coordinates that have derivative evaluations (major iterations)
+deriv_coords = {
+    row[0]
+    for row in conn.execute(
+        "SELECT iteration_coordinate FROM driver_derivatives"
+    ).fetchall()
+}
+
+# Get all driver iterations and filter to major ones
+rows = conn.execute(
+    "SELECT iteration_coordinate, outputs FROM driver_iterations"
+    " ORDER BY counter"
+).fetchall()
+conn.close()
+
+import json
+
+major_cd = []
+for coord, outputs_blob in rows:
+    if coord in deriv_coords:
+        outputs = json.loads(outputs_blob)
+        # Find the CD key (may be promoted or absolute path)
+        cd_val = None
+        for key, val in outputs.items():
+            if key.endswith(".CD") or key == "CD":
+                cd_val = val[0] if isinstance(val, list) else val
+                break
+        if cd_val is not None:
+            major_cd.append(cd_val)
+
+fig3, ax3 = plt.subplots(figsize=(7, 5))
+ax3.plot(range(1, len(major_cd) + 1), major_cd, "o-", color="tab:red",
+         markersize=4, linewidth=1.5)
+ax3.set_xlabel("Major Iteration")
+ax3.set_ylabel("$C_D$")
+ax3.set_title("Optimization Convergence History")
+ax3.grid(True, alpha=0.3)
+fig3.tight_layout()
+fig3.savefig("openmdao_vlm_optimization_out/convergence_history.png", dpi=150)
 
 plt.show()
 print("Plots saved to openmdao_vlm_optimization_out/")

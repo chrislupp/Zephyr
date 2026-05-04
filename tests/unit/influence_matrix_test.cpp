@@ -317,5 +317,165 @@ TEST_F(InfluenceMatrixTest, InducedVelocityFromMatrix) {
     }
 }
 
+TEST_F(InfluenceMatrixTest, SupersonicMachClamped) {
+    Aircraft aircraft = CreateRectangularWing(4.0, 1.0, 2, 2);
+
+    VortexLattice mesh;
+    mesh.GenerateFromAircraft(aircraft);
+
+    InfluenceMatrixBuilder builder(mesh);
+    builder.SetMachNumber(1.5);  // Supersonic - PG factor clamped to 1.0
+
+    MatX aic = builder.BuildNormalwashMatrix();
+
+    // Should still produce finite results
+    for (Index i = 0; i < aic.rows(); ++i) {
+        for (Index j = 0; j < aic.cols(); ++j) {
+            EXPECT_TRUE(std::isfinite(aic(i, j)));
+        }
+    }
+}
+
+TEST_F(InfluenceMatrixTest, ComputeInducedVelocity) {
+    Aircraft aircraft = CreateRectangularWing(4.0, 1.0, 2, 4);
+
+    VortexLattice mesh;
+    mesh.GenerateFromAircraft(aircraft);
+
+    InfluenceMatrixBuilder builder(mesh);
+
+    // Create uniform circulation
+    Index n = mesh.GetNumVortices();
+    VecX circulation = VecX::Ones(n) * 0.1;
+
+    Vec3 field_point(0.5, 0.0, 0.5);
+    Vec3 vel = builder.ComputeInducedVelocity(field_point, circulation);
+
+    EXPECT_TRUE(std::isfinite(vel.x()));
+    EXPECT_TRUE(std::isfinite(vel.y()));
+    EXPECT_TRUE(std::isfinite(vel.z()));
+
+    // With positive circulation, should get downwash at center
+    EXPECT_LT(vel.z(), 0.0);
+}
+
+TEST_F(InfluenceMatrixTest, ComputeSingleVortexVelocity) {
+    Aircraft aircraft = CreateRectangularWing(4.0, 1.0, 2, 4);
+
+    VortexLattice mesh;
+    mesh.GenerateFromAircraft(aircraft);
+
+    InfluenceMatrixBuilder builder(mesh);
+
+    Vec3 field_point(0.5, 0.0, 1.0);
+    Vec3 vel = builder.ComputeSingleVortexVelocity(field_point, 0, true);
+
+    EXPECT_TRUE(vel.allFinite());
+}
+
+TEST_F(InfluenceMatrixTest, YSymmetryInfluence) {
+    Aircraft aircraft("Symmetric Wing");
+
+    Surface wing("Wing");
+    wing.SetChordwisePanelCount(2);
+    wing.SetSpanwisePanelCount(4);
+    wing.SetYDuplicate(0.0);
+    wing.AddSection(Section(Vec3(0, 0, 0), 1.0, 0.0));
+    wing.AddSection(Section(Vec3(0, 2.0, 0), 1.0, 0.0));
+
+    aircraft.AddSurface(wing);
+    aircraft.SetReferenceArea(4.0);
+    aircraft.SetReferenceChord(1.0);
+    aircraft.SetReferenceSpan(4.0);
+    aircraft.SetYSymmetry(SymmetryType::kSymmetric);
+
+    VortexLattice mesh;
+    mesh.GenerateFromAircraft(aircraft);
+
+    InfluenceMatrixBuilder builder(mesh);
+    SymmetryConfig sym;
+    sym.y_symmetry = aircraft.GetYSymmetry();
+    sym.z_symmetry = aircraft.GetZSymmetry();
+    sym.z_symmetry_plane = aircraft.GetZSymmetryPlane();
+    builder.SetSymmetry(sym);
+    MatX aic = builder.BuildNormalwashMatrix();
+
+    // Should be finite
+    for (Index i = 0; i < aic.rows(); ++i) {
+        for (Index j = 0; j < aic.cols(); ++j) {
+            EXPECT_TRUE(std::isfinite(aic(i, j)));
+        }
+    }
+}
+
+TEST_F(InfluenceMatrixTest, DifferentComponentCoreRadius) {
+    // Two separate surfaces -> different components -> larger core radius
+    Aircraft aircraft("Two Component");
+
+    Surface wing("Wing");
+    wing.SetChordwisePanelCount(2);
+    wing.SetSpanwisePanelCount(2);
+    wing.SetComponentIndex(0);
+    wing.AddSection(Section(Vec3(0, -2, 0), 1.0, 0.0));
+    wing.AddSection(Section(Vec3(0, 2, 0), 1.0, 0.0));
+
+    Surface tail("Tail");
+    tail.SetChordwisePanelCount(2);
+    tail.SetSpanwisePanelCount(2);
+    tail.SetComponentIndex(1);
+    tail.AddSection(Section(Vec3(4, -1, 0), 0.5, 0.0));
+    tail.AddSection(Section(Vec3(4, 1, 0), 0.5, 0.0));
+
+    aircraft.AddSurface(wing);
+    aircraft.AddSurface(tail);
+    aircraft.SetReferenceArea(4.0);
+    aircraft.SetReferenceChord(1.0);
+    aircraft.SetReferenceSpan(4.0);
+
+    VortexLattice mesh;
+    mesh.GenerateFromAircraft(aircraft);
+
+    InfluenceMatrixBuilder builder(mesh);
+    MatX aic = builder.BuildNormalwashMatrix();
+
+    // All values finite
+    for (Index i = 0; i < aic.rows(); ++i) {
+        for (Index j = 0; j < aic.cols(); ++j) {
+            EXPECT_TRUE(std::isfinite(aic(i, j)));
+        }
+    }
+}
+
+TEST_F(InfluenceMatrixTest, InducedVelocityWithYSymmetry) {
+    Aircraft aircraft("Symmetric Wing");
+
+    Surface wing("Wing");
+    wing.SetChordwisePanelCount(2);
+    wing.SetSpanwisePanelCount(4);
+    wing.SetYDuplicate(0.0);
+    wing.AddSection(Section(Vec3(0, 0, 0), 1.0, 0.0));
+    wing.AddSection(Section(Vec3(0, 2.0, 0), 1.0, 0.0));
+
+    aircraft.AddSurface(wing);
+    aircraft.SetYSymmetry(SymmetryType::kSymmetric);
+
+    VortexLattice mesh;
+    mesh.GenerateFromAircraft(aircraft);
+
+    InfluenceMatrixBuilder builder(mesh);
+    SymmetryConfig sym;
+    sym.y_symmetry = aircraft.GetYSymmetry();
+    sym.z_symmetry = aircraft.GetZSymmetry();
+    sym.z_symmetry_plane = aircraft.GetZSymmetryPlane();
+    builder.SetSymmetry(sym);
+
+    Index n = mesh.GetNumVortices();
+    VecX circulation = VecX::Ones(n) * 0.1;
+
+    Vec3 field_point(0.5, 0.0, 0.5);
+    Vec3 vel = builder.ComputeInducedVelocity(field_point, circulation);
+    EXPECT_TRUE(vel.allFinite());
+}
+
 }  // namespace
 }  // namespace pegasus

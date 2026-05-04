@@ -97,7 +97,7 @@ Label-driven release pipeline. Triggered when a labeled PR is merged to `main`.
 ### Changelog
 `CHANGELOG.md` follows [Keep a Changelog](https://keepachangelog.com/) format. New changes go under `[Unreleased]`. The release workflow converts this to a versioned section automatically.
 
-**Important**: When adding, changing, or removing features, always update `CHANGELOG.md` as part of the same commit.
+**Important**: EVERY code change MUST include a corresponding `CHANGELOG.md` update in the same commit. This applies to all additions, modifications, and removals — no exceptions. If something previously added is later removed, update the changelog to reflect that removal. Never commit code changes without updating the changelog.
 
 ## Coding Conventions
 

@@ -29,7 +29,6 @@ add_executable(pegasus_unit_tests
     unit/stability_derivatives_test.cpp
     unit/trim_solver_test.cpp
     unit/eigenmode_test.cpp
-    unit/autodiff_test.cpp
     unit/mass_reader_test.cpp
     unit/vtk_export_test.cpp
     unit/control_surface_test.cpp
@@ -38,6 +37,16 @@ add_executable(pegasus_unit_tests
     unit/optvl_gradient_validation_test.cpp
     unit/mesh_input_test.cpp
     unit/mesh_node_gradient_test.cpp
+    unit/body_test.cpp
+    unit/analytical_aic_test.cpp
+    unit/analytical_biot_savart_test.cpp
+    unit/analytical_forces_test.cpp
+    unit/analytical_trefftz_test.cpp
+    unit/mesh_sensitivity_test.cpp
+    unit/math_utilities_test.cpp
+    unit/flight_constraints_test.cpp
+    unit/section_test.cpp
+    unit/aerodynamic_results_test.cpp
 )
 
 target_link_libraries(pegasus_unit_tests

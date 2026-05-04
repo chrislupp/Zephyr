@@ -56,7 +56,12 @@ ctest --output-on-failure
 ### Basic Analysis
 
 ```cpp
-#include "pegasus/pegasus.h"
+#include "pegasus/aero/force_calculator.h"
+#include "pegasus/core/types.h"
+#include "pegasus/geometry/aircraft.h"
+#include "pegasus/geometry/section.h"
+#include "pegasus/geometry/surface.h"
+#include "pegasus/solver/vortex_lattice_solver.h"
 
 using namespace pegasus;
 
@@ -104,7 +109,11 @@ int main() {
 ### Loading AVL Files
 
 ```cpp
-#include "pegasus/pegasus.h"
+#include "pegasus/aero/force_calculator.h"
+#include "pegasus/core/types.h"
+#include "pegasus/geometry/aircraft.h"
+#include "pegasus/io/avl_reader.h"
+#include "pegasus/solver/vortex_lattice_solver.h"
 
 using namespace pegasus;
 
@@ -134,7 +143,8 @@ int main() {
 ### Stability Derivatives
 
 ```cpp
-#include "pegasus/pegasus.h"
+#include "pegasus/aero/stability_derivatives.h"
+#include "pegasus/core/types.h"
 
 using namespace pegasus;
 
@@ -160,7 +170,9 @@ int main() {
 ### Trim Analysis
 
 ```cpp
-#include "pegasus/pegasus.h"
+#include "pegasus/core/types.h"
+#include "pegasus/trim/flight_constraints.h"
+#include "pegasus/trim/trim_solver.h"
 
 using namespace pegasus;
 
@@ -185,7 +197,8 @@ int main() {
 ### Eigenmode Analysis
 
 ```cpp
-#include "pegasus/pegasus.h"
+#include "pegasus/dynamics/eigenmode_analysis.h"
+#include "pegasus/dynamics/mass_properties.h"
 
 using namespace pegasus;
 
@@ -224,7 +237,6 @@ int main() {
 ```
 Pegasus/
 ├── include/pegasus/
-│   ├── pegasus.h               # Main facade header
 │   ├── core/                   # Types, constants
 │   ├── geometry/               # Airfoil, Section, Surface, Aircraft
 │   ├── io/                     # AVL/mass file readers

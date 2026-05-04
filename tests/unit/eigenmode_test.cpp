@@ -394,6 +394,153 @@ TEST_F(EigenmodeAnalysisTest, ModeTypeNames) {
     EXPECT_EQ(GetModeTypeName(ModeType::kDutchRoll), "Dutch Roll");
     EXPECT_EQ(GetModeTypeName(ModeType::kRollSubsidence), "Roll Subsidence");
     EXPECT_EQ(GetModeTypeName(ModeType::kSpiralMode), "Spiral");
+    EXPECT_EQ(GetModeTypeName(ModeType::kUnknown), "Unknown");
+    EXPECT_EQ(GetModeTypeName(ModeType::kOther), "Unknown");
+}
+
+TEST_F(EigenmodeAnalysisTest, GetTimeConstant) {
+    Eigenmode mode;
+    mode.eigenvalue = ComplexScalar(-0.5, 2.0);
+    Scalar tc = mode.GetTimeConstant();
+    // tc = -ln(2) / sigma = -ln(2) / (-0.5) = ln(2) * 2
+    EXPECT_NEAR(tc, std::log(2.0) * 2.0, 0.01);
+}
+
+TEST_F(EigenmodeAnalysisTest, GetTimeConstantZeroDamping) {
+    Eigenmode mode;
+    mode.eigenvalue = ComplexScalar(0.0, 2.0);
+    EXPECT_NEAR(mode.GetTimeConstant(), 0.0, kTestTolerance);
+}
+
+TEST_F(EigenmodeAnalysisTest, DampingRatioZeroFrequency) {
+    Eigenmode mode;
+    mode.eigenvalue = ComplexScalar(0.0, 0.0);
+    EXPECT_NEAR(mode.GetDampingRatio(), 0.0, kTestTolerance);
+}
+
+TEST_F(EigenmodeAnalysisTest, UnstableModeDetected) {
+    Eigenmode mode;
+    mode.eigenvalue = ComplexScalar(0.5, 1.0);
+    EXPECT_FALSE(mode.IsStable());
+    EXPECT_GT(mode.GetDamping(), 0.0);
+}
+
+TEST_F(EigenmodeAnalysisTest, FindModesByTypeEmpty) {
+    EigenmodeResults results;
+    results.is_valid = true;
+    auto found = results.FindModesByType(ModeType::kShortPeriod);
+    EXPECT_TRUE(found.empty());
+}
+
+TEST_F(EigenmodeAnalysisTest, FindModesByTypeWithMatch) {
+    EigenmodeResults results;
+    results.is_valid = true;
+
+    Eigenmode m1;
+    m1.type = ModeType::kShortPeriod;
+    m1.eigenvalue = ComplexScalar(-1.0, 3.0);
+    results.modes.push_back(m1);
+
+    Eigenmode m2;
+    m2.type = ModeType::kPhugoid;
+    m2.eigenvalue = ComplexScalar(-0.1, 0.5);
+    results.modes.push_back(m2);
+
+    auto sp = results.FindModesByType(ModeType::kShortPeriod);
+    EXPECT_EQ(sp.size(), 1u);
+    EXPECT_NEAR(sp[0]->GetFrequency(), 3.0, kTestTolerance);
+}
+
+TEST_F(EigenmodeAnalysisTest, GetDutchRollNotFound) {
+    EigenmodeResults results;
+    results.is_valid = true;
+    EXPECT_EQ(results.GetDutchRoll(), nullptr);
+}
+
+TEST_F(EigenmodeAnalysisTest, GetPhugoidNotFound) {
+    EigenmodeResults results;
+    results.is_valid = true;
+    EXPECT_EQ(results.GetPhugoid(), nullptr);
+}
+
+TEST_F(EigenmodeAnalysisTest, GetShortPeriodNotFound) {
+    EigenmodeResults results;
+    results.is_valid = true;
+    EXPECT_EQ(results.GetShortPeriod(), nullptr);
+}
+
+TEST_F(EigenmodeAnalysisTest, IsStableAllStable) {
+    EigenmodeResults results;
+    Eigenmode m;
+    m.eigenvalue = ComplexScalar(-1.0, 2.0);
+    results.modes.push_back(m);
+    m.eigenvalue = ComplexScalar(-0.5, 0.0);
+    results.modes.push_back(m);
+    EXPECT_TRUE(results.IsStable());
+}
+
+TEST_F(EigenmodeAnalysisTest, IsStableOneUnstable) {
+    EigenmodeResults results;
+    Eigenmode m;
+    m.eigenvalue = ComplexScalar(-1.0, 2.0);
+    results.modes.push_back(m);
+    m.eigenvalue = ComplexScalar(0.1, 0.5);  // unstable
+    results.modes.push_back(m);
+    EXPECT_FALSE(results.IsStable());
+}
+
+TEST_F(EigenmodeAnalysisTest, IsStableEmpty) {
+    EigenmodeResults results;
+    EXPECT_TRUE(results.IsStable());  // vacuous truth
+}
+
+TEST_F(MassPropertiesTest, SetInertiaTensor) {
+    MassProperties props;
+    Mat3 I;
+    I << 100, -5, -2, -5, 200, -3, -2, -3, 300;
+    props.SetInertiaTensor(I);
+    EXPECT_NEAR(props.Ixx, 100.0, kTestTolerance);
+    EXPECT_NEAR(props.Iyy, 200.0, kTestTolerance);
+    EXPECT_NEAR(props.Izz, 300.0, kTestTolerance);
+    EXPECT_NEAR(props.Ixy, 5.0, kTestTolerance);
+    EXPECT_NEAR(props.Iyz, 3.0, kTestTolerance);
+    EXPECT_NEAR(props.Ixz, 2.0, kTestTolerance);
+}
+
+TEST(FlightStateTest, BodyVelocityWithBeta) {
+    FlightState state;
+    state.velocity = 50.0;
+    state.alpha = 0.0;
+    state.beta = 0.1;  // Small sideslip
+
+    Vec3 v = state.GetBodyVelocity();
+    EXPECT_GT(v.y(), 0.0);  // Positive sideslip -> positive v
+    EXPECT_TRUE(v.allFinite());
+}
+
+TEST(FlightStateTest, DefaultValues) {
+    FlightState state;
+    EXPECT_NEAR(state.velocity, 0.0, kTestTolerance);
+    EXPECT_NEAR(state.alpha, 0.0, kTestTolerance);
+    EXPECT_NEAR(state.beta, 0.0, kTestTolerance);
+    EXPECT_NEAR(state.density, 1.225, kTestTolerance);
+    EXPECT_NEAR(state.gravity, 9.81, kTestTolerance);
+}
+
+TEST(ApparentMassTest, DefaultState) {
+    ApparentMass am;
+    EXPECT_FALSE(am.include_effects);
+    EXPECT_NEAR(am.mass_matrix.norm(), 0.0, kTestTolerance);
+    EXPECT_NEAR(am.inertia_matrix.norm(), 0.0, kTestTolerance);
+}
+
+TEST_F(EigenmodeAnalysisTest, SetApparentMass) {
+    EigenmodeAnalysis analysis;
+    ApparentMass am;
+    am.include_effects = true;
+    am.mass_matrix = Mat3::Identity() * 10.0;
+    analysis.SetApparentMass(am);
+    // Just verify it doesn't crash
 }
 
 }  // namespace
