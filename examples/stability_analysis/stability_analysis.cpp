@@ -21,7 +21,15 @@
 /// @file stability_analysis.cpp
 /// @brief Example: Stability derivatives and dynamic mode analysis.
 
-#include "pegasus/pegasus.h"
+#include "pegasus/aero/force_calculator.h"
+#include "pegasus/aero/stability_derivatives.h"
+#include "pegasus/core/types.h"
+#include "pegasus/dynamics/eigenmode_analysis.h"
+#include "pegasus/dynamics/mass_properties.h"
+#include "pegasus/geometry/aircraft.h"
+#include "pegasus/geometry/section.h"
+#include "pegasus/geometry/surface.h"
+#include "pegasus/solver/vortex_lattice_solver.h"
 
 #include <iomanip>
 #include <iostream>

@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- Comprehensive unit tests for geometry (Surface, Aircraft, Airfoil, Section, AVL reader), math utilities, influence matrix, trim solver, flight constraints, aerodynamic results, eigenmode analysis, mass properties, vortex lattice, and VLM solver — line coverage increased from ~80% to ~92%
+- Philote and VTK/visualization source exclusion from Codecov coverage reporting
+
+### Removed
+- God header `pegasus/pegasus.h` — consumers now include specific headers directly
+- Autodiff tape and dual number headers (`gradients/autodiff_tape.h`, `gradients/dual_number.h`)
+
 ## [0.1.0] - 2026-05-03
 
 ### Added

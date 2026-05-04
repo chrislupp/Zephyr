@@ -21,7 +21,12 @@
 /// @file basic_analysis.cpp
 /// @brief Example: Basic aerodynamic analysis of a rectangular wing.
 
-#include "pegasus/pegasus.h"
+#include "pegasus/aero/force_calculator.h"
+#include "pegasus/core/types.h"
+#include "pegasus/geometry/aircraft.h"
+#include "pegasus/geometry/section.h"
+#include "pegasus/geometry/surface.h"
+#include "pegasus/solver/vortex_lattice_solver.h"
 
 #include <iomanip>
 #include <iostream>

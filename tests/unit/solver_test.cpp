@@ -382,5 +382,84 @@ TEST_F(VortexLatticeSolverTest, InducedVelocityAtControlPoints) {
     EXPECT_LT(avg_w, 0.0);
 }
 
+TEST_F(VortexLatticeSolverTest, GetMeshMutable) {
+    Aircraft aircraft = CreateRectangularWing(4.0, 1.0, 4, 4);
+    VortexLatticeSolver solver;
+    solver.SetAircraft(aircraft);
+
+    VortexLattice& mesh = solver.GetMeshMutable();
+    EXPECT_GT(mesh.GetNumVortices(), 0);
+}
+
+TEST_F(VortexLatticeSolverTest, GetReferenceQuantities) {
+    VortexLatticeSolver solver;
+    // Default reference quantities
+    const auto& ref = solver.GetReferenceQuantities();
+    EXPECT_NEAR(ref.reference_area, 1.0, 1e-10);
+    EXPECT_NEAR(ref.reference_chord, 1.0, 1e-10);
+    EXPECT_NEAR(ref.reference_span, 1.0, 1e-10);
+}
+
+TEST_F(VortexLatticeSolverTest, SetReferencePoint) {
+    VortexLatticeSolver solver;
+    Vec3 ref(0.25, 0.0, 0.0);
+    solver.SetReferencePoint(ref);
+    EXPECT_NEAR(solver.GetReferencePoint().x(), 0.25, 1e-10);
+    EXPECT_NEAR(solver.GetReferencePoint().y(), 0.0, 1e-10);
+}
+
+TEST_F(VortexLatticeSolverTest, SetSymmetry) {
+    VortexLatticeSolver solver;
+    SymmetryConfig sym;
+    sym.y_symmetry = SymmetryType::kSymmetric;
+    solver.SetSymmetry(sym);
+    EXPECT_EQ(solver.GetSymmetry().y_symmetry, SymmetryType::kSymmetric);
+}
+
+TEST_F(VortexLatticeSolverTest, InitialStateInvalid) {
+    VortexLatticeSolver solver;
+    EXPECT_FALSE(solver.IsAICValid());
+    EXPECT_FALSE(solver.AreUnitResponsesValid());
+}
+
+TEST_F(VortexLatticeSolverTest, GetSolution) {
+    Aircraft aircraft = CreateRectangularWing(4.0, 1.0, 4, 4);
+    VortexLatticeSolver solver;
+    solver.SetAircraft(aircraft);
+
+    FlightCondition condition;
+    condition.alpha = 5.0 * kDegreesToRadians;
+    solver.Solve(condition);
+
+    const auto& sol = solver.GetSolution();
+    EXPECT_TRUE(sol.is_valid);
+    EXPECT_GT(sol.circulation.size(), 0);
+}
+
+TEST_F(VortexLatticeSolverTest, GetMatrices) {
+    Aircraft aircraft = CreateRectangularWing(4.0, 1.0, 4, 4);
+    VortexLatticeSolver solver;
+    solver.SetAircraft(aircraft);
+    solver.RebuildAIC();
+
+    const auto& aic = solver.GetAICMatrix();
+    Index n = solver.GetMesh().GetNumVortices();
+    EXPECT_EQ(aic.rows(), n);
+    EXPECT_EQ(aic.cols(), n);
+
+    const auto& vel = solver.GetVelocityInfluenceMatrix();
+    EXPECT_EQ(vel.rows(), 3 * n);
+    EXPECT_EQ(vel.cols(), n);
+}
+
+TEST_F(VortexLatticeSolverTest, FreestreamDirectionWithBeta) {
+    FlightCondition cond;
+    cond.alpha = 0.0;
+    cond.beta = 10.0 * kDegreesToRadians;
+    Vec3 dir = VortexLatticeSolver::ComputeFreestreamDirection(cond);
+    EXPECT_GT(dir.y(), 0.0);  // positive beta -> positive y component
+    EXPECT_TRUE(dir.allFinite());
+}
+
 }  // namespace
 }  // namespace pegasus
