@@ -39,6 +39,7 @@
 
 #include "pegasus/core/types.h"
 #include "pegasus/geometry/mesh_input.h"
+#include "pegasus/gradients/output_selection.h"
 #include "pegasus/solver/vortex_lattice_solver.h"
 
 namespace pegasus::gradients {
@@ -132,16 +133,16 @@ struct ForceGradients {
 /// @param condition Flight condition
 /// @param aircraft Aircraft geometry (for reference quantities)
 /// @return Gradients of all force coefficients w.r.t. circulation
-ForceGradients ComputeForceGradients(const VortexLattice& mesh,
-                                     const SolutionState& solution,
-                                     const FlightCondition& condition,
-                                     const Aircraft& aircraft);
+ForceGradients ComputeForceGradients(
+    const VortexLattice& mesh, const SolutionState& solution,
+    const FlightCondition& condition, const Aircraft& aircraft,
+    const OutputSelection& selection = OutputSelection{});
 
 /// @brief Compute force gradients using reference quantities directly.
-ForceGradients ComputeForceGradients(const VortexLattice& mesh,
-                                     const SolutionState& solution,
-                                     const FlightCondition& condition,
-                                     const ReferenceQuantities& ref);
+ForceGradients ComputeForceGradients(
+    const VortexLattice& mesh, const SolutionState& solution,
+    const FlightCondition& condition, const ReferenceQuantities& ref,
+    const OutputSelection& selection = OutputSelection{});
 
 /// @brief Compute total derivative of objective w.r.t. flight condition.
 ///
