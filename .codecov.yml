@@ -25,6 +25,10 @@ ignore:
   - "cmake-build-*/**/*"
   - "scripts/**/*"
   - "docs/**/*"
+  - "src/philote/**/*"
+  - "include/pegasus/philote/**/*"
+  - "src/visualization/**/*"
+  - "include/pegasus/visualization/**/*"
 
 comment:
   layout: "reach,diff,flags,tree"

@@ -6,7 +6,10 @@
 // Build:  make benchmark_analysis
 // Run:    ./benchmark_analysis > results_vlm.csv
 
-#include "pegasus/pegasus.h"
+#include "pegasus/aero/force_calculator.h"
+#include "pegasus/core/types.h"
+#include "pegasus/geometry/mesh_input.h"
+#include "pegasus/solver/vortex_lattice_solver.h"
 
 #include <chrono>
 #include <cmath>

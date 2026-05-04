@@ -1,5 +1,5 @@
 # Copyright (c) 2024 VLM Authors
-# SPDX-License-Identifier: AGPL-3.0-or-later
+# SPDX-License-Identifier: GPL-3.0-or-later
 #
 # OpenMDAO VLM analysis using Philote MDO disciplines.
 #
@@ -36,11 +36,6 @@ twist_arr = np.zeros(n_stations)
 xle_arr = np.zeros(n_stations)
 zle_arr = np.zeros(n_stations)
 
-# Reference quantities
-ref_area = span * chord_val      # planform area [m^2]
-ref_chord = chord_val            # mean aerodynamic chord [m]
-ref_span = span                  # full span [m]
-
 # Build the OpenMDAO problem
 prob = om.Problem()
 model = prob.model
@@ -55,8 +50,10 @@ model.add_subsystem(
         ny=ny,
         cosine_chordwise_spacing="true",
         cosine_spanwise_spacing="false",
+        y_duplicated="true",
     ),
     promotes_inputs=["chord", "twist", "xle", "yle", "zle"],
+    promotes_outputs=["reference_area", "reference_span", "reference_chord"],
 )
 
 # VLM solver discipline (port 50051)
@@ -94,10 +91,7 @@ prob["xle"] = xle_arr
 prob["yle"] = yle
 prob["zle"] = zle_arr
 
-# Set reference quantities
-prob["reference_area"] = ref_area
-prob["reference_chord"] = ref_chord
-prob["reference_span"] = ref_span
+# reference_area, reference_chord, reference_span computed by mesh_comp
 prob["moment_ref_x"] = 0.25 * chord_val
 prob["moment_ref_y"] = 0.0
 prob["moment_ref_z"] = 0.0

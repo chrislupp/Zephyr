@@ -423,5 +423,92 @@ TEST_F(VortexLatticeTest, ClearAndRegenerate) {
     EXPECT_EQ(mesh.GetNumStrips(), num_strip_1);
 }
 
+TEST_F(VortexLatticeTest, CoreRadiusFractions) {
+    VortexLattice mesh;
+    EXPECT_NEAR(mesh.GetVortexCoreRadiusChordFraction(), 0.75, 1e-6);
+    EXPECT_NEAR(mesh.GetVortexCoreRadiusWidthFraction(), 0.25, 1e-6);
+
+    mesh.SetVortexCoreRadiusChordFraction(0.5);
+    mesh.SetVortexCoreRadiusWidthFraction(0.1);
+    EXPECT_NEAR(mesh.GetVortexCoreRadiusChordFraction(), 0.5, 1e-6);
+    EXPECT_NEAR(mesh.GetVortexCoreRadiusWidthFraction(), 0.1, 1e-6);
+}
+
+TEST_F(VortexLatticeTest, GetMeshInputNullByDefault) {
+    VortexLattice mesh;
+    EXPECT_EQ(mesh.GetMeshInput(), nullptr);
+}
+
+TEST_F(VortexLatticeTest, MutableVortexAccess) {
+    Aircraft aircraft = CreateRectangularWing(4.0, 1.0, 2, 2);
+    VortexLattice mesh;
+    mesh.GenerateFromAircraft(aircraft);
+
+    // Get mutable vortex and modify it
+    HorseshoeVortex& vor = mesh.GetVortex(0);
+    Vec3 orig_cp = vor.control_point;
+    vor.control_point = Vec3(99, 99, 99);
+    EXPECT_NEAR(mesh.GetVortex(0).control_point.x(), 99.0, 1e-6);
+    vor.control_point = orig_cp;  // restore
+}
+
+TEST_F(VortexLatticeTest, MutableStripAccess) {
+    Aircraft aircraft = CreateRectangularWing(4.0, 1.0, 2, 2);
+    VortexLattice mesh;
+    mesh.GenerateFromAircraft(aircraft);
+
+    Strip& strip = mesh.GetStrip(0);
+    EXPECT_GE(strip.num_vortices, 1);
+}
+
+TEST_F(VortexLatticeTest, GetVorticesMutable) {
+    Aircraft aircraft = CreateRectangularWing(4.0, 1.0, 2, 2);
+    VortexLattice mesh;
+    mesh.GenerateFromAircraft(aircraft);
+
+    auto& vortices = mesh.GetVortices();
+    EXPECT_FALSE(vortices.empty());
+}
+
+TEST_F(VortexLatticeTest, GetStripsMutable) {
+    Aircraft aircraft = CreateRectangularWing(4.0, 1.0, 2, 2);
+    VortexLattice mesh;
+    mesh.GenerateFromAircraft(aircraft);
+
+    auto& strips = mesh.GetStrips();
+    EXPECT_FALSE(strips.empty());
+}
+
+TEST_F(VortexLatticeTest, ControlSurfaceNamesEmpty) {
+    Aircraft aircraft = CreateRectangularWing(4.0, 1.0, 2, 2);
+    VortexLattice mesh;
+    mesh.GenerateFromAircraft(aircraft);
+
+    EXPECT_TRUE(mesh.GetControlSurfaceNames().empty());
+}
+
+TEST_F(VortexLatticeTest, ControlSurfaceInfluencesSize) {
+    Aircraft aircraft = CreateRectangularWing(4.0, 1.0, 2, 2);
+    VortexLattice mesh;
+    mesh.GenerateFromAircraft(aircraft);
+
+    auto& influences = mesh.GetControlSurfaceInfluences();
+    EXPECT_EQ(static_cast<Index>(influences.size()), mesh.GetNumVortices());
+}
+
+TEST_F(VortexLatticeTest, RecalculateNormals) {
+    Aircraft aircraft = CreateRectangularWing(4.0, 1.0, 2, 2);
+    VortexLattice mesh;
+    mesh.GenerateFromAircraft(aircraft);
+
+    // Normals should already be computed, save one
+    Vec3 normal0 = mesh.GetVortex(0).normal_at_control_point;
+
+    // Recalculate and verify they're the same
+    mesh.RecalculateNormals();
+    EXPECT_NEAR((mesh.GetVortex(0).normal_at_control_point - normal0).norm(),
+                0.0, 1e-10);
+}
+
 }  // namespace
 }  // namespace pegasus

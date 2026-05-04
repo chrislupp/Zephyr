@@ -629,5 +629,158 @@ TEST_F(MultiSurfaceGeometryGradientTest, TailTwistAffectsPitchingMoment) {
         << "Positive tail twist should create nose-down moment";
 }
 
+// ============================================================================
+// OutputSelection Tests
+// ============================================================================
+
+/// @brief Test that OutputSelection subset results match all-outputs results.
+TEST_F(GradientCalculatorTest, OutputSelectionSubsetMatchesFullResults) {
+    FlightCondition condition;
+    condition.alpha = 5.0 * kDegreesToRadians;
+
+    // Compute with all outputs enabled (default)
+    auto full_grads = grad_calc_.ComputeAlphaDerivatives(condition);
+
+    // Compute with only CL and CD enabled
+    gradients::OutputSelection sel;
+    sel.CY = false;
+    sel.Cl = false;
+    sel.Cm = false;
+    sel.Cn = false;
+    sel.CDi = false;
+
+    gradients::GradientCalculator subset_calc;
+    subset_calc.SetAircraft(aircraft_);
+    subset_calc.SetOutputSelection(sel);
+    auto subset_grads = subset_calc.ComputeAlphaDerivatives(condition);
+
+    // CL and CD should match the full result
+    EXPECT_NEAR(subset_grads.dCL, full_grads.dCL, 1e-10)
+        << "CL gradient should match full result";
+    EXPECT_NEAR(subset_grads.dCD, full_grads.dCD, 1e-10)
+        << "CD gradient should match full result";
+
+    // Disabled outputs should be zero
+    EXPECT_EQ(subset_grads.dCY, 0.0);
+    EXPECT_EQ(subset_grads.dCl, 0.0);
+    EXPECT_EQ(subset_grads.dCm, 0.0);
+    EXPECT_EQ(subset_grads.dCn, 0.0);
+}
+
+/// @brief Test single-output selection matches full result.
+TEST_F(GradientCalculatorTest, OutputSelectionSingleOutput) {
+    FlightCondition condition;
+    condition.alpha = 5.0 * kDegreesToRadians;
+
+    auto full_grads = grad_calc_.ComputeAlphaDerivatives(condition);
+
+    // Enable only Cm
+    gradients::OutputSelection sel;
+    sel.CL = false;
+    sel.CD = false;
+    sel.CY = false;
+    sel.Cl = false;
+    sel.Cn = false;
+    sel.CDi = false;
+
+    gradients::GradientCalculator single_calc;
+    single_calc.SetAircraft(aircraft_);
+    single_calc.SetOutputSelection(sel);
+    auto single_grads = single_calc.ComputeAlphaDerivatives(condition);
+
+    EXPECT_NEAR(single_grads.dCm, full_grads.dCm, 1e-10)
+        << "Single Cm gradient should match full result";
+
+    EXPECT_EQ(single_grads.dCL, 0.0);
+    EXPECT_EQ(single_grads.dCD, 0.0);
+    EXPECT_EQ(single_grads.dCY, 0.0);
+    EXPECT_EQ(single_grads.dCl, 0.0);
+    EXPECT_EQ(single_grads.dCn, 0.0);
+}
+
+/// @brief Test that all-disabled selection returns zeros without crashing.
+TEST_F(GradientCalculatorTest, OutputSelectionAllDisabled) {
+    FlightCondition condition;
+    condition.alpha = 5.0 * kDegreesToRadians;
+
+    gradients::OutputSelection sel;
+    sel.CL = false;
+    sel.CD = false;
+    sel.CY = false;
+    sel.Cl = false;
+    sel.Cm = false;
+    sel.Cn = false;
+    sel.CDi = false;
+
+    gradients::GradientCalculator empty_calc;
+    empty_calc.SetAircraft(aircraft_);
+    empty_calc.SetOutputSelection(sel);
+    auto grads = empty_calc.ComputeAlphaDerivatives(condition);
+
+    EXPECT_EQ(grads.dCL, 0.0);
+    EXPECT_EQ(grads.dCD, 0.0);
+    EXPECT_EQ(grads.dCY, 0.0);
+    EXPECT_EQ(grads.dCl, 0.0);
+    EXPECT_EQ(grads.dCm, 0.0);
+    EXPECT_EQ(grads.dCn, 0.0);
+}
+
+/// @brief Test OutputSelection with beta derivatives.
+TEST_F(GradientCalculatorTest, OutputSelectionBetaDerivatives) {
+    FlightCondition condition;
+    condition.alpha = 3.0 * kDegreesToRadians;
+    condition.beta = 2.0 * kDegreesToRadians;
+
+    auto full_grads = grad_calc_.ComputeBetaDerivatives(condition);
+
+    gradients::OutputSelection sel;
+    sel.CL = false;
+    sel.CD = false;
+    sel.Cm = false;
+    sel.CDi = false;
+
+    gradients::GradientCalculator subset_calc;
+    subset_calc.SetAircraft(aircraft_);
+    subset_calc.SetOutputSelection(sel);
+    auto subset_grads = subset_calc.ComputeBetaDerivatives(condition);
+
+    EXPECT_NEAR(subset_grads.dCY, full_grads.dCY, 1e-10);
+    EXPECT_NEAR(subset_grads.dCl, full_grads.dCl, 1e-10);
+    EXPECT_NEAR(subset_grads.dCn, full_grads.dCn, 1e-10);
+
+    EXPECT_EQ(subset_grads.dCL, 0.0);
+    EXPECT_EQ(subset_grads.dCD, 0.0);
+    EXPECT_EQ(subset_grads.dCm, 0.0);
+}
+
+/// @brief Test OutputSelection with geometry gradients.
+TEST_F(GradientCalculatorTest, OutputSelectionGeometryGradients) {
+    FlightCondition condition;
+    condition.alpha = 5.0 * kDegreesToRadians;
+
+    auto full_grads = grad_calc_.ComputeSectionGradient(
+        condition, 0, 0, gradients::GeometryVariable::kChord);
+
+    gradients::OutputSelection sel;
+    sel.CY = false;
+    sel.Cl = false;
+    sel.Cn = false;
+    sel.CDi = false;
+
+    gradients::GradientCalculator subset_calc;
+    subset_calc.SetAircraft(aircraft_);
+    subset_calc.SetOutputSelection(sel);
+    auto subset_grads = subset_calc.ComputeSectionGradient(
+        condition, 0, 0, gradients::GeometryVariable::kChord);
+
+    EXPECT_NEAR(subset_grads.dCL, full_grads.dCL, 1e-10);
+    EXPECT_NEAR(subset_grads.dCD, full_grads.dCD, 1e-10);
+    EXPECT_NEAR(subset_grads.dCm, full_grads.dCm, 1e-10);
+
+    EXPECT_EQ(subset_grads.dCY, 0.0);
+    EXPECT_EQ(subset_grads.dCl, 0.0);
+    EXPECT_EQ(subset_grads.dCn, 0.0);
+}
+
 }  // namespace
 }  // namespace pegasus

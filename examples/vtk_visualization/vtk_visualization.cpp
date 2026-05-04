@@ -22,7 +22,13 @@
 /// @brief Example: Export VLM results to VTK format for visualization in
 /// ParaView
 
-#include "pegasus/pegasus.h"
+#include "pegasus/aero/force_calculator.h"
+#include "pegasus/core/types.h"
+#include "pegasus/geometry/aircraft.h"
+#include "pegasus/geometry/section.h"
+#include "pegasus/geometry/surface.h"
+#include "pegasus/solver/vortex_lattice_solver.h"
+#include "pegasus/visualization/vtk_export.h"
 
 #include <filesystem>
 #include <iostream>
