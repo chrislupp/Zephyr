@@ -1,5 +1,5 @@
 # Copyright (c) 2024 VLM Authors
-# SPDX-License-Identifier: AGPL-3.0-or-later
+# SPDX-License-Identifier: GPL-3.0-or-later
 #
 # OpenMDAO chord optimization using Philote MDO disciplines.
 #
@@ -22,13 +22,14 @@ import philote_mdo.openmdao as pmom
 class AkimaChord(om.ExplicitComponent):
     """Interpolates chord from control points to spanwise stations using Akima.
 
-    Uses scipy's Akima1DInterpolator.
+    Control points and stations are defined in normalized span coordinates
+    (eta in [0, 1]), so the interpolation is independent of halfspan.
     """
 
     def initialize(self):
         self.options.declare("n_cp", types=int)
         self.options.declare("n_stations", types=int)
-        self.options.declare("y_stations", types=np.ndarray)
+        self.options.declare("eta_stations", types=np.ndarray)
 
     def setup(self):
         n_cp = self.options["n_cp"]
@@ -42,21 +43,19 @@ class AkimaChord(om.ExplicitComponent):
     def compute(self, inputs, outputs):
         from scipy.interpolate import Akima1DInterpolator
         n_cp = self.options["n_cp"]
-        y_st = self.options["y_stations"]
-        half_span = y_st[-1]
+        eta_st = self.options["eta_stations"]
 
-        y_cp = np.linspace(0.0, half_span, n_cp)
-        spline = Akima1DInterpolator(y_cp, inputs["chord_cp"])
-        outputs["chord"] = spline(y_st)
+        eta_cp = np.linspace(0.0, 1.0, n_cp)
+        spline = Akima1DInterpolator(eta_cp, inputs["chord_cp"])
+        outputs["chord"] = spline(eta_st)
 
     def compute_partials(self, inputs, partials):
         from scipy.interpolate import Akima1DInterpolator
         n_cp = self.options["n_cp"]
         n_st = self.options["n_stations"]
-        y_st = self.options["y_stations"]
-        half_span = y_st[-1]
+        eta_st = self.options["eta_stations"]
 
-        y_cp = np.linspace(0.0, half_span, n_cp)
+        eta_cp = np.linspace(0.0, 1.0, n_cp)
         cp = inputs["chord_cp"].ravel()
 
         # Compute Jacobian via finite differences on the spline
@@ -65,17 +64,17 @@ class AkimaChord(om.ExplicitComponent):
         for k in range(n_cp):
             cp_p = cp.copy()
             cp_p[k] += h
-            sp_p = Akima1DInterpolator(y_cp, cp_p)
+            sp_p = Akima1DInterpolator(eta_cp, cp_p)
             cp_m = cp.copy()
             cp_m[k] -= h
-            sp_m = Akima1DInterpolator(y_cp, cp_m)
-            jac[:, k] = (sp_p(y_st) - sp_m(y_st)) / (2.0 * h)
+            sp_m = Akima1DInterpolator(eta_cp, cp_m)
+            jac[:, k] = (sp_p(eta_st) - sp_m(eta_st)) / (2.0 * h)
 
         partials["chord", "chord_cp"] = jac
 
 
 # Wing geometry parameters
-span = 10.0          # full span [m]
+halfspan_init = 5.0  # initial half-span [m]
 chord_init = 1.0     # initial chord [m]
 alpha_deg = 5.0      # angle of attack [deg]
 mach = 0.0           # incompressible
@@ -91,8 +90,8 @@ ny = 12  # spanwise panels (half-span, y-duplicated)
 n_stations = ny + 1
 n_cp = 5  # chord B-spline control points
 
-# Spanwise stations (half-span, linear spacing)
-yle = np.linspace(0.0, span / 2.0, n_stations)
+# Normalized spanwise stations (eta in [0, 1])
+eta_stations = np.linspace(0.0, 1.0, n_stations)
 
 # Initial geometry: constant chord, zero twist
 chord_cp_init = np.full(n_cp, chord_init)
@@ -101,7 +100,7 @@ xle_arr = np.zeros(n_stations)
 zle_arr = np.zeros(n_stations)
 
 # Initial planform area (used as constraint target)
-ref_area = span * chord_init
+ref_area = 2.0 * halfspan_init * chord_init
 
 # Build the OpenMDAO problem
 prob = om.Problem()
@@ -110,7 +109,7 @@ model = prob.model
 # Chord interpolation (control points -> stations)
 model.add_subsystem(
     "chord_interp",
-    AkimaChord(n_cp=n_cp, n_stations=n_stations, y_stations=yle),
+    AkimaChord(n_cp=n_cp, n_stations=n_stations, eta_stations=eta_stations),
     promotes_inputs=[("chord_cp", "chord_cp")],
     promotes_outputs=["chord"],
 )
@@ -124,10 +123,9 @@ model.add_subsystem(
         nx=nx,
         ny=ny,
         cosine_chordwise_spacing="true",
-        cosine_spanwise_spacing="false",
         y_duplicated="true",
     ),
-    promotes_inputs=["chord", "twist", "xle", "yle", "zle"],
+    promotes_inputs=["chord", "twist", "xle", "zle", "halfspan", "eta"],
     promotes_outputs=["reference_area", "reference_span", "reference_chord"],
 )
 
@@ -172,6 +170,9 @@ prob.driver.recording_options["record_derivatives"] = True
 # Design variable: chord control points
 model.add_design_var("chord_cp", lower=0.1, upper=3.0)
 
+# Design variable: half-span (upper bound: 50% growth from initial)
+model.add_design_var("halfspan", lower=2.0, upper=7.5)
+
 # Design variable: angle of attack (free to meet CL constraint)
 model.add_design_var("alpha", lower=np.deg2rad(-10.0), upper=np.deg2rad(15.0))
 
@@ -188,8 +189,9 @@ prob.setup()
 prob["chord_cp"] = chord_cp_init
 prob["twist"] = twist_arr
 prob["xle"] = xle_arr
-prob["yle"] = yle
 prob["zle"] = zle_arr
+prob["halfspan"] = halfspan_init
+prob["eta"] = eta_stations
 
 # reference_area, reference_chord, reference_span computed by mesh_comp
 prob["moment_ref_x"] = 0.25 * chord_init
@@ -212,6 +214,9 @@ prob.cleanup()
 # Print results
 opt_chord = prob["chord"]
 opt_alpha = np.rad2deg(prob["alpha"][0])
+opt_halfspan = prob["halfspan"][0]
+opt_span = 2.0 * opt_halfspan
+opt_yle = eta_stations * opt_halfspan
 
 print(f"\n{'='*50}")
 print(f"Optimization Results")
@@ -220,19 +225,21 @@ print(f"  CL = {prob['CL'][0]:.6f}  (target: {CL_target})")
 print(f"  CD = {prob['CD'][0]:.6f}")
 print(f"  L/D = {prob['CL'][0] / prob['CD'][0]:.2f}")
 print(f"  alpha = {opt_alpha:.3f} deg")
+print(f"  half-span = {opt_halfspan:.4f} m  (initial: {halfspan_init})")
+print(f"  full span = {opt_span:.4f} m")
 print(f"  planform area = {prob['reference_area'][0]:.4f} m^2  (target: {ref_area})")
 print(f"\n  Chord control points: {prob['chord_cp'].ravel()}")
 print(f"\n  Chord distribution (root to tip):")
-for i, (y, c) in enumerate(zip(yle, opt_chord)):
+for i, (y, c) in enumerate(zip(opt_yle, opt_chord)):
     print(f"    y={y:6.3f} m  chord={c:.4f} m")
 print(f"{'='*50}\n")
 
 # Compare to elliptic planform
 c_root = opt_chord[0]
-elliptic = c_root * np.sqrt(np.maximum(1.0 - (2.0 * yle / span) ** 2, 0.0))
+elliptic = c_root * np.sqrt(np.maximum(1.0 - (2.0 * opt_yle / opt_span) ** 2, 0.0))
 print("Comparison to elliptic planform (c_root matched):")
 print(f"  {'y [m]':>8s}  {'optimized':>10s}  {'elliptic':>10s}  {'ratio':>8s}")
-for y, c_opt, c_ell in zip(yle, opt_chord, elliptic):
+for y, c_opt, c_ell in zip(opt_yle, opt_chord, elliptic):
     ratio = c_opt / c_ell if c_ell > 1e-6 else float("inf")
     print(f"  {y:8.3f}  {c_opt:10.4f}  {c_ell:10.4f}  {ratio:8.3f}")
 print()
@@ -241,27 +248,28 @@ print()
 import matplotlib.pyplot as plt
 
 # Full-span arrays (mirror the half-span data)
-y_full = np.concatenate([-yle[::-1], yle[1:]])
+y_full = np.concatenate([-opt_yle[::-1], opt_yle[1:]])
 chord_full = np.concatenate([opt_chord[::-1], opt_chord[1:]])
 elliptic_full = np.concatenate([elliptic[::-1], elliptic[1:]])
 
 subtitle = (
     f"$C_L$={prob['CL'][0]:.4f}, $C_D$={prob['CD'][0]:.6f}, "
     f"$L/D$={prob['CL'][0]/prob['CD'][0]:.1f}, "
-    f"$\\alpha$={opt_alpha:.2f}$^\\circ$"
+    f"$\\alpha$={opt_alpha:.2f}$^\\circ$, "
+    f"span={opt_span:.2f} m"
 )
 
 # --- Figure 1: Chord distribution ---
 fig1, ax1 = plt.subplots(figsize=(7, 5))
-y_ellipse_fine = np.linspace(-span / 2, span / 2, 200)
-ellipse_fine = c_root * np.sqrt(np.maximum(1.0 - (2.0 * y_ellipse_fine / span) ** 2, 0.0))
+y_ellipse_fine = np.linspace(-opt_halfspan, opt_halfspan, 200)
+ellipse_fine = c_root * np.sqrt(np.maximum(1.0 - (y_ellipse_fine / opt_halfspan) ** 2, 0.0))
 ax1.plot(y_ellipse_fine, ellipse_fine, "k--", linewidth=1.0, label="Elliptic (matched $c_\\mathrm{root}$)")
 ax1.plot(y_full, chord_full, "o-", color="tab:blue", markersize=4, linewidth=1.5, label="Optimized")
 ax1.set_xlabel("Spanwise station $y$ [m]")
 ax1.set_ylabel("Chord [m]")
 ax1.set_title(f"Chord Distribution\n{subtitle}")
 ax1.legend(loc="lower center")
-ax1.set_xlim(-span / 2 * 1.05, span / 2 * 1.05)
+ax1.set_xlim(-opt_halfspan * 1.05, opt_halfspan * 1.05)
 ax1.set_ylim(bottom=0)
 ax1.grid(True, alpha=0.3)
 fig1.tight_layout()
@@ -281,8 +289,8 @@ ax2.plot([y_full[0], y_full[0]], [-le_x[0], -te_x[0]], "-", color="tab:blue", li
 ax2.plot([y_full[-1], y_full[-1]], [-le_x[-1], -te_x[-1]], "-", color="tab:blue", linewidth=1.5)
 
 # Elliptic planform outline (smooth)
-y_ell_fine = np.linspace(-span / 2, span / 2, 200)
-c_ell_fine = c_root * np.sqrt(np.maximum(1.0 - (2.0 * y_ell_fine / span) ** 2, 0.0))
+y_ell_fine = np.linspace(-opt_halfspan, opt_halfspan, 200)
+c_ell_fine = c_root * np.sqrt(np.maximum(1.0 - (y_ell_fine / opt_halfspan) ** 2, 0.0))
 le_ell_fine = -0.25 * c_ell_fine
 te_ell_fine = 0.75 * c_ell_fine
 ax2.plot(y_ell_fine, -le_ell_fine, "k--", linewidth=1.0, label="Elliptic")
