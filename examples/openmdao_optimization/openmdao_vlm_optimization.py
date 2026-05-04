@@ -19,58 +19,6 @@ import openmdao.api as om
 import philote_mdo.openmdao as pmom
 
 
-class PlanformArea(om.ExplicitComponent):
-    """Computes planform area from chord and yle via trapezoidal integration.
-
-    For a y-duplicated (half-span) wing, multiplies by 2 for full-span area.
-    """
-
-    def initialize(self):
-        self.options.declare("n_stations", types=int)
-
-    def setup(self):
-        n = self.options["n_stations"]
-        self.add_input("chord", shape=(n,), units="m")
-        self.add_input("yle", shape=(n,), units="m")
-        self.add_output("planform_area", shape=(1,), units="m**2")
-
-    def setup_partials(self):
-        n = self.options["n_stations"]
-        self.declare_partials("planform_area", "chord",
-                              rows=np.zeros(n, dtype=int),
-                              cols=np.arange(n))
-        self.declare_partials("planform_area", "yle",
-                              rows=np.zeros(n, dtype=int),
-                              cols=np.arange(n))
-
-    def compute(self, inputs, outputs):
-        c = inputs["chord"]
-        y = inputs["yle"]
-        dy = np.diff(y)
-        outputs["planform_area"] = 2.0 * np.sum(0.5 * (c[:-1] + c[1:]) * dy)
-
-    def compute_partials(self, inputs, partials):
-        c = inputs["chord"]
-        y = inputs["yle"]
-        dy = np.diff(y)
-        n = len(c)
-
-        da_dc = np.zeros(n)
-        for j in range(n):
-            if j > 0:
-                da_dc[j] += dy[j - 1]
-            if j < n - 1:
-                da_dc[j] += dy[j]
-        partials["planform_area", "chord"] = da_dc
-
-        da_dy = np.zeros(n)
-        for j in range(n - 1):
-            avg_c = 0.5 * (c[j] + c[j + 1])
-            da_dy[j] -= 2.0 * avg_c
-            da_dy[j + 1] += 2.0 * avg_c
-        partials["planform_area", "yle"] = da_dy
-
-
 class AkimaChord(om.ExplicitComponent):
     """Interpolates chord from control points to spanwise stations using Akima.
 
@@ -152,10 +100,8 @@ twist_arr = np.zeros(n_stations)
 xle_arr = np.zeros(n_stations)
 zle_arr = np.zeros(n_stations)
 
-# Reference quantities
+# Initial planform area (used as constraint target)
 ref_area = span * chord_init
-ref_chord = chord_init
-ref_span = span
 
 # Build the OpenMDAO problem
 prob = om.Problem()
@@ -179,8 +125,10 @@ model.add_subsystem(
         ny=ny,
         cosine_chordwise_spacing="true",
         cosine_spanwise_spacing="false",
+        y_duplicated="true",
     ),
     promotes_inputs=["chord", "twist", "xle", "yle", "zle"],
+    promotes_outputs=["reference_area", "reference_span", "reference_chord"],
 )
 
 # VLM solver discipline (port 50051)
@@ -204,14 +152,6 @@ model.add_subsystem(
                      "reference_area", "reference_chord", "reference_span",
                      "moment_ref_x", "moment_ref_y", "moment_ref_z"],
     promotes_outputs=["CL", "CD", "CY", "Cl", "Cm", "Cn"],
-)
-
-# Planform area computation
-model.add_subsystem(
-    "area_comp",
-    PlanformArea(n_stations=n_stations),
-    promotes_inputs=["chord", "yle"],
-    promotes_outputs=["planform_area"],
 )
 
 # Connect mesh output to VLM solver input
@@ -240,7 +180,7 @@ model.add_objective("CD")
 
 # Constraints
 model.add_constraint("CL", equals=CL_target)
-model.add_constraint("planform_area", equals=ref_area)
+model.add_constraint("reference_area", equals=ref_area)
 
 prob.setup()
 
@@ -251,10 +191,7 @@ prob["xle"] = xle_arr
 prob["yle"] = yle
 prob["zle"] = zle_arr
 
-# Set reference quantities
-prob["reference_area"] = ref_area
-prob["reference_chord"] = ref_chord
-prob["reference_span"] = ref_span
+# reference_area, reference_chord, reference_span computed by mesh_comp
 prob["moment_ref_x"] = 0.25 * chord_init
 prob["moment_ref_y"] = 0.0
 prob["moment_ref_z"] = 0.0
@@ -283,7 +220,7 @@ print(f"  CL = {prob['CL'][0]:.6f}  (target: {CL_target})")
 print(f"  CD = {prob['CD'][0]:.6f}")
 print(f"  L/D = {prob['CL'][0] / prob['CD'][0]:.2f}")
 print(f"  alpha = {opt_alpha:.3f} deg")
-print(f"  planform area = {prob['planform_area'][0]:.4f} m^2  (target: {ref_area})")
+print(f"  planform area = {prob['reference_area'][0]:.4f} m^2  (target: {ref_area})")
 print(f"\n  Chord control points: {prob['chord_cp'].ravel()}")
 print(f"\n  Chord distribution (root to tip):")
 for i, (y, c) in enumerate(zip(yle, opt_chord)):

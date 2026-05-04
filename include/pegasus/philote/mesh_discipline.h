@@ -60,6 +60,7 @@ private:
     int64_t ny_ = 1;
     bool cosine_chordwise_spacing_ = false;
     bool cosine_spanwise_spacing_ = false;
+    bool y_duplicated_ = true;
 
     // Precomputed chordwise fractions [nx+1]
     std::vector<double> chord_fracs_;

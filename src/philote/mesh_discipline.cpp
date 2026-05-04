@@ -23,6 +23,7 @@
 #include <algorithm>
 #include <cmath>
 #include <stdexcept>
+#include <vector>
 
 namespace pegasus {
 
@@ -54,6 +55,7 @@ void MeshDiscipline::Initialize() {
     AddOption("ny", "int");
     AddOption("cosine_chordwise_spacing", "string");
     AddOption("cosine_spanwise_spacing", "string");
+    AddOption("y_duplicated", "string");
 }
 
 void MeshDiscipline::SetOptions(
@@ -82,6 +84,13 @@ void MeshDiscipline::SetOptions(
         cosine_spanwise_spacing_ = (val == "true" || val == "1");
     }
 
+    it = fields.find("y_duplicated");
+    if (it != fields.end()) {
+        std::string val = it->second.string_value();
+        std::transform(val.begin(), val.end(), val.begin(), ::tolower);
+        y_duplicated_ = (val == "true" || val == "1");
+    }
+
     PrecomputeChordFracs();
 
     ExplicitDiscipline::SetOptions(options_struct);
@@ -100,6 +109,11 @@ void MeshDiscipline::Setup() {
     // Flat mesh output
     int64_t num_values = (nx_ + 1) * n_stations * 3;
     AddOutput("mesh", {num_values}, "m");
+
+    // Reference quantities
+    AddOutput("reference_area", {1}, "m**2");
+    AddOutput("reference_span", {1}, "m");
+    AddOutput("reference_chord", {1}, "m");
 }
 
 void MeshDiscipline::SetupPartials() {
@@ -108,6 +122,19 @@ void MeshDiscipline::SetupPartials() {
     DeclarePartials("mesh", "xle");
     DeclarePartials("mesh", "yle");
     DeclarePartials("mesh", "zle");
+
+    // Reference area partials
+    DeclarePartials("reference_area", "chord");
+    DeclarePartials("reference_area", "yle");
+    DeclarePartials("reference_area", "zle");
+
+    // Reference span partials
+    DeclarePartials("reference_span", "yle");
+
+    // Reference chord (MAC) partials
+    DeclarePartials("reference_chord", "chord");
+    DeclarePartials("reference_chord", "yle");
+    DeclarePartials("reference_chord", "zle");
 }
 
 // =============================================================================
@@ -136,6 +163,26 @@ void MeshDiscipline::Compute(const philote::Variables& inputs,
             mesh(idx + 2) = zle(j) - cf * chord(j) * sin_tw;
         }
     }
+
+    // Reference area (planform area via trapezoidal rule)
+    double sym = y_duplicated_ ? 2.0 : 1.0;
+    double s_ref_half = 0.0;
+    double mac_num = 0.0;
+
+    for (int64_t j = 0; j < ny_; ++j) {
+        double dy = yle(j + 1) - yle(j);
+        double dz = zle(j + 1) - zle(j);
+        double ds = std::sqrt(dy * dy + dz * dz);
+        double avg_c = 0.5 * (chord(j) + chord(j + 1));
+        s_ref_half += avg_c * ds;
+        mac_num +=
+            0.5 * (chord(j) * chord(j) + chord(j + 1) * chord(j + 1)) * ds;
+    }
+
+    outputs.at("reference_area")(0) = sym * s_ref_half;
+    outputs.at("reference_span")(0) = sym * (yle(ny_) - yle(0));
+    outputs.at("reference_chord")(0) =
+        (s_ref_half > 0.0) ? (mac_num / s_ref_half) : 0.0;
 }
 
 // =============================================================================
@@ -146,6 +193,8 @@ void MeshDiscipline::ComputePartials(const philote::Variables& inputs,
                                      philote::Partials& partials) {
     const auto& chord = inputs.at("chord");
     const auto& twist = inputs.at("twist");
+    const auto& yle = inputs.at("yle");
+    const auto& zle = inputs.at("zle");
 
     auto& dm_dc = partials[{"mesh", "chord"}];
     auto& dm_dt = partials[{"mesh", "twist"}];
@@ -156,7 +205,7 @@ void MeshDiscipline::ComputePartials(const philote::Variables& inputs,
     int64_t n_st = ny_ + 1;
     int64_t n_mesh = (nx_ + 1) * n_st * 3;
 
-    // Zero all partials
+    // Zero all mesh partials
     for (int64_t k = 0; k < n_mesh * n_st; ++k) {
         dm_dc(k) = 0.0;
         dm_dt(k) = 0.0;
@@ -189,6 +238,122 @@ void MeshDiscipline::ComputePartials(const philote::Variables& inputs,
             dm_dc(row_z + j) = -cf * sin_tw;
             dm_dt(row_z + j) = -cf * c_j * cos_tw;
             dm_dzle(row_z + j) = 1.0;
+        }
+    }
+
+    // =========================================================================
+    // Reference quantity partials
+    // =========================================================================
+    double sym = y_duplicated_ ? 2.0 : 1.0;
+
+    // Precompute per-segment values
+    std::vector<double> ds(ny_), avg_c(ny_), dy_seg(ny_), dz_seg(ny_);
+    double s_ref_half = 0.0;
+    double mac_num = 0.0;
+
+    for (int64_t j = 0; j < ny_; ++j) {
+        dy_seg[j] = yle(j + 1) - yle(j);
+        dz_seg[j] = zle(j + 1) - zle(j);
+        ds[j] = std::sqrt(dy_seg[j] * dy_seg[j] + dz_seg[j] * dz_seg[j]);
+        avg_c[j] = 0.5 * (chord(j) + chord(j + 1));
+        s_ref_half += avg_c[j] * ds[j];
+        mac_num +=
+            0.5 * (chord(j) * chord(j) + chord(j + 1) * chord(j + 1)) * ds[j];
+    }
+
+    // --- reference_area partials ---
+    auto& dSref_dc = partials[{"reference_area", "chord"}];
+    auto& dSref_dy = partials[{"reference_area", "yle"}];
+    auto& dSref_dz = partials[{"reference_area", "zle"}];
+
+    for (int64_t j = 0; j < n_st; ++j) {
+        dSref_dc(j) = 0.0;
+        dSref_dy(j) = 0.0;
+        dSref_dz(j) = 0.0;
+    }
+
+    for (int64_t j = 0; j < ny_; ++j) {
+        // dS_ref/dchord[j] and dS_ref/dchord[j+1]
+        dSref_dc(j) += sym * 0.5 * ds[j];
+        dSref_dc(j + 1) += sym * 0.5 * ds[j];
+
+        // dS_ref/dyle[j] and dS_ref/dyle[j+1] via d(ds)/dyle
+        if (ds[j] > 0.0) {
+            double dds_dy_j = -dy_seg[j] / ds[j];
+            double dds_dy_j1 = dy_seg[j] / ds[j];
+            dSref_dy(j) += sym * avg_c[j] * dds_dy_j;
+            dSref_dy(j + 1) += sym * avg_c[j] * dds_dy_j1;
+
+            double dds_dz_j = -dz_seg[j] / ds[j];
+            double dds_dz_j1 = dz_seg[j] / ds[j];
+            dSref_dz(j) += sym * avg_c[j] * dds_dz_j;
+            dSref_dz(j + 1) += sym * avg_c[j] * dds_dz_j1;
+        }
+    }
+
+    // --- reference_span partials ---
+    auto& dspan_dy = partials[{"reference_span", "yle"}];
+    for (int64_t j = 0; j < n_st; ++j) {
+        dspan_dy(j) = 0.0;
+    }
+    dspan_dy(0) = -sym;
+    dspan_dy(ny_) = sym;
+
+    // --- reference_chord (MAC) partials via quotient rule ---
+    // MAC = mac_num / s_ref_half
+    // dMAC/dx = (d_mac_num/dx * s_ref_half - mac_num * d_s_ref_half/dx)
+    //           / s_ref_half^2
+    auto& dMAC_dc = partials[{"reference_chord", "chord"}];
+    auto& dMAC_dy = partials[{"reference_chord", "yle"}];
+    auto& dMAC_dz = partials[{"reference_chord", "zle"}];
+
+    for (int64_t j = 0; j < n_st; ++j) {
+        dMAC_dc(j) = 0.0;
+        dMAC_dy(j) = 0.0;
+        dMAC_dz(j) = 0.0;
+    }
+
+    if (s_ref_half > 0.0) {
+        double denom2 = s_ref_half * s_ref_half;
+
+        for (int64_t j = 0; j < ny_; ++j) {
+            // d_mac_num/dchord[j] and [j+1]
+            double dnum_dc_j = 0.5 * 2.0 * chord(j) * ds[j];
+            double dnum_dc_j1 = 0.5 * 2.0 * chord(j + 1) * ds[j];
+            // d_s_ref_half/dchord[j] and [j+1]
+            double dden_dc_j = 0.5 * ds[j];
+            double dden_dc_j1 = 0.5 * ds[j];
+
+            dMAC_dc(j) +=
+                (dnum_dc_j * s_ref_half - mac_num * dden_dc_j) / denom2;
+            dMAC_dc(j + 1) +=
+                (dnum_dc_j1 * s_ref_half - mac_num * dden_dc_j1) / denom2;
+
+            // Partials w.r.t. yle and zle (through ds)
+            if (ds[j] > 0.0) {
+                double dds_dy_j = -dy_seg[j] / ds[j];
+                double dds_dy_j1 = dy_seg[j] / ds[j];
+                double dds_dz_j = -dz_seg[j] / ds[j];
+                double dds_dz_j1 = dz_seg[j] / ds[j];
+
+                double num_coeff =
+                    0.5 * (chord(j) * chord(j) + chord(j + 1) * chord(j + 1));
+                double den_coeff = avg_c[j];
+
+                dMAC_dy(j) += (num_coeff * dds_dy_j * s_ref_half -
+                               mac_num * den_coeff * dds_dy_j) /
+                              denom2;
+                dMAC_dy(j + 1) += (num_coeff * dds_dy_j1 * s_ref_half -
+                                   mac_num * den_coeff * dds_dy_j1) /
+                                  denom2;
+
+                dMAC_dz(j) += (num_coeff * dds_dz_j * s_ref_half -
+                               mac_num * den_coeff * dds_dz_j) /
+                              denom2;
+                dMAC_dz(j + 1) += (num_coeff * dds_dz_j1 * s_ref_half -
+                                   mac_num * den_coeff * dds_dz_j1) /
+                                  denom2;
+            }
         }
     }
 }
