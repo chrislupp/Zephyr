@@ -29,8 +29,7 @@ namespace pegasus {
 namespace {
 
 // Helper: create a protobuf Struct with the given options
-google::protobuf::Struct MakeOptions(int nx, int ny,
-                                     bool y_duplicated = true) {
+google::protobuf::Struct MakeOptions(int nx, int ny, bool y_duplicated = true) {
     google::protobuf::Struct opts;
     auto& fields = *opts.mutable_fields();
     fields["nx"].set_number_value(static_cast<double>(nx));
@@ -53,22 +52,21 @@ void SetupDiscipline(MeshDiscipline& disc, int nx, int ny,
 }
 
 // Helper: build inputs for a given chord/yle/zle distribution
-philote::Variables MakeInputs(int ny,
-                              const std::vector<double>& chord_vals,
+philote::Variables MakeInputs(int ny, const std::vector<double>& chord_vals,
                               const std::vector<double>& yle_vals,
                               const std::vector<double>& zle_vals) {
     int n_st = ny + 1;
     philote::Variables inputs;
-    inputs["chord"] = philote::Variable(philote::kInput,
-                                        {static_cast<size_t>(n_st)});
-    inputs["twist"] = philote::Variable(philote::kInput,
-                                        {static_cast<size_t>(n_st)});
-    inputs["xle"] = philote::Variable(philote::kInput,
-                                      {static_cast<size_t>(n_st)});
-    inputs["yle"] = philote::Variable(philote::kInput,
-                                      {static_cast<size_t>(n_st)});
-    inputs["zle"] = philote::Variable(philote::kInput,
-                                      {static_cast<size_t>(n_st)});
+    inputs["chord"] =
+        philote::Variable(philote::kInput, {static_cast<size_t>(n_st)});
+    inputs["twist"] =
+        philote::Variable(philote::kInput, {static_cast<size_t>(n_st)});
+    inputs["xle"] =
+        philote::Variable(philote::kInput, {static_cast<size_t>(n_st)});
+    inputs["yle"] =
+        philote::Variable(philote::kInput, {static_cast<size_t>(n_st)});
+    inputs["zle"] =
+        philote::Variable(philote::kInput, {static_cast<size_t>(n_st)});
 
     for (int j = 0; j < n_st; ++j) {
         inputs["chord"](j) = chord_vals[j];
@@ -258,17 +256,15 @@ TEST(MeshDisciplineRefTest, PartialsFiniteDifference) {
         inp_m["chord"](j) -= eps;
         auto out_m = compute_refs(inp_m);
 
-        double fd_area = (out_p["reference_area"](0) -
-                          out_m["reference_area"](0)) /
-                         (2.0 * eps);
-        double fd_mac = (out_p["reference_chord"](0) -
-                         out_m["reference_chord"](0)) /
-                        (2.0 * eps);
+        double fd_area =
+            (out_p["reference_area"](0) - out_m["reference_area"](0)) /
+            (2.0 * eps);
+        double fd_mac =
+            (out_p["reference_chord"](0) - out_m["reference_chord"](0)) /
+            (2.0 * eps);
 
-        EXPECT_NEAR(dArea_dc(j), fd_area, 1e-5)
-            << "dS_ref/dchord[" << j << "]";
-        EXPECT_NEAR(dMAC_dc(j), fd_mac, 1e-5)
-            << "dMAC/dchord[" << j << "]";
+        EXPECT_NEAR(dArea_dc(j), fd_area, 1e-5) << "dS_ref/dchord[" << j << "]";
+        EXPECT_NEAR(dMAC_dc(j), fd_mac, 1e-5) << "dMAC/dchord[" << j << "]";
     }
 
     // Check dS_ref/dyle, dspan/dyle, dMAC/dyle
@@ -281,22 +277,19 @@ TEST(MeshDisciplineRefTest, PartialsFiniteDifference) {
         inp_m["yle"](j) -= eps;
         auto out_m = compute_refs(inp_m);
 
-        double fd_area = (out_p["reference_area"](0) -
-                          out_m["reference_area"](0)) /
-                         (2.0 * eps);
-        double fd_span = (out_p["reference_span"](0) -
-                          out_m["reference_span"](0)) /
-                         (2.0 * eps);
-        double fd_mac = (out_p["reference_chord"](0) -
-                         out_m["reference_chord"](0)) /
-                        (2.0 * eps);
+        double fd_area =
+            (out_p["reference_area"](0) - out_m["reference_area"](0)) /
+            (2.0 * eps);
+        double fd_span =
+            (out_p["reference_span"](0) - out_m["reference_span"](0)) /
+            (2.0 * eps);
+        double fd_mac =
+            (out_p["reference_chord"](0) - out_m["reference_chord"](0)) /
+            (2.0 * eps);
 
-        EXPECT_NEAR(dArea_dy(j), fd_area, 1e-5)
-            << "dS_ref/dyle[" << j << "]";
-        EXPECT_NEAR(dSpan_dy(j), fd_span, 1e-5)
-            << "dspan/dyle[" << j << "]";
-        EXPECT_NEAR(dMAC_dy(j), fd_mac, 1e-5)
-            << "dMAC/dyle[" << j << "]";
+        EXPECT_NEAR(dArea_dy(j), fd_area, 1e-5) << "dS_ref/dyle[" << j << "]";
+        EXPECT_NEAR(dSpan_dy(j), fd_span, 1e-5) << "dspan/dyle[" << j << "]";
+        EXPECT_NEAR(dMAC_dy(j), fd_mac, 1e-5) << "dMAC/dyle[" << j << "]";
     }
 
     // Check dS_ref/dzle, dMAC/dzle
@@ -309,17 +302,15 @@ TEST(MeshDisciplineRefTest, PartialsFiniteDifference) {
         inp_m["zle"](j) -= eps;
         auto out_m = compute_refs(inp_m);
 
-        double fd_area = (out_p["reference_area"](0) -
-                          out_m["reference_area"](0)) /
-                         (2.0 * eps);
-        double fd_mac = (out_p["reference_chord"](0) -
-                         out_m["reference_chord"](0)) /
-                        (2.0 * eps);
+        double fd_area =
+            (out_p["reference_area"](0) - out_m["reference_area"](0)) /
+            (2.0 * eps);
+        double fd_mac =
+            (out_p["reference_chord"](0) - out_m["reference_chord"](0)) /
+            (2.0 * eps);
 
-        EXPECT_NEAR(dArea_dz(j), fd_area, 1e-5)
-            << "dS_ref/dzle[" << j << "]";
-        EXPECT_NEAR(dMAC_dz(j), fd_mac, 1e-5)
-            << "dMAC/dzle[" << j << "]";
+        EXPECT_NEAR(dArea_dz(j), fd_area, 1e-5) << "dS_ref/dzle[" << j << "]";
+        EXPECT_NEAR(dMAC_dz(j), fd_mac, 1e-5) << "dMAC/dzle[" << j << "]";
     }
 }
 
