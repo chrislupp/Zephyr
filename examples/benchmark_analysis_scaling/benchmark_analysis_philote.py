@@ -35,8 +35,11 @@ for ny in ny_values:
     mesh_channel = grpc.insecure_channel("localhost:50052")
     model.add_subsystem("mesh_comp",
         pmom.RemoteExplicitComponent(channel=mesh_channel, nx=nx, ny=ny,
-            cosine_chordwise_spacing="true", cosine_spanwise_spacing="false"),
-        promotes_inputs=["chord", "twist", "xle", "yle", "zle"])
+            cosine_chordwise_spacing="true", cosine_spanwise_spacing="false",
+            y_duplicated="true"),
+        promotes_inputs=["chord", "twist", "xle", "yle", "zle"],
+        promotes_outputs=["reference_area", "reference_span",
+                          "reference_chord"])
 
     # VLM discipline
     vlm_channel = grpc.insecure_channel("localhost:50051")
@@ -63,9 +66,8 @@ for ny in ny_values:
     prob["xle"] = np.zeros(n_stations)
     prob["yle"] = yle
     prob["zle"] = np.zeros(n_stations)
-    prob["reference_area"] = span * chord
-    prob["reference_chord"] = chord
-    prob["reference_span"] = span
+    # reference_area, reference_chord, reference_span are now computed by
+    # mesh_comp and connected automatically via promotes
     prob["moment_ref_x"] = 0.25 * chord
     prob["moment_ref_y"] = 0.0
     prob["moment_ref_z"] = 0.0

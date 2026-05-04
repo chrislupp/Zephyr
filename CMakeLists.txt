@@ -148,6 +148,21 @@ if(PEGASUS_BUILD_PHILOTE)
     if(_proto_inc)
         target_include_directories(mesh_philote_server BEFORE PRIVATE ${_proto_inc})
     endif()
+
+    # Philote discipline tests
+    if(PEGASUS_BUILD_TESTS)
+        add_executable(pegasus_philote_tests
+            tests/unit/mesh_discipline_test.cpp
+            src/philote/mesh_discipline.cpp
+        )
+        target_link_libraries(pegasus_philote_tests
+            PRIVATE pegasus PhiloteCpp::PhiloteCpp GTest::gtest_main)
+        if(_proto_inc)
+            target_include_directories(pegasus_philote_tests BEFORE PRIVATE ${_proto_inc})
+        endif()
+        include(GoogleTest)
+        gtest_discover_tests(pegasus_philote_tests)
+    endif()
 endif()
 
 # Installation
