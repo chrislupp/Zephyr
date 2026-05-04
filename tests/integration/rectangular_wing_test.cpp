@@ -21,7 +21,14 @@
 /// @file rectangular_wing_test.cpp
 /// @brief Integration tests for rectangular wing analysis.
 
-#include "pegasus/pegasus.h"
+#include "pegasus/aero/force_calculator.h"
+#include "pegasus/aero/stability_derivatives.h"
+#include "pegasus/core/types.h"
+#include "pegasus/geometry/aircraft.h"
+#include "pegasus/geometry/section.h"
+#include "pegasus/geometry/surface.h"
+#include "pegasus/io/avl_reader.h"
+#include "pegasus/solver/vortex_lattice_solver.h"
 
 #include <cmath>
 

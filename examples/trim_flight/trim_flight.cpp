@@ -21,7 +21,13 @@
 /// @file trim_flight.cpp
 /// @brief Example: Trim solver for level flight conditions.
 
-#include "pegasus/pegasus.h"
+#include "pegasus/core/types.h"
+#include "pegasus/geometry/aircraft.h"
+#include "pegasus/geometry/section.h"
+#include "pegasus/geometry/surface.h"
+#include "pegasus/solver/vortex_lattice_solver.h"
+#include "pegasus/trim/flight_constraints.h"
+#include "pegasus/trim/trim_solver.h"
 
 #include <iomanip>
 #include <iostream>

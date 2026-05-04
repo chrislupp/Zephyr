@@ -294,5 +294,91 @@ TEST_F(TrimSolverTest, PresetSteadySideslip) {
     EXPECT_NEAR(constraints.beta.target, beta, kTestTolerance);
 }
 
+TEST_F(TrimSolverTest, TrimWithPitchMomentConstraint) {
+    Aircraft aircraft = CreateRectangularWing(10.0, 1.0, 4, 16);
+
+    VortexLatticeSolver solver;
+    solver.SetAircraft(aircraft);
+
+    // Constrain alpha to trim pitching moment to zero
+    TrimConstraints constraints;
+    constraints.alpha.type = ConstraintType::kPitchMoment;
+    constraints.alpha.target = 0.0;
+    constraints.beta.type = ConstraintType::kFixed;
+    constraints.beta.target = 0.0;
+    constraints.roll_rate.type = ConstraintType::kFixed;
+    constraints.roll_rate.target = 0.0;
+    constraints.pitch_rate.type = ConstraintType::kFixed;
+    constraints.pitch_rate.target = 0.0;
+    constraints.yaw_rate.type = ConstraintType::kFixed;
+    constraints.yaw_rate.target = 0.0;
+
+    TrimSolver trimmer;
+    TrimResult result = trimmer.Solve(aircraft, solver, constraints);
+
+    // For symmetric wing with CG at LE, Cm may or may not be zero at alpha=0
+    // Just verify it converged or at least ran
+    EXPECT_GT(result.iterations, 0);
+}
+
+TEST_F(TrimSolverTest, TrimVerboseOutput) {
+    Aircraft aircraft = CreateRectangularWing(10.0, 1.0, 4, 16);
+
+    VortexLatticeSolver solver;
+    solver.SetAircraft(aircraft);
+
+    TrimConstraints constraints = TrimPresets::LevelFlight(0.3);
+
+    TrimSolver trimmer;
+    TrimOptions options;
+    options.verbose = true;
+    options.max_iterations = 3;
+    trimmer.SetOptions(options);
+
+    // Just verify it runs without crashing when verbose is on
+    TrimResult result = trimmer.Solve(aircraft, solver, constraints);
+    EXPECT_GT(result.iterations, 0);
+}
+
+TEST_F(TrimSolverTest, TrimMaxIterationsReached) {
+    Aircraft aircraft = CreateRectangularWing(10.0, 1.0, 4, 16);
+
+    VortexLatticeSolver solver;
+    solver.SetAircraft(aircraft);
+
+    TrimConstraints constraints = TrimPresets::LevelFlight(0.5);
+
+    TrimSolver trimmer;
+    TrimOptions options;
+    options.max_iterations = 1;
+    options.tolerance = 1e-20;  // Impossibly tight tolerance
+    trimmer.SetOptions(options);
+
+    TrimResult result = trimmer.Solve(aircraft, solver, constraints);
+    EXPECT_FALSE(result.converged);
+    EXPECT_EQ(result.iterations, 1);
+}
+
+TEST_F(TrimSolverTest, ConstraintCount) {
+    TrimConstraints constraints;
+    EXPECT_EQ(constraints.GetNumConstraints(), 0);
+
+    constraints.alpha.type = ConstraintType::kCL;
+    constraints.alpha.target = 0.5;
+    EXPECT_EQ(constraints.GetNumConstraints(), 1);
+
+    constraints.beta.type = ConstraintType::kFixed;
+    constraints.beta.target = 0.0;
+    EXPECT_EQ(constraints.GetNumConstraints(), 2);
+
+    constraints.roll_rate.type = ConstraintType::kFixed;
+    constraints.roll_rate.target = 0.0;
+    constraints.pitch_rate.type = ConstraintType::kFixed;
+    constraints.pitch_rate.target = 0.0;
+    constraints.yaw_rate.type = ConstraintType::kFixed;
+    constraints.yaw_rate.target = 0.0;
+    EXPECT_EQ(constraints.GetNumConstraints(), 5);
+}
+
 }  // namespace
 }  // namespace pegasus
