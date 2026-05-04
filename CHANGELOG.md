@@ -14,12 +14,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Philote and VTK/visualization source exclusion from Codecov coverage reporting
 - Optimization convergence history plot (CD vs major iteration) in OpenMDAO optimization example
 
+### Changed
+- `MeshDiscipline` replaces absolute `yle` input with scalar `halfspan` and normalized `eta` array parameterization, making wingspan a first-class design variable for optimization
+- License changed from AGPL-3.0-or-later to GPL-3.0-or-later
+
 ### Removed
 - God header `pegasus/pegasus.h` — consumers now include specific headers directly
 - Autodiff tape and dual number headers (`gradients/autodiff_tape.h`, `gradients/dual_number.h`)
-
-### Changed
-- License changed from AGPL-3.0-or-later to GPL-3.0-or-later
 
 ### Fixed
 - CI job names now match branch protection required checks (`format`, `build`)
