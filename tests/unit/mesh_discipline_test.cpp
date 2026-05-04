@@ -35,7 +35,6 @@ google::protobuf::Struct MakeOptions(int nx, int ny, bool y_duplicated = true) {
     fields["nx"].set_number_value(static_cast<double>(nx));
     fields["ny"].set_number_value(static_cast<double>(ny));
     fields["cosine_chordwise_spacing"].set_string_value("false");
-    fields["cosine_spanwise_spacing"].set_string_value("false");
     fields["y_duplicated"].set_string_value(y_duplicated ? "true" : "false");
     return opts;
 }
@@ -43,7 +42,6 @@ google::protobuf::Struct MakeOptions(int nx, int ny, bool y_duplicated = true) {
 // Helper: set up a MeshDiscipline through the public base-class interface
 void SetupDiscipline(MeshDiscipline& disc, int nx, int ny,
                      bool y_duplicated = true) {
-    // Call through base class reference to access public virtuals
     philote::Discipline& dbase = disc;
     dbase.Initialize();
     dbase.SetOptions(MakeOptions(nx, ny, y_duplicated));
@@ -51,9 +49,10 @@ void SetupDiscipline(MeshDiscipline& disc, int nx, int ny,
     dbase.SetupPartials();
 }
 
-// Helper: build inputs for a given chord/yle/zle distribution
+// Helper: build inputs for a given chord/eta/zle distribution
 philote::Variables MakeInputs(int ny, const std::vector<double>& chord_vals,
-                              const std::vector<double>& yle_vals,
+                              double halfspan,
+                              const std::vector<double>& eta_vals,
                               const std::vector<double>& zle_vals) {
     int n_st = ny + 1;
     philote::Variables inputs;
@@ -63,18 +62,20 @@ philote::Variables MakeInputs(int ny, const std::vector<double>& chord_vals,
         philote::Variable(philote::kInput, {static_cast<size_t>(n_st)});
     inputs["xle"] =
         philote::Variable(philote::kInput, {static_cast<size_t>(n_st)});
-    inputs["yle"] =
-        philote::Variable(philote::kInput, {static_cast<size_t>(n_st)});
     inputs["zle"] =
+        philote::Variable(philote::kInput, {static_cast<size_t>(n_st)});
+    inputs["halfspan"] = philote::Variable(philote::kInput, {1});
+    inputs["eta"] =
         philote::Variable(philote::kInput, {static_cast<size_t>(n_st)});
 
     for (int j = 0; j < n_st; ++j) {
         inputs["chord"](j) = chord_vals[j];
         inputs["twist"](j) = 0.0;
         inputs["xle"](j) = 0.0;
-        inputs["yle"](j) = yle_vals[j];
+        inputs["eta"](j) = eta_vals[j];
         inputs["zle"](j) = zle_vals[j];
     }
+    inputs["halfspan"](0) = halfspan;
     return inputs;
 }
 
@@ -97,32 +98,43 @@ philote::Partials MakePartials(int nx, int ny) {
     size_t sn = static_cast<size_t>(n_st);
     philote::Partials partials;
 
-    // Mesh partials (dense: n_mesh rows × n_st cols)
+    // Mesh partials (dense: n_mesh rows x n_st cols)
     partials[{"mesh", "chord"}] =
         philote::Variable(philote::kOutput, {n_mesh * sn});
     partials[{"mesh", "twist"}] =
         philote::Variable(philote::kOutput, {n_mesh * sn});
     partials[{"mesh", "xle"}] =
         philote::Variable(philote::kOutput, {n_mesh * sn});
-    partials[{"mesh", "yle"}] =
-        philote::Variable(philote::kOutput, {n_mesh * sn});
     partials[{"mesh", "zle"}] =
         philote::Variable(philote::kOutput, {n_mesh * sn});
+    partials[{"mesh", "eta"}] =
+        philote::Variable(philote::kOutput, {n_mesh * sn});
+    // halfspan is scalar: n_mesh x 1
+    partials[{"mesh", "halfspan"}] =
+        philote::Variable(philote::kOutput, {n_mesh});
 
-    // Reference quantity partials (1 row × n_st cols each)
+    // Reference quantity partials (1 row x n_st cols each)
     partials[{"reference_area", "chord"}] =
-        philote::Variable(philote::kOutput, {sn});
-    partials[{"reference_area", "yle"}] =
         philote::Variable(philote::kOutput, {sn});
     partials[{"reference_area", "zle"}] =
         philote::Variable(philote::kOutput, {sn});
-    partials[{"reference_span", "yle"}] =
+    partials[{"reference_area", "halfspan"}] =
+        philote::Variable(philote::kOutput, {1});
+    partials[{"reference_area", "eta"}] =
         philote::Variable(philote::kOutput, {sn});
+
+    partials[{"reference_span", "halfspan"}] =
+        philote::Variable(philote::kOutput, {1});
+    partials[{"reference_span", "eta"}] =
+        philote::Variable(philote::kOutput, {sn});
+
     partials[{"reference_chord", "chord"}] =
         philote::Variable(philote::kOutput, {sn});
-    partials[{"reference_chord", "yle"}] =
-        philote::Variable(philote::kOutput, {sn});
     partials[{"reference_chord", "zle"}] =
+        philote::Variable(philote::kOutput, {sn});
+    partials[{"reference_chord", "halfspan"}] =
+        philote::Variable(philote::kOutput, {1});
+    partials[{"reference_chord", "eta"}] =
         philote::Variable(philote::kOutput, {sn});
 
     return partials;
@@ -145,11 +157,11 @@ TEST(MeshDisciplineRefTest, RectangularWingArea) {
     SetupDiscipline(disc, nx, ny, true);
 
     std::vector<double> chords(n_st, chord_val);
-    std::vector<double> yles(n_st), zles(n_st, 0.0);
+    std::vector<double> etas(n_st), zles(n_st, 0.0);
     for (int j = 0; j < n_st; ++j)
-        yles[j] = half_span * static_cast<double>(j) / ny;
+        etas[j] = static_cast<double>(j) / ny;
 
-    auto inputs = MakeInputs(ny, chords, yles, zles);
+    auto inputs = MakeInputs(ny, chords, half_span, etas, zles);
     auto outputs = MakeOutputs(nx, ny);
 
     philote::ExplicitDiscipline& base = disc;
@@ -172,14 +184,14 @@ TEST(MeshDisciplineRefTest, TaperedWingArea) {
     MeshDiscipline disc;
     SetupDiscipline(disc, nx, ny, true);
 
-    std::vector<double> chords(n_st), yles(n_st), zles(n_st, 0.0);
+    std::vector<double> chords(n_st), etas(n_st), zles(n_st, 0.0);
     for (int j = 0; j < n_st; ++j) {
         double eta = static_cast<double>(j) / ny;
         chords[j] = 2.0 - 1.0 * eta;
-        yles[j] = half_span * eta;
+        etas[j] = eta;
     }
 
-    auto inputs = MakeInputs(ny, chords, yles, zles);
+    auto inputs = MakeInputs(ny, chords, half_span, etas, zles);
     auto outputs = MakeOutputs(nx, ny);
 
     philote::ExplicitDiscipline& base = disc;
@@ -214,15 +226,15 @@ TEST(MeshDisciplineRefTest, PartialsFiniteDifference) {
     SetupDiscipline(disc, nx, ny, true);
 
     // Non-uniform chord for interesting partials
-    std::vector<double> chords(n_st), yles(n_st), zles(n_st);
+    std::vector<double> chords(n_st), etas(n_st), zles(n_st);
     for (int j = 0; j < n_st; ++j) {
-        double eta = static_cast<double>(j) / ny;
-        chords[j] = 2.0 - 0.8 * eta;
-        yles[j] = half_span * eta;
-        zles[j] = 0.1 * eta * eta;  // slight dihedral
+        double e = static_cast<double>(j) / ny;
+        chords[j] = 2.0 - 0.8 * e;
+        etas[j] = e;
+        zles[j] = 0.1 * e * e;  // slight dihedral
     }
 
-    auto inputs = MakeInputs(ny, chords, yles, zles);
+    auto inputs = MakeInputs(ny, chords, half_span, etas, zles);
     auto partials = MakePartials(nx, ny);
 
     philote::ExplicitDiscipline& base = disc;
@@ -237,22 +249,25 @@ TEST(MeshDisciplineRefTest, PartialsFiniteDifference) {
 
     const double eps = 1e-7;
 
-    // Extract partial references to avoid brace-init inside macros
+    // Extract partial references
     auto& dArea_dc = partials[{"reference_area", "chord"}];
-    auto& dArea_dy = partials[{"reference_area", "yle"}];
     auto& dArea_dz = partials[{"reference_area", "zle"}];
-    auto& dSpan_dy = partials[{"reference_span", "yle"}];
+    auto& dArea_dhs = partials[{"reference_area", "halfspan"}];
+    auto& dArea_deta = partials[{"reference_area", "eta"}];
+    auto& dSpan_dhs = partials[{"reference_span", "halfspan"}];
+    auto& dSpan_deta = partials[{"reference_span", "eta"}];
     auto& dMAC_dc = partials[{"reference_chord", "chord"}];
-    auto& dMAC_dy = partials[{"reference_chord", "yle"}];
     auto& dMAC_dz = partials[{"reference_chord", "zle"}];
+    auto& dMAC_dhs = partials[{"reference_chord", "halfspan"}];
+    auto& dMAC_deta = partials[{"reference_chord", "eta"}];
 
     // Check dS_ref/dchord, dMAC/dchord
     for (int j = 0; j < n_st; ++j) {
-        auto inp_p = MakeInputs(ny, chords, yles, zles);
+        auto inp_p = MakeInputs(ny, chords, half_span, etas, zles);
         inp_p["chord"](j) += eps;
         auto out_p = compute_refs(inp_p);
 
-        auto inp_m = MakeInputs(ny, chords, yles, zles);
+        auto inp_m = MakeInputs(ny, chords, half_span, etas, zles);
         inp_m["chord"](j) -= eps;
         auto out_m = compute_refs(inp_m);
 
@@ -267,14 +282,11 @@ TEST(MeshDisciplineRefTest, PartialsFiniteDifference) {
         EXPECT_NEAR(dMAC_dc(j), fd_mac, 1e-5) << "dMAC/dchord[" << j << "]";
     }
 
-    // Check dS_ref/dyle, dspan/dyle, dMAC/dyle
-    for (int j = 0; j < n_st; ++j) {
-        auto inp_p = MakeInputs(ny, chords, yles, zles);
-        inp_p["yle"](j) += eps;
+    // Check partials w.r.t. halfspan
+    {
+        auto inp_p = MakeInputs(ny, chords, half_span + eps, etas, zles);
         auto out_p = compute_refs(inp_p);
-
-        auto inp_m = MakeInputs(ny, chords, yles, zles);
-        inp_m["yle"](j) -= eps;
+        auto inp_m = MakeInputs(ny, chords, half_span - eps, etas, zles);
         auto out_m = compute_refs(inp_m);
 
         double fd_area =
@@ -287,18 +299,43 @@ TEST(MeshDisciplineRefTest, PartialsFiniteDifference) {
             (out_p["reference_chord"](0) - out_m["reference_chord"](0)) /
             (2.0 * eps);
 
-        EXPECT_NEAR(dArea_dy(j), fd_area, 1e-5) << "dS_ref/dyle[" << j << "]";
-        EXPECT_NEAR(dSpan_dy(j), fd_span, 1e-5) << "dspan/dyle[" << j << "]";
-        EXPECT_NEAR(dMAC_dy(j), fd_mac, 1e-5) << "dMAC/dyle[" << j << "]";
+        EXPECT_NEAR(dArea_dhs(0), fd_area, 1e-5) << "dS_ref/d(halfspan)";
+        EXPECT_NEAR(dSpan_dhs(0), fd_span, 1e-5) << "dspan/d(halfspan)";
+        EXPECT_NEAR(dMAC_dhs(0), fd_mac, 1e-5) << "dMAC/d(halfspan)";
+    }
+
+    // Check partials w.r.t. eta
+    for (int j = 0; j < n_st; ++j) {
+        auto inp_p = MakeInputs(ny, chords, half_span, etas, zles);
+        inp_p["eta"](j) += eps;
+        auto out_p = compute_refs(inp_p);
+
+        auto inp_m = MakeInputs(ny, chords, half_span, etas, zles);
+        inp_m["eta"](j) -= eps;
+        auto out_m = compute_refs(inp_m);
+
+        double fd_area =
+            (out_p["reference_area"](0) - out_m["reference_area"](0)) /
+            (2.0 * eps);
+        double fd_span =
+            (out_p["reference_span"](0) - out_m["reference_span"](0)) /
+            (2.0 * eps);
+        double fd_mac =
+            (out_p["reference_chord"](0) - out_m["reference_chord"](0)) /
+            (2.0 * eps);
+
+        EXPECT_NEAR(dArea_deta(j), fd_area, 1e-5) << "dS_ref/deta[" << j << "]";
+        EXPECT_NEAR(dSpan_deta(j), fd_span, 1e-5) << "dspan/deta[" << j << "]";
+        EXPECT_NEAR(dMAC_deta(j), fd_mac, 1e-5) << "dMAC/deta[" << j << "]";
     }
 
     // Check dS_ref/dzle, dMAC/dzle
     for (int j = 0; j < n_st; ++j) {
-        auto inp_p = MakeInputs(ny, chords, yles, zles);
+        auto inp_p = MakeInputs(ny, chords, half_span, etas, zles);
         inp_p["zle"](j) += eps;
         auto out_p = compute_refs(inp_p);
 
-        auto inp_m = MakeInputs(ny, chords, yles, zles);
+        auto inp_m = MakeInputs(ny, chords, half_span, etas, zles);
         inp_m["zle"](j) -= eps;
         auto out_m = compute_refs(inp_m);
 
@@ -311,6 +348,50 @@ TEST(MeshDisciplineRefTest, PartialsFiniteDifference) {
 
         EXPECT_NEAR(dArea_dz(j), fd_area, 1e-5) << "dS_ref/dzle[" << j << "]";
         EXPECT_NEAR(dMAC_dz(j), fd_mac, 1e-5) << "dMAC/dzle[" << j << "]";
+    }
+
+    // Check mesh partials w.r.t. halfspan (spot-check y components)
+    {
+        auto& dm_dhs = partials[{"mesh", "halfspan"}];
+        auto inp_p = MakeInputs(ny, chords, half_span + eps, etas, zles);
+        auto out_p = MakeOutputs(nx, ny);
+        base.Compute(inp_p, out_p);
+
+        auto inp_m = MakeInputs(ny, chords, half_span - eps, etas, zles);
+        auto out_m = MakeOutputs(nx, ny);
+        base.Compute(inp_m, out_m);
+
+        int n_mesh = (nx + 1) * n_st * 3;
+        for (int k = 0; k < n_mesh; ++k) {
+            double fd = (out_p["mesh"](k) - out_m["mesh"](k)) / (2.0 * eps);
+            EXPECT_NEAR(dm_dhs(k), fd, 1e-5)
+                << "d(mesh[" << k << "])/d(halfspan)";
+        }
+    }
+
+    // Check mesh partials w.r.t. eta
+    {
+        auto& dm_deta = partials[{"mesh", "eta"}];
+        int n_mesh = (nx + 1) * n_st * 3;
+
+        for (int j = 0; j < n_st; ++j) {
+            auto inp_p = MakeInputs(ny, chords, half_span, etas, zles);
+            inp_p["eta"](j) += eps;
+            auto out_p = MakeOutputs(nx, ny);
+            base.Compute(inp_p, out_p);
+
+            auto inp_m = MakeInputs(ny, chords, half_span, etas, zles);
+            inp_m["eta"](j) -= eps;
+            auto out_m = MakeOutputs(nx, ny);
+            base.Compute(inp_m, out_m);
+
+            for (int k = 0; k < n_mesh; ++k) {
+                double fd = (out_p["mesh"](k) - out_m["mesh"](k)) / (2.0 * eps);
+                double analytical = dm_deta(k * n_st + j);
+                EXPECT_NEAR(analytical, fd, 1e-5)
+                    << "d(mesh[" << k << "])/d(eta[" << j << "])";
+            }
+        }
     }
 }
 
