@@ -190,6 +190,20 @@ if(PEGASUS_BUILD_PHILOTE)
         target_include_directories(mesh_philote_server BEFORE PRIVATE ${_proto_inc})
     endif()
 
+    # Viscous-VLM discipline server (requires the viscous coupling module).
+    if(PEGASUS_ENABLE_VISCOUS_COUPLING)
+        add_executable(viscous_vlm_philote_server
+            src/philote/viscous_vlm_discipline.cpp
+            src/philote/viscous_vlm_server.cpp
+        )
+        target_link_libraries(viscous_vlm_philote_server
+            PRIVATE pegasus PhiloteCpp::PhiloteCpp)
+        if(_proto_inc)
+            target_include_directories(viscous_vlm_philote_server BEFORE PRIVATE
+                ${_proto_inc})
+        endif()
+    endif()
+
     # Philote discipline tests
     if(PEGASUS_BUILD_TESTS)
         add_executable(pegasus_philote_tests
