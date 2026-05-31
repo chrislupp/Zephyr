@@ -189,11 +189,13 @@ void VortexLattice::GenerateSurfaceMesh(const Surface& surface,
         Scalar chord_left = scale.x() * sec_left.GetChord();
         Scalar chord_right = scale.x() * sec_right.GetChord();
 
-        // Section incidence angles (include angle offset)
+        // Section incidence angles (effective twist = geometric + viscous Δα
+        // offset, plus angle offset). The viscous offset is normally zero
+        // unless set by the viscous-inviscid coupler.
         Scalar twist_left =
-            sec_left.GetTwistAngle() * kDegreesToRadians + angle_offset;
+            sec_left.GetEffectiveTwistAngleRadians() + angle_offset;
         Scalar twist_right =
-            sec_right.GetTwistAngle() * kDegreesToRadians + angle_offset;
+            sec_right.GetEffectiveTwistAngleRadians() + angle_offset;
 
         // CL-alpha factors
         Scalar claf_left = sec_left.GetClAlphaFactor();

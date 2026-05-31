@@ -106,6 +106,26 @@ public:
         return twist_angle_deg_ * kDegreesToRadians;
     }
 
+    /// @brief Gets the viscous twist offset in degrees.
+    ///
+    /// An additional twist increment applied on top of the geometric twist
+    /// without modifying it. Used by the viscous-inviscid coupler to inject
+    /// a per-strip Δα correction during the Newton loop. Default is 0.
+    [[nodiscard]] Scalar GetTwistOffset() const { return twist_offset_deg_; }
+
+    /// @brief Sets the viscous twist offset in degrees.
+    void SetTwistOffset(Scalar offset_deg) { twist_offset_deg_ = offset_deg; }
+
+    /// @brief Gets the effective twist angle (geometric + offset) in degrees.
+    [[nodiscard]] Scalar GetEffectiveTwistAngle() const {
+        return twist_angle_deg_ + twist_offset_deg_;
+    }
+
+    /// @brief Gets the effective twist angle (geometric + offset) in radians.
+    [[nodiscard]] Scalar GetEffectiveTwistAngleRadians() const {
+        return GetEffectiveTwistAngle() * kDegreesToRadians;
+    }
+
     /// @}
 
     /// @name Airfoil
@@ -234,6 +254,7 @@ private:
     Vec3 leading_edge_position_{0, 0, 0};  ///< Leading edge (x, y, z)
     Scalar chord_{1.0};                    ///< Chord length
     Scalar twist_angle_deg_{0.0};          ///< Angle of incidence (degrees)
+    Scalar twist_offset_deg_{0.0};         ///< Viscous Δα offset (degrees)
     std::shared_ptr<Airfoil> airfoil_;     ///< Airfoil definition
     Scalar cl_alpha_factor_{1.0};          ///< CL-alpha scaling factor
 

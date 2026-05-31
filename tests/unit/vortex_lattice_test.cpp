@@ -510,5 +510,40 @@ TEST_F(VortexLatticeTest, RecalculateNormals) {
                 0.0, 1e-10);
 }
 
+TEST_F(VortexLatticeTest, TwistOffsetEquivalentToGeometricTwist) {
+    // A section configured with (twist=2°, offset=3°) should produce the
+    // same mesh as one with (twist=5°, offset=0°). This is the contract
+    // the viscous-inviscid coupler relies on when injecting Δα.
+    Scalar span = 2.0;
+    Scalar chord = 1.0;
+
+    auto build = [&](Scalar root_twist, Scalar root_offset, Scalar tip_twist,
+                     Scalar tip_offset) {
+        Aircraft a("Test");
+        Surface wing("Wing");
+        wing.SetChordwisePanelCount(4);
+        wing.SetSpanwisePanelCount(4);
+        Section root(Vec3(0, 0, 0), chord, root_twist);
+        root.SetTwistOffset(root_offset);
+        Section tip(Vec3(0, span / 2, 0), chord, tip_twist);
+        tip.SetTwistOffset(tip_offset);
+        wing.AddSection(root);
+        wing.AddSection(tip);
+        a.AddSurface(wing);
+        VortexLattice m;
+        m.GenerateFromAircraft(a);
+        return m;
+    };
+
+    VortexLattice baseline = build(5.0, 0.0, 1.0, 0.0);
+    VortexLattice with_offset = build(2.0, 3.0, 0.0, 1.0);
+
+    ASSERT_EQ(baseline.GetNumStrips(), with_offset.GetNumStrips());
+    for (Index j = 0; j < baseline.GetNumStrips(); ++j) {
+        EXPECT_NEAR(baseline.GetStrip(j).twist_angle,
+                    with_offset.GetStrip(j).twist_angle, 1e-12);
+    }
+}
+
 }  // namespace
 }  // namespace pegasus

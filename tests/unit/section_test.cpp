@@ -134,6 +134,23 @@ TEST(SectionUnitTest, ClAlphaFactor) {
     EXPECT_NEAR(s.GetClAlphaFactor(), 0.8, kTol);
 }
 
+TEST(SectionUnitTest, TwistOffsetDefaultsToZero) {
+    Section s;
+    EXPECT_NEAR(s.GetTwistOffset(), 0.0, kTol);
+    EXPECT_NEAR(s.GetEffectiveTwistAngle(), s.GetTwistAngle(), kTol);
+}
+
+TEST(SectionUnitTest, TwistOffsetAddsToGeometricTwist) {
+    Section s;
+    s.SetTwistAngle(2.0);
+    s.SetTwistOffset(0.5);
+    EXPECT_NEAR(s.GetTwistAngle(), 2.0, kTol);  // geometric preserved
+    EXPECT_NEAR(s.GetTwistOffset(), 0.5, kTol);
+    EXPECT_NEAR(s.GetEffectiveTwistAngle(), 2.5, kTol);
+    EXPECT_NEAR(s.GetEffectiveTwistAngleRadians(), 2.5 * kDegreesToRadians,
+                1e-12);
+}
+
 // ============================================================================
 // Control Surfaces
 // ============================================================================

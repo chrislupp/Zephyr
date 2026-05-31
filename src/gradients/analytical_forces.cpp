@@ -545,9 +545,12 @@ void per_vortex_force_circulation_vjp(
         for (int j = 0; j < num_vim_cols; ++j) {
             // VIM column j, rows 3*i .. 3*i+2
             double vim_ij[3] = {
-                vim[static_cast<std::size_t>(j) * (3 * num_vortices) + 3 * i + 0],
-                vim[static_cast<std::size_t>(j) * (3 * num_vortices) + 3 * i + 1],
-                vim[static_cast<std::size_t>(j) * (3 * num_vortices) + 3 * i + 2]};
+                vim[static_cast<std::size_t>(j) * (3 * num_vortices) + 3 * i +
+                    0],
+                vim[static_cast<std::size_t>(j) * (3 * num_vortices) + 3 * i +
+                    1],
+                vim[static_cast<std::size_t>(j) * (3 * num_vortices) + 3 * i +
+                    2]};
 
             // VIM_{i,j} x dl_i
             double vim_cross_dl[3] = {vim_ij[1] * dl[2] - vim_ij[2] * dl[1],
