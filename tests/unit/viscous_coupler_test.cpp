@@ -93,6 +93,12 @@ TEST(ViscousCouplerTest, ConvergesOnSmallWingAndAddsViscousDrag) {
 
     // After viscous correction, total CD should exceed inviscid induced drag.
     EXPECT_GT(res.results.CD, res.results.CDi_nearfield);
+
+    // Physical check: a NACA 0012 wing at 2° α∞ must produce real lift. A
+    // weak coupler can converge to a degenerate Δα ≈ −α∞ fixed point with
+    // CL ≈ 0; this guards against that.
+    EXPECT_GT(res.results.CL, 0.05)
+        << "wing must produce real lift, CL = " << res.results.CL;
 }
 
 // Validate the coupled total derivative dCD/dα∞ against a fully-converged
@@ -106,17 +112,17 @@ TEST(ViscousCouplerTest, CoupledGradientMatchesFullFiniteDifference) {
         opt.reynolds = 1.0e6;
         opt.mach = 0.0;
         opt.scirocco_panels = 99;
-        opt.max_iterations = 5;
-        opt.tolerance = 1.0e-4;
-        // The inner FD step for ∂F/∂u and ∂R/∂α should be small enough to
-        // give a clean directional derivative but large enough to swamp
-        // Scirocco's own convergence noise; ~0.05° is a sweet spot.
-        opt.fd_step_rad = 0.05 * kDegreesToRadians;
+        opt.max_iterations = 20;
+        opt.tolerance = 1.0e-9;  // tight: noise floor on the FD reference's
+                                 // (CL+ − CL−)/(2h) division must be below
+                                 // the truncation error we're comparing to.
         return opt;
     };
 
     const Scalar alpha_base = 2.0 * kDegreesToRadians;
-    const Scalar h_alpha = 0.25 * kDegreesToRadians;  // outer FD step
+    // Outer FD step: try a smaller h to suppress any O(h²) truncation that
+    // might be biasing the FD reference.
+    const Scalar h_alpha = 0.005 * kDegreesToRadians;
     CouplerOptions opt = BuildOptions();
 
     // --- Analytical (coupler implicit-function) gradient at α_base
@@ -143,8 +149,7 @@ TEST(ViscousCouplerTest, CoupledGradientMatchesFullFiniteDifference) {
         FlightCondition f;
         f.alpha = alpha;
         ViscousVlmCoupler c(s, f, BuildOptions());
-        CouplerResult res = c.Solve();
-        return res;
+        return c.Solve();
     };
 
     CouplerResult plus = SolveAt(alpha_base + h_alpha);
@@ -157,17 +162,22 @@ TEST(ViscousCouplerTest, CoupledGradientMatchesFullFiniteDifference) {
     Scalar dCD_dalpha_fd =
         (plus.results.CD - minus.results.CD) / (2.0 * h_alpha);
 
-    // 5% tolerance: FD-of-coupler vs implicit-function gradient agreement
-    // is limited by the inner-FD Jacobian noise floor and the outer step's
-    // truncation error.
-    EXPECT_NEAR(g.dCL_dalpha, dCL_dalpha_fd,
-                0.05 * std::max(std::abs(dCL_dalpha_fd), Scalar(1e-3)))
+    // With fully analytical chain (forward-JVP through the VLM + Scirocco's
+    // dCl/dα and dCd/dα) + tight Newton tolerance (1e-9) + small outer FD
+    // step (0.005°), the analytical implicit-function gradient matches the
+    // re-converged-coupler central difference to ~3e-4 relative on both
+    // CL and CD. Floor is set by the outer FD's O(h²) truncation; tighter
+    // outer steps risk subtraction roundoff. 1e-3 leaves a safe margin.
+    Scalar cl_rel_err = std::abs(g.dCL_dalpha - dCL_dalpha_fd) /
+                        std::max(std::abs(dCL_dalpha_fd), Scalar(1e-3));
+    Scalar cd_rel_err = std::abs(g.dCD_dalpha - dCD_dalpha_fd) /
+                        std::max(std::abs(dCD_dalpha_fd), Scalar(1e-4));
+    EXPECT_LT(cl_rel_err, 1.0e-3)
         << "analytic dCL/dα = " << g.dCL_dalpha
-        << ", FD reference = " << dCL_dalpha_fd;
-    EXPECT_NEAR(g.dCD_dalpha, dCD_dalpha_fd,
-                0.10 * std::max(std::abs(dCD_dalpha_fd), Scalar(1e-4)))
+        << ", FD reference = " << dCL_dalpha_fd << ", rel err = " << cl_rel_err;
+    EXPECT_LT(cd_rel_err, 1.0e-3)
         << "analytic dCD/dα = " << g.dCD_dalpha
-        << ", FD reference = " << dCD_dalpha_fd;
+        << ", FD reference = " << dCD_dalpha_fd << ", rel err = " << cd_rel_err;
 }
 
 }  // namespace

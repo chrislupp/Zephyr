@@ -53,11 +53,14 @@ struct CouplerOptions {
     /// Convergence tolerance: ‖R‖∞ in Cl units.
     Scalar tolerance = 1.0e-5;
 
-    /// Finite-difference step for Jacobian column assembly, in radians.
-    Scalar fd_step_rad = 0.05 * kDegreesToRadians;
-
     /// Newton step damping (line-search factor cap). 1.0 = full step.
     Scalar damping = 1.0;
+
+    /// Maximum |Δα|∞ change per Newton iteration, radians. Step is
+    /// uniformly scaled down if exceeded. Prevents overshoot into
+    /// non-physical fixed points when J is poorly conditioned (which
+    /// happens when the 3D lift slope is close to 2π, making J ≈ small).
+    Scalar max_step_rad = 0.5 * kDegreesToRadians;
 };
 
 /// @brief Outcome of a coupler solve.
@@ -136,15 +139,37 @@ private:
     void ApplyTwistsAndRefresh();
 
     /// Run a VLM solve at the current twist state and return strip Cl and
-    /// α_eff vectors.
+    /// α_eff vectors. Also caches the SolutionState for analytical
+    /// linearization use.
     void EvaluateVlm(VecX& cl_vlm, VecX& alpha_eff);
 
     /// Compute residual R = Cl_VLM − Cl_2D at the current state.
-    /// Also fills cd_2d_ for drag bookkeeping.
+    /// Also fills cd_2d_ and dcl2d_dalpha_/dcd2d_dalpha_ for the
+    /// analytical Jacobian and total-derivative chains.
     VecX ComputeResidual(const VecX& alpha_eff, const VecX& cl_vlm);
 
-    /// Build the Jacobian by finite differences over delta_alpha_.
-    MatX BuildJacobianFD(const VecX& base_residual);
+    /// Build the analytical Jacobian J = ∂R/∂u using a forward
+    /// propagation through the VLM chain (one cheap forward solve per
+    /// column reusing the cached AIC LU) plus Scirocco's analytical
+    /// dCl_2D/dα. No additional VLM or Scirocco solves needed.
+    MatX BuildJacobianAnalytical();
+
+    /// Aggregated forward-mode response of a single perturbation
+    /// direction through the VLM chain (and Scirocco's linearization).
+    struct ForwardResponse {
+        VecX dCl_strip;    ///< Per-strip δCl_VLM
+        VecX dAlphaEff;    ///< Per-strip δα_eff (induced + explicit)
+        Scalar dCL_total;  ///< Integrated δCL (stability axis)
+        Scalar dCD_total;  ///< Integrated δCD = δCDi + δCDv
+    };
+
+    /// Forward-mode propagation: given a normal-vector perturbation `dn`
+    /// (3*N_vortex), a freestream-direction perturbation `dv_inf`, and a
+    /// per-strip explicit twist perturbation `dtwist_explicit`, computes
+    /// per-strip Cl_VLM / α_eff sensitivities, integrated CL/CD
+    /// sensitivities, and the viscous-drag sensitivity through Scirocco.
+    ForwardResponse RunForwardChain(const VecX& dn, const Vec3& dv_inf,
+                                    const VecX& dtwist_explicit);
 
     VortexLatticeSolver& solver_;
     FlightCondition flight_;
@@ -162,6 +187,14 @@ private:
 
     /// Cached 2D drag per strip from the last residual evaluation.
     VecX cd_2d_;
+    /// Cached Scirocco dCl_2D/dα per strip (per radian).
+    VecX dcl2d_dalpha_;
+    /// Cached Scirocco dCd_2D/dα per strip (per radian).
+    VecX dcd2d_dalpha_;
+
+    /// Cached SolutionState from the last EvaluateVlm() call; used by the
+    /// analytical forward chain. Not valid before the first solve.
+    SolutionState last_solution_;
 
     /// Cached VLM aerodynamic results from the last evaluation.
     AerodynamicResults last_results_;
