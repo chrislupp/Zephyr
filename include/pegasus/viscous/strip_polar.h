@@ -26,6 +26,8 @@
 #include <memory>
 #include <string>
 
+#include <Eigen/Core>
+
 namespace scirocco {
 class Scirocco;
 }
@@ -47,6 +49,13 @@ public:
     /// @brief Construct from a NACA 4-digit designator.
     explicit StripPolarSolver(const std::string& naca = "0012",
                               int num_panels = 199);
+
+    /// @brief Construct from a 2×N coordinate matrix (Scirocco order).
+    ///
+    /// `coords` is a 2-by-N matrix of airfoil node coordinates passed
+    /// directly to Scirocco. `num_panels` controls Scirocco's internal
+    /// repaneling.
+    StripPolarSolver(const Eigen::MatrixXd& coords, int num_panels);
 
     ~StripPolarSolver();
     StripPolarSolver(StripPolarSolver&&) noexcept;
@@ -84,6 +93,17 @@ public:
     [[nodiscard]] Scalar GetDclDalphaPerRadian() const;
     /// @brief dCd/dα in units of per-radian.
     [[nodiscard]] Scalar GetDcdDalphaPerRadian() const;
+
+    /// @brief dCl / d(panel-node-coords). Returns a 2×N matrix matching the
+    /// Scirocco-internal panel layout (which may differ from input coords if
+    /// repaneling occurred).
+    [[nodiscard]] const Eigen::MatrixXd& GetDclDx() const;
+    /// @brief dCd / d(panel-node-coords) — same layout as GetDclDx.
+    [[nodiscard]] const Eigen::MatrixXd& GetDcdDx() const;
+
+    /// @brief Number of panels in the Scirocco-internal airfoil. May differ
+    /// from `num_panels` passed at construction if Scirocco repaneled.
+    [[nodiscard]] int GetNumPanels() const;
 
 private:
     std::unique_ptr<scirocco::Scirocco> solver_;

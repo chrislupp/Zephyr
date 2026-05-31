@@ -29,6 +29,10 @@ namespace pegasus::viscous {
 StripPolarSolver::StripPolarSolver(const std::string& naca, int num_panels)
     : solver_(std::make_unique<scirocco::Scirocco>(naca, num_panels)) {}
 
+StripPolarSolver::StripPolarSolver(const Eigen::MatrixXd& coords,
+                                   int num_panels)
+    : solver_(std::make_unique<scirocco::Scirocco>(coords, num_panels)) {}
+
 StripPolarSolver::~StripPolarSolver() = default;
 StripPolarSolver::StripPolarSolver(StripPolarSolver&&) noexcept = default;
 StripPolarSolver& StripPolarSolver::operator=(StripPolarSolver&&) noexcept =
@@ -78,6 +82,18 @@ Scalar StripPolarSolver::GetDclDalphaPerRadian() const {
 
 Scalar StripPolarSolver::GetDcdDalphaPerRadian() const {
     return static_cast<Scalar>(solver_->GetDcdDalpha()) * kRadiansToDegrees;
+}
+
+const Eigen::MatrixXd& StripPolarSolver::GetDclDx() const {
+    return solver_->GetDclDx();
+}
+
+const Eigen::MatrixXd& StripPolarSolver::GetDcdDx() const {
+    return solver_->GetDcdDx();
+}
+
+int StripPolarSolver::GetNumPanels() const {
+    return static_cast<int>(solver_->GetFoilCoords().cols());
 }
 
 }  // namespace pegasus::viscous
