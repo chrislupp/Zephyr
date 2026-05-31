@@ -32,6 +32,12 @@ set(CMAKE_CXX_EXTENSIONS OFF)
 option(PEGASUS_BUILD_TESTS "Build unit tests" ON)
 option(PEGASUS_BUILD_EXAMPLES "Build example programs" ON)
 option(PEGASUS_ENABLE_OPENMP "Enable OpenMP parallelization" OFF)
+option(PEGASUS_ENABLE_VISCOUS_COUPLING
+    "Build the viscous-inviscid coupling module (requires Scirocco/Trysil)"
+    OFF)
+set(PEGASUS_SCIROCCO_SOURCE_DIR
+    "${CMAKE_CURRENT_SOURCE_DIR}/../ProjectTrysil/scirocco"
+    CACHE PATH "Path to the Scirocco/Trysil source tree")
 
 # Export compile commands for IDE support
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
@@ -39,11 +45,13 @@ set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 # Find dependencies
 find_package(Eigen3 5.0 CONFIG REQUIRED)
 
-# Collect source files (exclude philote subdirectory, built separately)
+# Collect source files (exclude philote, built separately; exclude viscous,
+# added conditionally below)
 file(GLOB_RECURSE PEGASUS_SOURCES
     ${CMAKE_CURRENT_SOURCE_DIR}/src/*.cpp
 )
 list(FILTER PEGASUS_SOURCES EXCLUDE REGEX ".*/src/philote/.*")
+list(FILTER PEGASUS_SOURCES EXCLUDE REGEX ".*/src/viscous/.*")
 
 # Main library target
 add_library(pegasus ${PEGASUS_SOURCES})
@@ -96,6 +104,39 @@ if(PEGASUS_ENABLE_VTK)
     else()
         message(STATUS "VTK not found - visualization export disabled")
     endif()
+endif()
+
+# Viscous-inviscid coupling with Scirocco/Trysil (optional)
+if(PEGASUS_ENABLE_VISCOUS_COUPLING)
+    if(NOT EXISTS "${PEGASUS_SCIROCCO_SOURCE_DIR}/CMakeLists.txt")
+        message(FATAL_ERROR
+            "PEGASUS_ENABLE_VISCOUS_COUPLING=ON but Scirocco was not found "
+            "at ${PEGASUS_SCIROCCO_SOURCE_DIR}. Set PEGASUS_SCIROCCO_SOURCE_DIR "
+            "to point at a Scirocco/Trysil source tree."
+        )
+    endif()
+
+    # Suppress Scirocco's tests / examples / Philote / HDF5 / native-march when
+    # consumed as a subdirectory; we only need its library target.
+    set(SCIROCCO_BUILD_TESTS OFF CACHE BOOL "" FORCE)
+    set(SCIROCCO_BUILD_EXAMPLES OFF CACHE BOOL "" FORCE)
+    set(SCIROCCO_BUILD_PHILOTE OFF CACHE BOOL "" FORCE)
+    set(SCIROCCO_HDF5_OUTPUT OFF CACHE BOOL "" FORCE)
+    set(SCIROCCO_NATIVE_ARCH OFF CACHE BOOL "" FORCE)
+    set(SCIROCCO_BUILD_PROBES OFF CACHE BOOL "" FORCE)
+    set(SCIROCCO_BUILD_SENSITIVITY_DEBUG_TESTS OFF CACHE BOOL "" FORCE)
+
+    add_subdirectory(${PEGASUS_SCIROCCO_SOURCE_DIR}
+                     ${CMAKE_BINARY_DIR}/_deps/scirocco-build
+                     EXCLUDE_FROM_ALL)
+
+    # Collect and add the viscous-coupling sources to the main library
+    file(GLOB_RECURSE PEGASUS_VISCOUS_SOURCES
+        ${CMAKE_CURRENT_SOURCE_DIR}/src/viscous/*.cpp
+    )
+    target_sources(pegasus PRIVATE ${PEGASUS_VISCOUS_SOURCES})
+    target_link_libraries(pegasus PUBLIC scirocco)
+    target_compile_definitions(pegasus PUBLIC PEGASUS_HAS_VISCOUS_COUPLING)
 endif()
 
 

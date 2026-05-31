@@ -49,6 +49,12 @@ add_executable(pegasus_unit_tests
     unit/aerodynamic_results_test.cpp
 )
 
+if(PEGASUS_ENABLE_VISCOUS_COUPLING)
+    target_sources(pegasus_unit_tests PRIVATE
+        unit/viscous_strip_polar_test.cpp
+    )
+endif()
+
 target_link_libraries(pegasus_unit_tests
     PRIVATE
         pegasus

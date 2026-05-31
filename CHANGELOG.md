@@ -15,6 +15,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - CMake package config (`cmake/PegasusConfig.cmake.in`, `PegasusConfigVersion.cmake`) installed under `lib/cmake/Pegasus` so downstream projects can consume Pegasus via `find_package(Pegasus)`
 
 - `Section::SetTwistOffset()` / `GetTwistOffset()` / `GetEffectiveTwistAngle()` for injecting a Δα correction on top of the geometric twist without overwriting it; consumed by mesh generation as the effective twist. Used by the viscous-inviscid coupler to inject per-strip Newton corrections.
+- `PEGASUS_ENABLE_VISCOUS_COUPLING` CMake option (default OFF) that pulls in Scirocco/Trysil as a subdirectory dependency for the viscous-inviscid coupling module. Path is controlled by `PEGASUS_SCIROCCO_SOURCE_DIR` (defaults to a sibling `ProjectTrysil/scirocco` directory). When ON, defines `PEGASUS_HAS_VISCOUS_COUPLING` and links `pegasus` against `scirocco`.
+- `pegasus::viscous::StripPolarSolver`: per-strip wrapper around a Scirocco 2D viscous airfoil analysis with warm-start support (caches converged BL state across Newton iterations via Scirocco's `oper.initbl = false`). Exposes Cl/Cd/Cm at radians and per-radian dCl/dα and dCd/dα for the coupling Jacobian.
 
 ### Fixed
 - Qualify bare `size_t` as `std::size_t` in `per_vortex_force_circulation_vjp()` so it builds with stricter compiler frontends (e.g. AppleClang)
