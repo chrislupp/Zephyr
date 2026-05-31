@@ -52,6 +52,7 @@ add_executable(pegasus_unit_tests
 if(PEGASUS_ENABLE_VISCOUS_COUPLING)
     target_sources(pegasus_unit_tests PRIVATE
         unit/viscous_strip_polar_test.cpp
+        unit/viscous_coupler_test.cpp
     )
 endif()
 
