@@ -69,6 +69,18 @@ struct CouplerResult {
     VecX delta_alpha;  ///< Per-strip Δα at exit, radians.
 };
 
+/// @brief Total derivatives of integrated outputs w.r.t. design variables,
+/// accounting for the implicit coupling between VLM and 2D viscous solvers.
+struct CoupledGradients {
+    Scalar CL = 0.0;
+    Scalar CD = 0.0;
+
+    /// dCL/dα∞ and dCD/dα∞ (per radian) including the implicit coupling
+    /// du/dα∞ that satisfies the converged residual.
+    Scalar dCL_dalpha = 0.0;
+    Scalar dCD_dalpha = 0.0;
+};
+
 /// @brief Viscous-inviscid coupler: drives a VLM ↔ 2D airfoil Newton loop.
 ///
 /// At each outer iteration the coupler:
@@ -91,6 +103,20 @@ public:
 
     /// @brief Solve the coupled problem.
     CouplerResult Solve();
+
+    /// @brief Total derivatives of CL and CD with respect to the freestream
+    /// angle of attack α∞ at the currently-converged state.
+    ///
+    /// Must be called after `Solve()` has converged. Uses the implicit
+    /// function theorem:
+    ///   J · (du/dα) = −∂R/∂α     [forward sensitivity]
+    ///   dF/dα = ∂F/∂α + ∂F/∂u · (du/dα)
+    /// All partials and the Jacobian J = ∂R/∂u are obtained via finite
+    /// differences in this v1 implementation.
+    ///
+    /// On return, the coupler's internal state is left at the converged
+    /// (u*, x) baseline.
+    CoupledGradients ComputeAlphaDerivatives();
 
     /// @brief Baseline (pre-coupling) twist of each strip, radians.
     [[nodiscard]] const VecX& GetBaselineTwists() const {

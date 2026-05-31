@@ -224,4 +224,99 @@ CouplerResult ViscousVlmCoupler::Solve() {
     return out;
 }
 
+CoupledGradients ViscousVlmCoupler::ComputeAlphaDerivatives() {
+    CoupledGradients g;
+    const Index n = static_cast<Index>(strip_polars_.size());
+
+    // Base evaluation at converged (u*, α∞)
+    VecX cl_base(n), alpha_eff_base(n);
+    EvaluateVlm(cl_base, alpha_eff_base);
+    VecX r_base = ComputeResidual(alpha_eff_base, cl_base);
+    AerodynamicResults base_results = last_results_;
+    // Capture base CL/CD with viscous correction.
+    auto AccumulateCDv = [&](const VecX& cd2d) {
+        Scalar cdv = 0.0;
+        const VortexLattice& mesh = solver_.GetMesh();
+        for (Index i = 0; i < n; ++i) {
+            const Strip& strip = mesh.GetStrip(i);
+            cdv += cd2d(i) * strip.chord_center * strip.width;
+        }
+        return cdv / std::max(base_results.reference_area, Scalar(1e-30));
+    };
+    const VecX cd2d_base = cd_2d_;
+    const Scalar CL_base = base_results.CL;
+    const Scalar CD_base =
+        base_results.CDi_nearfield + AccumulateCDv(cd2d_base);
+    g.CL = CL_base;
+    g.CD = CD_base;
+
+    // -----------------------------------------------------------------
+    // ∂F/∂u and J = ∂R/∂u via finite differences on Δα (shared sweep).
+    // For each strip j perturb Δα_j by h, re-evaluate everything, capture
+    // both r_pert (residual column) and F_pert (CL, CD with viscous
+    // correction). Net cost: N evaluations.
+    // -----------------------------------------------------------------
+    const Scalar h = options_.fd_step_rad;
+    MatX J(n, n);  // ∂R/∂u
+    VecX dCL_du = VecX::Zero(n);
+    VecX dCD_du = VecX::Zero(n);
+
+    const VecX delta_alpha_save = delta_alpha_;
+    VecX cl_pert(n), alpha_pert(n);
+
+    for (Index j = 0; j < n; ++j) {
+        delta_alpha_ = delta_alpha_save;
+        delta_alpha_(j) += h;
+
+        EvaluateVlm(cl_pert, alpha_pert);
+        VecX r_pert = ComputeResidual(alpha_pert, cl_pert);
+        J.col(j) = (r_pert - r_base) / h;
+
+        const Scalar CL_pert = last_results_.CL;
+        const Scalar CD_pert =
+            last_results_.CDi_nearfield + AccumulateCDv(cd_2d_);
+        dCL_du(j) = (CL_pert - CL_base) / h;
+        dCD_du(j) = (CD_pert - CD_base) / h;
+    }
+    delta_alpha_ = delta_alpha_save;
+
+    // -----------------------------------------------------------------
+    // ∂F/∂α∞ and ∂R/∂α∞ via FD on α∞, holding u fixed.
+    // -----------------------------------------------------------------
+    const Scalar h_alpha = options_.fd_step_rad;
+    const FlightCondition flight_save = flight_;
+    flight_.alpha += h_alpha;
+    EvaluateVlm(cl_pert, alpha_pert);
+    VecX r_alpha = ComputeResidual(alpha_pert, cl_pert);
+    const Scalar CL_alpha_pert = last_results_.CL;
+    const Scalar CD_alpha_pert =
+        last_results_.CDi_nearfield + AccumulateCDv(cd_2d_);
+    flight_ = flight_save;
+
+    VecX dR_dalpha = (r_alpha - r_base) / h_alpha;
+    Scalar dCL_dalpha_partial = (CL_alpha_pert - CL_base) / h_alpha;
+    Scalar dCD_dalpha_partial = (CD_alpha_pert - CD_base) / h_alpha;
+
+    // -----------------------------------------------------------------
+    // Forward sensitivity:  J · (du/dα) = −∂R/∂α
+    // -----------------------------------------------------------------
+    Eigen::FullPivLU<MatX> lu(J);
+    VecX du_dalpha = lu.solve(-dR_dalpha);
+
+    // -----------------------------------------------------------------
+    // Total derivative:  dF/dα = ∂F/∂α + ∂F/∂u · (du/dα)
+    // -----------------------------------------------------------------
+    g.dCL_dalpha = dCL_dalpha_partial + dCL_du.dot(du_dalpha);
+    g.dCD_dalpha = dCD_dalpha_partial + dCD_du.dot(du_dalpha);
+
+    // Restore the converged base state so subsequent calls see a clean
+    // coupler.
+    EvaluateVlm(cl_base, alpha_eff_base);
+    (void)ComputeResidual(alpha_eff_base, cl_base);
+    last_results_ = base_results;
+    cd_2d_ = cd2d_base;
+
+    return g;
+}
+
 }  // namespace pegasus::viscous

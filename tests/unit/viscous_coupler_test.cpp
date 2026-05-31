@@ -57,6 +57,14 @@ Aircraft BuildSmallWing(Index n_spanwise) {
     return aircraft;
 }
 
+// Convenience: build a coupler around a freshly-meshed solver and return
+// both. The coupler holds a reference to the solver, so the caller must
+// keep `solver` alive at least as long as the returned coupler.
+struct CouplerFixture {
+    Aircraft aircraft;
+    VortexLatticeSolver solver;
+};
+
 // Smoke test: the Newton loop converges on a small wing at low α and
 // produces a viscous drag contribution that is positive and non-trivial.
 TEST(ViscousCouplerTest, ConvergesOnSmallWingAndAddsViscousDrag) {
@@ -85,6 +93,81 @@ TEST(ViscousCouplerTest, ConvergesOnSmallWingAndAddsViscousDrag) {
 
     // After viscous correction, total CD should exceed inviscid induced drag.
     EXPECT_GT(res.results.CD, res.results.CDi_nearfield);
+}
+
+// Validate the coupled total derivative dCD/dα∞ against a fully-converged
+// finite difference over α∞. This exercises the implicit-function chain
+// inside ComputeAlphaDerivatives(): J du/dα + ∂R/∂α = 0,  then
+// dF/dα = ∂F/∂α + ∂F/∂u · du/dα.
+TEST(ViscousCouplerTest, CoupledGradientMatchesFullFiniteDifference) {
+    auto BuildOptions = []() {
+        CouplerOptions opt;
+        opt.airfoil_naca = "0012";
+        opt.reynolds = 1.0e6;
+        opt.mach = 0.0;
+        opt.scirocco_panels = 99;
+        opt.max_iterations = 5;
+        opt.tolerance = 1.0e-4;
+        // The inner FD step for ∂F/∂u and ∂R/∂α should be small enough to
+        // give a clean directional derivative but large enough to swamp
+        // Scirocco's own convergence noise; ~0.05° is a sweet spot.
+        opt.fd_step_rad = 0.05 * kDegreesToRadians;
+        return opt;
+    };
+
+    const Scalar alpha_base = 2.0 * kDegreesToRadians;
+    const Scalar h_alpha = 0.25 * kDegreesToRadians;  // outer FD step
+    CouplerOptions opt = BuildOptions();
+
+    // --- Analytical (coupler implicit-function) gradient at α_base
+    Aircraft aircraft = BuildSmallWing(/*n_spanwise=*/2);
+    VortexLatticeSolver solver;
+    solver.SetAircraft(aircraft);
+    FlightCondition flight;
+    flight.alpha = alpha_base;
+
+    ViscousVlmCoupler coupler(solver, flight, opt);
+    CouplerResult base = coupler.Solve();
+    ASSERT_TRUE(base.converged);
+
+    CoupledGradients g = coupler.ComputeAlphaDerivatives();
+
+    // --- Reference: re-converge the coupler at α_base ± h, take central
+    // difference of CL and CD. Each independent re-solve gets its own
+    // Aircraft/Solver to avoid carrying over the previously-mutated mesh
+    // state.
+    auto SolveAt = [&](Scalar alpha) -> CouplerResult {
+        Aircraft a = BuildSmallWing(/*n_spanwise=*/2);
+        VortexLatticeSolver s;
+        s.SetAircraft(a);
+        FlightCondition f;
+        f.alpha = alpha;
+        ViscousVlmCoupler c(s, f, BuildOptions());
+        CouplerResult res = c.Solve();
+        return res;
+    };
+
+    CouplerResult plus = SolveAt(alpha_base + h_alpha);
+    CouplerResult minus = SolveAt(alpha_base - h_alpha);
+    ASSERT_TRUE(plus.converged);
+    ASSERT_TRUE(minus.converged);
+
+    Scalar dCL_dalpha_fd =
+        (plus.results.CL - minus.results.CL) / (2.0 * h_alpha);
+    Scalar dCD_dalpha_fd =
+        (plus.results.CD - minus.results.CD) / (2.0 * h_alpha);
+
+    // 5% tolerance: FD-of-coupler vs implicit-function gradient agreement
+    // is limited by the inner-FD Jacobian noise floor and the outer step's
+    // truncation error.
+    EXPECT_NEAR(g.dCL_dalpha, dCL_dalpha_fd,
+                0.05 * std::max(std::abs(dCL_dalpha_fd), Scalar(1e-3)))
+        << "analytic dCL/dα = " << g.dCL_dalpha
+        << ", FD reference = " << dCL_dalpha_fd;
+    EXPECT_NEAR(g.dCD_dalpha, dCD_dalpha_fd,
+                0.10 * std::max(std::abs(dCD_dalpha_fd), Scalar(1e-4)))
+        << "analytic dCD/dα = " << g.dCD_dalpha
+        << ", FD reference = " << dCD_dalpha_fd;
 }
 
 }  // namespace
