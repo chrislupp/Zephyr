@@ -14,6 +14,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `VortexLatticeSolver::SolveForward()` exposes the cached AIC LU factorization for forward-mode circulation sensitivities used by the JVP chain
 - CMake package config (`cmake/PegasusConfig.cmake.in`, `PegasusConfigVersion.cmake`) installed under `lib/cmake/Pegasus` so downstream projects can consume Pegasus via `find_package(Pegasus)`
 
+### Fixed
+- Qualify bare `size_t` as `std::size_t` in `per_vortex_force_circulation_vjp()` so it builds with stricter compiler frontends (e.g. AppleClang)
+
 ## [0.2.0] - 2026-05-04
 
 ### Added
