@@ -189,4 +189,42 @@ void analytical_force_geometry_gradient(
     double reference_area, const double* d_bound_left,
     const double* d_bound_right, const double* d_moment_arm, double* d_result);
 
+// ============================================================================
+// Per-Vortex Force Circulation VJP (for Perseus aerostructural coupling)
+// ============================================================================
+
+/// @brief Per-vortex force circulation VJP (vector-Jacobian product).
+///
+/// Computes result = (dF/dGamma)^T * seed, where F is the (3N x 1)
+/// per-vortex body-frame force vector and Gamma is the (N x 1) circulation
+/// vector.
+///
+/// The force on vortex i is:
+///   F_i = 2 * Gamma_i * (V_eff_i x dl_i)
+///   V_eff_i = V_inf + sum_j VIM_{i,j} * Gamma_j
+///
+/// So dF_i/dGamma_j has two contributions:
+///   Direct (j == i):   2 * (V_eff_i x dl_i)
+///   Induced (all j):   2 * Gamma_i * (VIM_{i,j} x dl_i)
+///
+/// The VJP contracts the (3N x N) Jacobian with a seed vector (3N x 1)
+/// to produce an (N x 1) result — the form needed by the VLM adjoint.
+///
+/// @param alpha          Angle of attack [rad]
+/// @param beta           Sideslip angle [rad]
+/// @param circulation    Circulation vector (N)
+/// @param induced_velocity  Induced velocity (3N, interleaved xyz per vortex)
+/// @param bound_left     Bound vortex left endpoints (3N, interleaved)
+/// @param bound_right    Bound vortex right endpoints (3N, interleaved)
+/// @param num_vortices   Number of horseshoe vortex elements
+/// @param seed           Adjoint seed vector (3N x 1)
+/// @param vim            Velocity influence matrix (3N x N column-major)
+/// @param num_vim_cols   Number of VIM columns (must equal num_vortices)
+/// @param[out] result    VJP output vector (N x 1), must be pre-allocated
+void per_vortex_force_circulation_vjp(
+    double alpha, double beta, const double* circulation,
+    const double* induced_velocity, const double* bound_left,
+    const double* bound_right, int num_vortices, const double* seed,
+    const double* vim, int num_vim_cols, double* result);
+
 }  // namespace pegasus::gradients

@@ -211,6 +211,16 @@ public:
         return velocity_influence_matrix_;
     }
 
+    /// @brief Solves the forward system AIC * x = rhs using the cached LU
+    /// factorization.
+    ///
+    /// Used for computing circulation sensitivities in forward mode:
+    ///   δΓ = AIC⁻¹ · rhs
+    ///
+    /// @param rhs Right-hand side vector
+    /// @return Solution vector x
+    [[nodiscard]] VecX SolveForward(const VecX& rhs) const;
+
     /// @}
 
 private:

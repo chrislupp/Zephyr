@@ -490,4 +490,75 @@ void analytical_force_geometry_gradient(
     d_result[5] = -d_cm_z;
 }
 
+// ============================================================================
+// Per-Vortex Force Circulation VJP
+// ============================================================================
+
+void per_vortex_force_circulation_vjp(
+    double alpha, double beta, const double* circulation,
+    const double* induced_velocity, const double* bound_left,
+    const double* bound_right, int num_vortices, const double* seed,
+    const double* vim, int num_vim_cols, double* result) {
+    // Zero the output
+    for (int j = 0; j < num_vortices; ++j) {
+        result[j] = 0.0;
+    }
+
+    double v_inf[3];
+    compute_freestream_direction(alpha, beta, v_inf);
+
+    for (int i = 0; i < num_vortices; ++i) {
+        // Effective velocity at vortex i
+        double v_eff[3] = {v_inf[0] + induced_velocity[3 * i + 0],
+                           v_inf[1] + induced_velocity[3 * i + 1],
+                           v_inf[2] + induced_velocity[3 * i + 2]};
+
+        // Bound vortex segment
+        double dl[3] = {bound_right[3 * i + 0] - bound_left[3 * i + 0],
+                        bound_right[3 * i + 1] - bound_left[3 * i + 1],
+                        bound_right[3 * i + 2] - bound_left[3 * i + 2]};
+
+        // Seed sub-vector for vortex i
+        double s[3] = {seed[3 * i + 0], seed[3 * i + 1], seed[3 * i + 2]};
+
+        // -----------------------------------------------------------
+        // Direct term:  dF_i/dGamma_i = 2 * (V_eff_i x dl_i)
+        // Contribution: result[i] += s_i . (2 * V_eff_i x dl_i)
+        // -----------------------------------------------------------
+        double v_cross_dl[3] = {v_eff[1] * dl[2] - v_eff[2] * dl[1],
+                                v_eff[2] * dl[0] - v_eff[0] * dl[2],
+                                v_eff[0] * dl[1] - v_eff[1] * dl[0]};
+        result[i] += 2.0 * (s[0] * v_cross_dl[0] + s[1] * v_cross_dl[1] +
+                            s[2] * v_cross_dl[2]);
+
+        // -----------------------------------------------------------
+        // Induced velocity term (all j):
+        //   dF_i/dGamma_j |_induced = 2 * Gamma_i * (VIM_{i,j} x dl_i)
+        // Contribution: result[j] += s_i . (2 * Gamma_i * (VIM_{i,j} x dl_i))
+        //
+        // VIM layout: (3N x N), element (3*i+k, j) gives velocity component
+        // k at vortex i from unit circulation at vortex j.
+        // -----------------------------------------------------------
+        double gamma_i = circulation[i];
+        double factor = 2.0 * gamma_i;
+
+        for (int j = 0; j < num_vim_cols; ++j) {
+            // VIM column j, rows 3*i .. 3*i+2
+            double vim_ij[3] = {
+                vim[static_cast<size_t>(j) * (3 * num_vortices) + 3 * i + 0],
+                vim[static_cast<size_t>(j) * (3 * num_vortices) + 3 * i + 1],
+                vim[static_cast<size_t>(j) * (3 * num_vortices) + 3 * i + 2]};
+
+            // VIM_{i,j} x dl_i
+            double vim_cross_dl[3] = {vim_ij[1] * dl[2] - vim_ij[2] * dl[1],
+                                      vim_ij[2] * dl[0] - vim_ij[0] * dl[2],
+                                      vim_ij[0] * dl[1] - vim_ij[1] * dl[0]};
+
+            result[j] +=
+                factor * (s[0] * vim_cross_dl[0] + s[1] * vim_cross_dl[1] +
+                          s[2] * vim_cross_dl[2]);
+        }
+    }
+}
+
 }  // namespace pegasus::gradients

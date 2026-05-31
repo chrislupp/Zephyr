@@ -31,6 +31,42 @@ constexpr Scalar kHalfPiInv = 0.15915494309189533577;
 
 }  // namespace
 
+PerVortexForces ForceCalculator::ComputePerVortexForces(
+    const VortexLattice& mesh, const SolutionState& solution,
+    const FlightCondition& condition) const {
+    const Index n = mesh.GetNumVortices();
+
+    PerVortexForces result;
+    result.forces.resize(3 * n);
+    result.moments.resize(3 * n);
+    result.moments.setZero();
+
+    Vec3 v_inf = VortexLatticeSolver::ComputeFreestreamDirection(condition);
+
+    for (Index i = 0; i < n; ++i) {
+        const HorseshoeVortex& vor = mesh.GetVortex(i);
+
+        // Effective velocity at bound vortex = freestream + induced
+        Vec3 v_eff = v_inf;
+        if (include_induced_velocity_ && solution.induced_velocity.rows() > i) {
+            v_eff.x() += solution.induced_velocity(i, 0);
+            v_eff.y() += solution.induced_velocity(i, 1);
+            v_eff.z() += solution.induced_velocity(i, 2);
+        }
+
+        // Bound vortex vector (from left to right)
+        Vec3 gamma_vec = vor.bound_vortex_right - vor.bound_vortex_left;
+
+        // Kutta-Joukowski: F = 2 * Gamma * (V_eff x dl)
+        Scalar gamma = solution.circulation(i);
+        Vec3 f = 2.0 * gamma * v_eff.cross(gamma_vec);
+
+        result.forces.segment<3>(3 * i) = f;
+    }
+
+    return result;
+}
+
 void ForceCalculator::BodyToStabilityAxis(const Vec3& cf_body, Scalar alpha,
                                           Scalar& CL, Scalar& CD) const {
     Scalar ca = std::cos(alpha);

@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- `PerVortexForces` struct and `ForceCalculator::ComputePerVortexForces()` for raw per-vortex body-frame forces without strip aggregation (Phase 0A of Perseus aerostructural coupling)
+- `per_vortex_force_circulation_vjp()` analytical gradient function for the VLM adjoint: computes (dF/dGamma)^T * seed including both direct and induced-velocity contributions (Phase 0B of Perseus coupling)
+- `forward_jvp.h`/`forward_jvp.cpp` module with forward-mode Jacobian-vector products through the VLM chain (mesh nodes → vortex geometry → AIC/b → Γ → per-vortex forces) for condensed-Jacobian aerostructural assembly (Phase 0C of Perseus coupling)
+- `VortexLatticeSolver::SolveForward()` exposes the cached AIC LU factorization for forward-mode circulation sensitivities used by the JVP chain
+- CMake package config (`cmake/PegasusConfig.cmake.in`, `PegasusConfigVersion.cmake`) installed under `lib/cmake/Pegasus` so downstream projects can consume Pegasus via `find_package(Pegasus)`
+
 ## [0.2.0] - 2026-05-04
 
 ### Added

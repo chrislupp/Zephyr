@@ -250,4 +250,8 @@ SolutionState VortexLatticeSolver::Solve(const FlightCondition& condition) {
     return state;
 }
 
+VecX VortexLatticeSolver::SolveForward(const VecX& rhs) const {
+    return aic_lu_.solve(rhs);
+}
+
 }  // namespace pegasus

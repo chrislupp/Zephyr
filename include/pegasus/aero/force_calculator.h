@@ -30,6 +30,20 @@
 
 namespace pegasus {
 
+/// Per-vortex force and moment data in body frame.
+///
+/// Stores the raw (un-normalized) per-vortex forces before any strip or
+/// surface aggregation.  The force on vortex i occupies
+/// forces.segment<3>(3*i).  These are the raw Kutta-Joukowski values:
+///   F_i = 2 * Gamma_i * (V_eff_i x dl_i)
+/// which equal the force coefficient times reference area in the Pegasus
+/// non-dimensionalization.  Perseus handles dimensional scaling externally.
+struct PerVortexForces {
+    VecX forces;   ///< (3*N x 1) body-frame force per vortex
+    VecX moments;  ///< (3*N x 1) body-frame moment per vortex (about control
+                   ///< point; currently zero — moment arm handled by Perseus)
+};
+
 /// Computes aerodynamic forces and moments using near-field integration.
 ///
 /// Uses the Kutta-Joukowski theorem to compute forces on each vortex element:
@@ -75,6 +89,23 @@ public:
                                  Scalar reference_area, Scalar reference_span,
                                  Scalar& CL_ff, Scalar& CY_ff, Scalar& CDi_ff,
                                  Scalar& span_efficiency) const;
+
+    /// Compute per-vortex forces in body frame without strip aggregation.
+    ///
+    /// Returns the raw Kutta-Joukowski force for every horseshoe vortex
+    /// element before any strip or surface aggregation.  The force on
+    /// vortex i is stored in result.forces.segment<3>(3*i).
+    ///
+    /// Moments are set to zero — the moment arm about a structural node is
+    /// handled by the Perseus load-transfer module.
+    ///
+    /// @param mesh      The vortex lattice mesh
+    /// @param solution  The converged circulation solution
+    /// @param condition The flight condition used in the solve
+    /// @return PerVortexForces with forces (3N x 1) and moments (3N x 1)
+    [[nodiscard]] PerVortexForces ComputePerVortexForces(
+        const VortexLattice& mesh, const SolutionState& solution,
+        const FlightCondition& condition) const;
 
     /// Set whether to include induced velocity in force computation.
     /// Default is true (include induced velocity for more accurate forces).

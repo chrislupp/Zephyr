@@ -167,6 +167,8 @@ endif()
 
 # Installation
 include(GNUInstallDirs)
+include(CMakePackageConfigHelpers)
+
 install(TARGETS pegasus
     EXPORT pegasus-targets
     LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR}
@@ -177,5 +179,21 @@ install(DIRECTORY include/ DESTINATION ${CMAKE_INSTALL_INCLUDEDIR})
 install(EXPORT pegasus-targets
     FILE PegasusTargets.cmake
     NAMESPACE Pegasus::
+    DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/Pegasus
+)
+
+configure_package_config_file(
+    "${CMAKE_CURRENT_SOURCE_DIR}/cmake/PegasusConfig.cmake.in"
+    "${CMAKE_CURRENT_BINARY_DIR}/PegasusConfig.cmake"
+    INSTALL_DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/Pegasus
+)
+write_basic_package_version_file(
+    "${CMAKE_CURRENT_BINARY_DIR}/PegasusConfigVersion.cmake"
+    VERSION ${PROJECT_VERSION}
+    COMPATIBILITY SameMajorVersion
+)
+install(FILES
+    "${CMAKE_CURRENT_BINARY_DIR}/PegasusConfig.cmake"
+    "${CMAKE_CURRENT_BINARY_DIR}/PegasusConfigVersion.cmake"
     DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/Pegasus
 )
