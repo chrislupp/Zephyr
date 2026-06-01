@@ -110,8 +110,8 @@ TEST(ViscousCouplerTest, ConvergesOnSmallWingAndAddsViscousDrag) {
     CouplerOptions opt;
     opt.stations = UniformStations({0.05, 0.5, 0.95}, /*panels=*/99);
     opt.mach = 0.0;
-    opt.max_iterations = 8;
-    opt.tolerance = 5.0e-3;
+    opt.max_iterations = 20;
+    opt.tolerance = 1.0e-6;
 
     ViscousVlmCoupler coupler(solver, flight, opt);
     CouplerResult res = coupler.Solve();
@@ -292,8 +292,8 @@ TEST(ViscousCouplerTest, ConvergesOnSweptWing) {
     CouplerOptions opt;
     opt.stations = UniformStations({0.05, 0.5, 0.95}, /*panels=*/99);
     opt.mach = 0.0;
-    opt.max_iterations = 12;
-    opt.tolerance = 5.0e-3;
+    opt.max_iterations = 20;
+    opt.tolerance = 1.0e-6;
 
     ViscousVlmCoupler coupler(solver, flight, opt);
     CouplerResult res = coupler.Solve();
