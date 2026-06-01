@@ -21,12 +21,12 @@
 #include "pegasus/philote/viscous_vlm_discipline.h"
 
 #include "pegasus/aero/aerodynamic_results.h"
+#include "pegasus/core/types.h"
 
 #include <algorithm>
 #include <sstream>
 #include <stdexcept>
-
-#include <scirocco/scirocco.h>
+#include <string>
 
 namespace pegasus {
 
@@ -52,6 +52,12 @@ bool ParseBoolStr(const std::string& s) {
     return lower == "true" || lower == "1" || lower == "yes";
 }
 
+std::string StationCoordsInputName(int k) {
+    std::ostringstream oss;
+    oss << "station_" << k << "_coords";
+    return oss.str();
+}
+
 }  // namespace
 
 // =============================================================================
@@ -61,8 +67,7 @@ bool ParseBoolStr(const std::string& s) {
 void ViscousVlmDiscipline::Initialize() {
     ExplicitDiscipline::Initialize();
 
-    // Surface configuration (same shape as VlmDiscipline so they're
-    // interchangeable from an MDO setup perspective).
+    // Surface configuration.
     AddOption("num_surfaces", "int");
     AddOption("surface_names", "string");
     AddOption("surface_nx", "string");
@@ -73,30 +78,35 @@ void ViscousVlmDiscipline::Initialize() {
     AddOption("surface_component_index", "string");
     AddOption("surface_affected_by_freestream", "string");
 
-    // Viscous-coupling options.
-    AddOption("viscous_airfoil_naca", "string");
-    AddOption("viscous_reynolds", "double");
+    // Per-station configuration.
+    AddOption("viscous_num_stations", "int");
+    AddOption("viscous_station_eta", "string");
+    AddOption("viscous_station_panels", "string");
+    AddOption("viscous_station_reynolds", "string");
+
+    // Global viscous-coupling scalars.
     AddOption("viscous_mach", "double");
-    AddOption("viscous_panels", "int");
     AddOption("viscous_max_iter", "int");
     AddOption("viscous_tolerance", "double");
+    AddOption("viscous_max_step_deg", "double");
 }
 
 void ViscousVlmDiscipline::SetOptions(
     const google::protobuf::Struct& options_struct) {
     const auto& fields = options_struct.fields();
 
-    int64_t num_surfaces = 1;
-    auto it = fields.find("num_surfaces");
-    if (it != fields.end()) {
-        num_surfaces = static_cast<int64_t>(it->second.number_value());
-    }
-
     auto read_csv = [&](const std::string& key) {
         auto f = fields.find(key);
         return f != fields.end() ? SplitCsv(f->second.string_value())
                                  : std::vector<std::string>{};
     };
+
+    // -------- surfaces (same as VlmDiscipline) --------
+    int64_t num_surfaces = 1;
+    auto it = fields.find("num_surfaces");
+    if (it != fields.end()) {
+        num_surfaces = static_cast<int64_t>(it->second.number_value());
+    }
     auto names = read_csv("surface_names");
     auto nx_strs = read_csv("surface_nx");
     auto ny_strs = read_csv("surface_ny");
@@ -105,7 +115,6 @@ void ViscousVlmDiscipline::SetOptions(
     auto y_dup_plane_strs = read_csv("surface_y_duplicate_plane");
     auto comp_idx_strs = read_csv("surface_component_index");
     auto aff_strs = read_csv("surface_affected_by_freestream");
-
     if (static_cast<int64_t>(names.size()) != num_surfaces ||
         static_cast<int64_t>(nx_strs.size()) != num_surfaces ||
         static_cast<int64_t>(ny_strs.size()) != num_surfaces) {
@@ -113,7 +122,6 @@ void ViscousVlmDiscipline::SetOptions(
             "ViscousVlmDiscipline: surface_names / surface_nx / surface_ny "
             "count must match num_surfaces");
     }
-
     surfaces_.clear();
     surfaces_.resize(num_surfaces);
     for (int64_t i = 0; i < num_surfaces; ++i) {
@@ -132,31 +140,56 @@ void ViscousVlmDiscipline::SetOptions(
             surfaces_[i].affected_by_freestream = ParseBoolStr(aff_strs[i]);
     }
 
-    // Viscous-coupling scalars.
-    it = fields.find("viscous_airfoil_naca");
-    if (it != fields.end())
-        airfoil_naca_ = it->second.string_value();
-    it = fields.find("viscous_reynolds");
-    if (it != fields.end())
-        reynolds_ = it->second.number_value();
+    // -------- stations --------
+    int64_t num_stations = 0;
+    it = fields.find("viscous_num_stations");
+    if (it != fields.end()) {
+        num_stations = static_cast<int64_t>(it->second.number_value());
+    }
+    if (num_stations < 2) {
+        throw std::runtime_error(
+            "ViscousVlmDiscipline: viscous_num_stations must be >= 2");
+    }
+    auto eta_strs = read_csv("viscous_station_eta");
+    auto panel_strs = read_csv("viscous_station_panels");
+    auto re_strs = read_csv("viscous_station_reynolds");
+    if (static_cast<int64_t>(eta_strs.size()) != num_stations) {
+        throw std::runtime_error(
+            "ViscousVlmDiscipline: viscous_station_eta count must match "
+            "viscous_num_stations");
+    }
+    station_eta_.resize(num_stations);
+    station_panels_.assign(num_stations, 99);
+    station_reynolds_.assign(num_stations, 1.0e6);
+    for (int64_t i = 0; i < num_stations; ++i) {
+        station_eta_[i] = std::stod(eta_strs[i]);
+        if (i < static_cast<int64_t>(panel_strs.size())) {
+            station_panels_[i] = static_cast<int>(std::stol(panel_strs[i]));
+        }
+        if (i < static_cast<int64_t>(re_strs.size())) {
+            station_reynolds_[i] = std::stod(re_strs[i]);
+        }
+    }
+
+    // -------- scalars --------
     it = fields.find("viscous_mach");
     if (it != fields.end())
         mach_override_ = it->second.number_value();
-    it = fields.find("viscous_panels");
-    if (it != fields.end())
-        scirocco_panels_ = static_cast<int>(it->second.number_value());
     it = fields.find("viscous_max_iter");
     if (it != fields.end())
         max_iter_ = static_cast<int>(it->second.number_value());
     it = fields.find("viscous_tolerance");
     if (it != fields.end())
         tolerance_ = it->second.number_value();
+    it = fields.find("viscous_max_step_deg");
+    if (it != fields.end())
+        max_step_deg_ = it->second.number_value();
 
     ExplicitDiscipline::SetOptions(options_struct);
 }
 
 void ViscousVlmDiscipline::Setup() {
-    // Same input contract as VlmDiscipline.
+    // Mesh node inputs (one per surface).
     for (const auto& s : surfaces_) {
         int64_t num_values = (s.nx + 1) * (s.ny + 1) * 3;
         AddInput(s.name, {num_values}, "m");
@@ -175,18 +208,25 @@ void ViscousVlmDiscipline::Setup() {
     AddInput("pitch_rate", {1}, "");
     AddInput("yaw_rate", {1}, "");
 
-    // Outputs: viscous-corrected CL, CD.
+    // Per-station coords: 2 · N_k coords stored as [x0,z0,x1,z1,...].
+    for (std::size_t k = 0; k < station_eta_.size(); ++k) {
+        int n = station_panels_[k];
+        AddInput(StationCoordsInputName(static_cast<int>(k)),
+                 {2L * static_cast<int64_t>(n)}, "m");
+    }
+
     AddOutput("CL", {1}, "");
     AddOutput("CD", {1}, "");
 }
 
 void ViscousVlmDiscipline::SetupPartials() {
-    // v1: only dCL/dα and dCD/dα are populated by ComputeAlphaDerivatives.
-    // Declare them so MDO frameworks can drive gradient-based solvers on
-    // α-related design variables. Other partials are intentionally not
-    // declared yet — see header for the staged plan.
     DeclarePartials("CL", "alpha");
     DeclarePartials("CD", "alpha");
+    for (std::size_t k = 0; k < station_eta_.size(); ++k) {
+        std::string name = StationCoordsInputName(static_cast<int>(k));
+        DeclarePartials("CL", name);
+        DeclarePartials("CD", name);
+    }
 }
 
 // =============================================================================
@@ -205,7 +245,6 @@ MeshInput ViscousVlmDiscipline::BuildMeshInput(
         inputs.at("moment_ref_y")(0);
     mesh_input.reference.moment_reference_point[2] =
         inputs.at("moment_ref_z")(0);
-
     for (const auto& s : surfaces_) {
         SurfaceMesh surface;
         surface.name = s.name;
@@ -216,7 +255,6 @@ MeshInput ViscousVlmDiscipline::BuildMeshInput(
         surface.has_wake = s.has_wake;
         surface.y_duplicated = s.y_duplicated;
         surface.y_duplicate_plane = s.y_duplicate_plane;
-
         int64_t num_nodes = (s.nx + 1) * (s.ny + 1);
         surface.nodes.resize(num_nodes, 3);
         const auto& var = inputs.at(s.name);
@@ -243,26 +281,36 @@ FlightCondition ViscousVlmDiscipline::BuildFlightCondition(
     return c;
 }
 
-viscous::CouplerOptions ViscousVlmDiscipline::BuildCouplerOptions() const {
+std::vector<viscous::CouplingStation> ViscousVlmDiscipline::BuildStations(
+    const philote::Variables& inputs) const {
+    std::vector<viscous::CouplingStation> stations;
+    stations.reserve(station_eta_.size());
+    for (std::size_t k = 0; k < station_eta_.size(); ++k) {
+        viscous::CouplingStation s;
+        s.eta = station_eta_[k];
+        s.num_panels = station_panels_[k];
+        s.reynolds = station_reynolds_[k];
+        const auto& var =
+            inputs.at(StationCoordsInputName(static_cast<int>(k)));
+        const int N = station_panels_[k];
+        s.coords.resize(2, N);
+        for (int j = 0; j < N; ++j) {
+            s.coords(0, j) = var(2 * j + 0);
+            s.coords(1, j) = var(2 * j + 1);
+        }
+        stations.push_back(std::move(s));
+    }
+    return stations;
+}
+
+viscous::CouplerOptions ViscousVlmDiscipline::BuildCouplerOptions(
+    const philote::Variables& inputs) const {
     viscous::CouplerOptions opt;
+    opt.stations = BuildStations(inputs);
     opt.mach = mach_override_;
     opt.max_iterations = max_iter_;
     opt.tolerance = tolerance_;
-
-    // v1 placeholder: build a small uniform 2-station list at eta = 0.05 /
-    // 0.95 using the NACA designator from options. A future revision will
-    // accept per-station coords directly as discipline inputs to enable
-    // shape-DV optimization.
-    scirocco::Scirocco airfoil(airfoil_naca_, scirocco_panels_);
-    Eigen::MatrixXd coords = airfoil.GetFoilCoords();
-    viscous::CouplingStation root_station;
-    root_station.eta = 0.05;
-    root_station.coords = coords;
-    root_station.num_panels = scirocco_panels_;
-    root_station.reynolds = reynolds_;
-    viscous::CouplingStation tip_station = root_station;
-    tip_station.eta = 0.95;
-    opt.stations = {root_station, tip_station};
+    opt.max_step_rad = max_step_deg_ * kDegreesToRadians;
     return opt;
 }
 
@@ -274,14 +322,11 @@ void ViscousVlmDiscipline::Compute(const philote::Variables& inputs,
                                    philote::Variables& outputs) {
     MeshInput mesh_input = BuildMeshInput(inputs);
     FlightCondition condition = BuildFlightCondition(inputs);
-
     VortexLatticeSolver solver;
     solver.SetMesh(mesh_input);
-
     viscous::ViscousVlmCoupler coupler(solver, condition,
-                                       BuildCouplerOptions());
+                                       BuildCouplerOptions(inputs));
     viscous::CouplerResult res = coupler.Solve();
-
     outputs.at("CL")(0) = res.results.CL;
     outputs.at("CD")(0) = res.results.CD;
 }
@@ -290,12 +335,10 @@ void ViscousVlmDiscipline::ComputePartials(const philote::Variables& inputs,
                                            philote::Partials& partials) {
     MeshInput mesh_input = BuildMeshInput(inputs);
     FlightCondition condition = BuildFlightCondition(inputs);
-
     VortexLatticeSolver solver;
     solver.SetMesh(mesh_input);
-
     viscous::ViscousVlmCoupler coupler(solver, condition,
-                                       BuildCouplerOptions());
+                                       BuildCouplerOptions(inputs));
     viscous::CouplerResult res = coupler.Solve();
     if (!res.converged) {
         throw std::runtime_error(
@@ -303,9 +346,26 @@ void ViscousVlmDiscipline::ComputePartials(const philote::Variables& inputs,
             "converge");
     }
 
-    viscous::CoupledGradients g = coupler.ComputeAlphaDerivatives();
-    partials.at({"CL", "alpha"})(0) = g.dCL_dalpha;
-    partials.at({"CD", "alpha"})(0) = g.dCD_dalpha;
+    viscous::CoupledGradients g_alpha = coupler.ComputeAlphaDerivatives();
+    partials.at({"CL", "alpha"})(0) = g_alpha.dCL_dalpha;
+    partials.at({"CD", "alpha"})(0) = g_alpha.dCD_dalpha;
+
+    viscous::CoupledShapeGradients g_shape = coupler.ComputeShapeDerivatives();
+    for (std::size_t k = 0; k < g_shape.dCL_dcoords.size(); ++k) {
+        const Eigen::MatrixXd& dCL_dx = g_shape.dCL_dcoords[k];
+        const Eigen::MatrixXd& dCD_dx = g_shape.dCD_dcoords[k];
+        std::string name = StationCoordsInputName(static_cast<int>(k));
+        auto& cl_p = partials.at({"CL", name});
+        auto& cd_p = partials.at({"CD", name});
+        const int N = static_cast<int>(dCL_dx.cols());
+        // Coords are flattened as [x0,z0,x1,z1,…]; partials match.
+        for (int j = 0; j < N; ++j) {
+            cl_p(2 * j + 0) = dCL_dx(0, j);
+            cl_p(2 * j + 1) = dCL_dx(1, j);
+            cd_p(2 * j + 0) = dCD_dx(0, j);
+            cd_p(2 * j + 1) = dCD_dx(1, j);
+        }
+    }
 }
 
 }  // namespace pegasus
