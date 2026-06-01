@@ -85,6 +85,19 @@ struct CoupledGradients {
     Scalar dCD_dalpha = 0.0;
 };
 
+/// @brief Total derivatives of integrated outputs w.r.t. per-station
+/// airfoil coordinates, via the coupled adjoint.
+///
+/// `dCL_dcoords[k]` and `dCD_dcoords[k]` are 2×N_k matrices matching the
+/// (Scirocco-internal) panel layout of station `k`. Includes the implicit
+/// coupling: changing station-k coordinates changes Cl_2D_k, which shifts
+/// the residual at station k, which propagates through J to perturb every
+/// Δα_station, which feeds back into all integrated outputs.
+struct CoupledShapeGradients {
+    std::vector<Eigen::MatrixXd> dCL_dcoords;
+    std::vector<Eigen::MatrixXd> dCD_dcoords;
+};
+
 /// @brief Viscous-inviscid coupler: drives a VLM ↔ 2D airfoil Newton loop
 /// using a user-defined station grid that is independent of the VLM
 /// strips.
@@ -117,6 +130,12 @@ public:
     /// angle of attack α∞ at the currently-converged state. Must be called
     /// after `Solve()` has converged.
     CoupledGradients ComputeAlphaDerivatives();
+
+    /// @brief Total derivatives of CL and CD with respect to each station's
+    /// airfoil coordinate matrix, via the coupled adjoint. Must be called
+    /// after `Solve()` has converged. Cost: one adjoint solve per output
+    /// (CL, CD), independent of the number of coordinate DVs.
+    CoupledShapeGradients ComputeShapeDerivatives();
 
     /// @brief Baseline (pre-coupling) twist of each strip, radians.
     [[nodiscard]] const VecX& GetBaselineTwists() const {

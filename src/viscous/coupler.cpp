@@ -664,4 +664,95 @@ CoupledGradients ViscousVlmCoupler::ComputeAlphaDerivatives() {
     return g;
 }
 
+// =============================================================================
+// Coupled adjoint w.r.t. per-station airfoil coordinates
+// =============================================================================
+//
+// For station-k coordinates x_k (2 × N matrix):
+//     ∂F/∂x_k|_u : CL = 0;  CD = w_k · ∂Cd_2D_k/∂x_k
+//                  with w_k = Σ_strip (to_strip)[strip, k] · area / S_ref
+//     ∂R_j/∂x_k|_u : zero except for row j == k, where it equals
+//                     −∂Cl_2D_k/∂x_k.
+//
+// Solve adjoint   J^T · λ_F = (∂F/∂u)^T   once per QoI:
+//     dF/dx_k = ∂F/∂x_k|_u + λ_F[k] · ∂R_k/∂x_k
+//             = ∂F/∂x_k|_u − λ_F[k] · ∂Cl_2D_k/∂x_k
+//
+// ∂F/∂u comes from the same RunForwardChain sweep used by
+// ComputeAlphaDerivatives; ∂Cl_2D_k/∂x_k and ∂Cd_2D_k/∂x_k come from
+// Scirocco's adjoint (GetDclDx / GetDcdDx, cached per station from the
+// most recent SolveFixedAlpha).
+CoupledShapeGradients ViscousVlmCoupler::ComputeShapeDerivatives() {
+    CoupledShapeGradients g;
+    const Index n_stations = static_cast<Index>(station_polars_.size());
+    const VortexLattice& mesh = solver_.GetMesh();
+    const Index n_strips = mesh.GetNumStrips();
+    const Scalar S_ref = std::max(
+        solver_.GetReferenceQuantities().reference_area, Scalar(1e-30));
+
+    // Refresh base state and ensure Scirocco caches are populated.
+    VecX cl_strip, alpha_strip;
+    EvaluateVlm(cl_strip, alpha_strip);
+    (void)ComputeResidual(alpha_strip, cl_strip);
+
+    // Rebuild J and ∂F/∂u using the same forward sweep as
+    // ComputeAlphaDerivatives.
+    MatX J(n_stations, n_stations);
+    VecX dCL_du(n_stations);
+    VecX dCD_du(n_stations);
+    for (Index k = 0; k < n_stations; ++k) {
+        VecX dtwist = interp_.to_strip.col(k);
+        ForwardResponse resp = RunForwardChain(dtwist, Vec3::Zero());
+        for (Index i = 0; i < n_stations; ++i) {
+            J(i, k) = resp.dCl_station(i) -
+                      dcl2d_dalpha_station_(i) * resp.dAlphaEff_station(i);
+        }
+        dCL_du(k) = resp.dCL_total;
+        dCD_du(k) = resp.dCD_total;
+    }
+
+    // Adjoint solves: J^T · λ_F = (∂F/∂u)^T, one per QoI.
+    Eigen::FullPivLU<MatX> lu_t(J.transpose());
+    VecX lambda_CL = lu_t.solve(dCL_du);
+    VecX lambda_CD = lu_t.solve(dCD_du);
+
+    // Per-station "viscous-drag weight" w_k = Σ_strip (to_strip)[strip,k] *
+    // strip_area / S_ref. This is how strongly station k's drag enters the
+    // integrated CDv.
+    VecX w(n_stations);
+    for (Index k = 0; k < n_stations; ++k) {
+        Scalar sum = 0.0;
+        for (Index i = 0; i < n_strips; ++i) {
+            const Strip& s = mesh.GetStrip(i);
+            sum += interp_.to_strip(i, k) * s.chord_center * s.width;
+        }
+        w(k) = sum / S_ref;
+    }
+
+    g.dCL_dcoords.resize(static_cast<std::size_t>(n_stations));
+    g.dCD_dcoords.resize(static_cast<std::size_t>(n_stations));
+    for (Index k = 0; k < n_stations; ++k) {
+        auto& polar = station_polars_[static_cast<std::size_t>(k)];
+        const Eigen::MatrixXd& dcl_dx = polar.GetDclDx();
+        const Eigen::MatrixXd& dcd_dx = polar.GetDcdDx();
+
+        // dF/dx = ∂F/∂x|_u − λ_F^T · ∂R/∂x. For x_k station-k coords:
+        //   ∂R_j/∂x_k = −∂Cl_2D_k/∂x_k · δ_jk  (only row k, with a minus)
+        // ⇒ the contribution from λ flips sign and becomes +λ[k]·dCl/dx.
+        //
+        // CL: ∂CL/∂x_k|_u = 0  (no direct effect on the integrated CL)
+        //     dCL/dx_k = +λ_CL[k] · dCl_2D_k/dx_k
+        Eigen::MatrixXd dCL_dx_k = lambda_CL(k) * dcl_dx;
+
+        // CD: ∂CD/∂x_k|_u = w_k · dCd_2D_k/dx_k (the viscous-drag direct
+        //     effect) and the implicit piece is +λ_CD[k]·dCl/dx_k.
+        Eigen::MatrixXd dCD_dx_k = w(k) * dcd_dx + lambda_CD(k) * dcl_dx;
+
+        g.dCL_dcoords[static_cast<std::size_t>(k)] = std::move(dCL_dx_k);
+        g.dCD_dcoords[static_cast<std::size_t>(k)] = std::move(dCD_dx_k);
+    }
+
+    return g;
+}
+
 }  // namespace pegasus::viscous

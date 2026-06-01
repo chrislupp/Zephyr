@@ -168,5 +168,93 @@ TEST(ViscousCouplerTest, CoupledGradientMatchesFullFiniteDifference) {
         << ", FD reference = " << dCD_dalpha_fd << ", rel err = " << cd_rel_err;
 }
 
+// Validate the coupled adjoint for per-station airfoil-coordinate DVs by
+// FD-perturbing one coordinate, re-converging the coupler from scratch,
+// and central-differencing CL and CD. Picks a single (station, coord)
+// pair to keep the test fast — fully validating all 2·N entries per
+// station would take hundreds of full coupler solves.
+TEST(ViscousCouplerTest, ShapeGradientMatchesFiniteDifference) {
+    auto BuildBaseStations = []() {
+        return UniformStations({0.1, 0.9}, /*panels=*/99);
+    };
+    auto BuildOptions = [&](const std::vector<CouplingStation>& stations) {
+        CouplerOptions opt;
+        opt.stations = stations;
+        opt.mach = 0.0;
+        opt.max_iterations = 50;
+        opt.tolerance = 1.0e-12;
+        opt.max_step_rad = 5.0 * kDegreesToRadians;
+        return opt;
+    };
+
+    const Scalar alpha_base = 2.0 * kDegreesToRadians;
+    Aircraft aircraft = BuildSmallWing(/*n_spanwise=*/3);
+
+    std::vector<CouplingStation> base_stations = BuildBaseStations();
+    VortexLatticeSolver solver;
+    solver.SetAircraft(aircraft);
+    FlightCondition flight;
+    flight.alpha = alpha_base;
+
+    ViscousVlmCoupler coupler(solver, flight, BuildOptions(base_stations));
+    CouplerResult base = coupler.Solve();
+    ASSERT_TRUE(base.converged);
+
+    CoupledShapeGradients g = coupler.ComputeShapeDerivatives();
+    ASSERT_EQ(g.dCL_dcoords.size(), base_stations.size());
+    ASSERT_EQ(g.dCD_dcoords.size(), base_stations.size());
+
+    // Pick station 0, the z-coordinate of a mid-upper-surface panel node.
+    // Upper-surface mid-chord is sensitive to small shape changes (camber/
+    // thickness pulse), so the derivative is large enough that central-diff
+    // noise stays low relative to it.
+    const std::size_t k = 0;
+    const Eigen::MatrixXd& base_coords = base_stations[k].coords;
+    const int N = static_cast<int>(base_coords.cols());
+    const int j_node = N / 4;  // somewhere on the upper surface
+    const int i_comp = 1;      // z component
+
+    Scalar dCL_dcoord_analytic = g.dCL_dcoords[k](i_comp, j_node);
+    Scalar dCD_dcoord_analytic = g.dCD_dcoords[k](i_comp, j_node);
+
+    auto SolveWithPerturbedCoord = [&](Scalar h) -> CouplerResult {
+        std::vector<CouplingStation> stations = BuildBaseStations();
+        stations[k].coords(i_comp, j_node) += h;
+        Aircraft a = BuildSmallWing(3);
+        VortexLatticeSolver s;
+        s.SetAircraft(a);
+        FlightCondition f;
+        f.alpha = alpha_base;
+        ViscousVlmCoupler c(s, f, BuildOptions(stations));
+        return c.Solve();
+    };
+
+    const Scalar h_coord = 1.0e-5;
+    CouplerResult plus = SolveWithPerturbedCoord(+h_coord);
+    CouplerResult minus = SolveWithPerturbedCoord(-h_coord);
+    ASSERT_TRUE(plus.converged);
+    ASSERT_TRUE(minus.converged);
+    Scalar dCL_fd = (plus.results.CL - minus.results.CL) / (2.0 * h_coord);
+    Scalar dCD_fd = (plus.results.CD - minus.results.CD) / (2.0 * h_coord);
+
+    // Same 5e-6 floor as the α∞ test: dominated by the FD reference's
+    // truncation/roundoff budget. dCL and dCD here are O(1) per coord
+    // unit, so absolute tolerance ≈ 5e-6 too.
+    Scalar cl_rel = std::abs(dCL_dcoord_analytic - dCL_fd) /
+                    std::max(std::abs(dCL_fd), Scalar(1e-3));
+    Scalar cd_rel = std::abs(dCD_dcoord_analytic - dCD_fd) /
+                    std::max(std::abs(dCD_fd), Scalar(1e-4));
+    // Shape-DV FD floor is dominated by Scirocco's internal primal-solve
+    // precision (~1e-8 in Cl) divided by the coord FD step (1e-5):
+    // central-diff noise ≈ 5e-4 relative. The analytical adjoint chain
+    // itself is unlimited; this is the FD reference floor.
+    EXPECT_LT(cl_rel, 5.0e-3)
+        << "analytic dCL/dx = " << dCL_dcoord_analytic << ", FD = " << dCL_fd
+        << ", rel err = " << cl_rel;
+    EXPECT_LT(cd_rel, 5.0e-3)
+        << "analytic dCD/dx = " << dCD_dcoord_analytic << ", FD = " << dCD_fd
+        << ", rel err = " << cd_rel;
+}
+
 }  // namespace
 }  // namespace pegasus::viscous
