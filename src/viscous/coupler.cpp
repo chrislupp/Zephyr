@@ -29,6 +29,10 @@
 
 #include <Eigen/Dense>
 
+#ifdef PEGASUS_USE_OPENMP
+#include <omp.h>
+#endif
+
 namespace pegasus::viscous {
 
 namespace {
@@ -239,6 +243,16 @@ VecX ViscousVlmCoupler::ComputeResidual(const VecX& alpha_eff_strip,
     dcl2d_dalpha_station_.resize(n_stations);
     dcd2d_dalpha_station_.resize(n_stations);
 
+    // Per-station Scirocco solves are the dominant cost in a Newton iter
+    // (~0.5–6 s each, sequential without OpenMP). Each station owns an
+    // independent StripPolarSolver / Scirocco instance and writes only to
+    // its own slot in r / cd_2d_station_ / dcl2d_dalpha_station_ /
+    // dcd2d_dalpha_station_, so the loop is embarrassingly parallel.
+    // Dynamic scheduling balances uneven solve costs (warm-start vs cold,
+    // BL iteration count varies per station).
+#ifdef PEGASUS_USE_OPENMP
+#pragma omp parallel for schedule(dynamic, 1)
+#endif
     for (Index k = 0; k < n_stations; ++k) {
         auto& polar = station_polars_[static_cast<std::size_t>(k)];
         Scalar re = options_.stations[static_cast<std::size_t>(k)].reynolds;
@@ -495,6 +509,13 @@ MatX ViscousVlmCoupler::BuildJacobianAnalytical() {
 
     // R_i = Cl_VLM_i − Cl_2D(α_eff_i), so
     //     ∂R_i/∂u_k = ∂Cl_i/∂u_k − (dCl_2D/dα)_i · ∂α_eff_i/∂u_k.
+    // Each forward chain is independent and writes only to its own column
+    // of J. RunForwardChain reads cached state read-only (last_solution_,
+    // VIM, AIC LU — PartialPivLU::solve is thread-safe for concurrent
+    // reads with different RHS). Uniform cost across stations → static.
+#ifdef PEGASUS_USE_OPENMP
+#pragma omp parallel for schedule(static)
+#endif
     for (Index k = 0; k < n_stations; ++k) {
         VecX dtwist = interp_.to_strip.col(k);
         ForwardResponse resp = RunForwardChain(dtwist, Vec3::Zero());
@@ -618,6 +639,9 @@ CoupledGradients ViscousVlmCoupler::ComputeAlphaDerivatives() {
     MatX J(n_stations, n_stations);
     VecX dCL_du(n_stations);
     VecX dCD_du(n_stations);
+#ifdef PEGASUS_USE_OPENMP
+#pragma omp parallel for schedule(static)
+#endif
     for (Index k = 0; k < n_stations; ++k) {
         VecX dtwist = interp_.to_strip.col(k);
         ForwardResponse resp = RunForwardChain(dtwist, Vec3::Zero());
@@ -700,6 +724,9 @@ CoupledShapeGradients ViscousVlmCoupler::ComputeShapeDerivatives() {
     MatX J(n_stations, n_stations);
     VecX dCL_du(n_stations);
     VecX dCD_du(n_stations);
+#ifdef PEGASUS_USE_OPENMP
+#pragma omp parallel for schedule(static)
+#endif
     for (Index k = 0; k < n_stations; ++k) {
         VecX dtwist = interp_.to_strip.col(k);
         ForwardResponse resp = RunForwardChain(dtwist, Vec3::Zero());
