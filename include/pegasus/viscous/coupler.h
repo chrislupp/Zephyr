@@ -25,27 +25,25 @@
 #include "pegasus/aero/force_calculator.h"
 #include "pegasus/core/types.h"
 #include "pegasus/solver/vortex_lattice_solver.h"
+#include "pegasus/viscous/coupling_station.h"
 #include "pegasus/viscous/strip_polar.h"
 
-#include <string>
 #include <vector>
 
 namespace pegasus::viscous {
 
 /// @brief Coupler options.
+///
+/// `stations` defines the user-controlled 2D viscous evaluation grid. The
+/// VLM mesh is left untouched (the coupler only mutates strip twist
+/// offsets). The number, spanwise placement (eta), airfoil shape, panel
+/// count, and Reynolds number are all per-station.
 struct CouplerOptions {
-    /// NACA 4-digit airfoil applied to every strip (v1 uses a single airfoil
-    /// for the whole wing — extend in future versions).
-    std::string airfoil_naca = "0012";
-
-    /// Reynolds number used at every strip.
-    Scalar reynolds = 1.0e6;
+    /// User-supplied 2D viscous stations (≥ 2, strictly increasing eta).
+    std::vector<CouplingStation> stations;
 
     /// Freestream Mach (passed to Scirocco's compressibility correction).
     Scalar mach = 0.0;
-
-    /// Number of panels in each Scirocco instance.
-    int scirocco_panels = 199;
 
     /// Maximum Newton outer iterations.
     int max_iterations = 20;
@@ -56,11 +54,8 @@ struct CouplerOptions {
     /// Newton step damping (line-search factor cap). 1.0 = full step.
     Scalar damping = 1.0;
 
-    /// Maximum |Δα|∞ change per Newton iteration, radians. Step is
-    /// uniformly scaled down if exceeded. Prevents overshoot into
-    /// non-physical fixed points when J is poorly conditioned (which
-    /// happens when the 3D lift slope is close to 2π, making J ≈ small).
-    Scalar max_step_rad = 0.5 * kDegreesToRadians;
+    /// Maximum |Δα|∞ change per Newton iteration, radians.
+    Scalar max_step_rad = 1.0 * kDegreesToRadians;
 };
 
 /// @brief Outcome of a coupler solve.
@@ -69,11 +64,17 @@ struct CouplerResult {
     int iterations = 0;
     Scalar final_residual = 0.0;
     AerodynamicResults results;
-    VecX delta_alpha;  ///< Per-strip Δα at exit, radians.
+
+    /// Per-station Δα at exit, radians.
+    VecX delta_alpha_station;
+
+    /// Per-strip twist offset (= spline_to_strip · delta_alpha_station),
+    /// radians. This is what was actually written to mesh strip twists.
+    VecX twist_offset_strip;
 };
 
 /// @brief Total derivatives of integrated outputs w.r.t. design variables,
-/// accounting for the implicit coupling between VLM and 2D viscous solvers.
+/// accounting for the implicit coupling.
 struct CoupledGradients {
     Scalar CL = 0.0;
     Scalar CD = 0.0;
@@ -84,41 +85,37 @@ struct CoupledGradients {
     Scalar dCD_dalpha = 0.0;
 };
 
-/// @brief Viscous-inviscid coupler: drives a VLM ↔ 2D airfoil Newton loop.
+/// @brief Viscous-inviscid coupler: drives a VLM ↔ 2D airfoil Newton loop
+/// using a user-defined station grid that is independent of the VLM
+/// strips.
 ///
-/// At each outer iteration the coupler:
-///   1. Applies the current Δα to every strip's twist_angle
-///   2. Re-builds the AIC and re-solves the VLM
-///   3. Extracts strip Cl_VLM and α_eff
-///   4. Runs Scirocco at α_eff for each strip → Cl_2D
-///   5. Residual r_i = Cl_VLM,i − Cl_2D,i
-///   6. Newton step with a finite-difference Jacobian column build
+/// Workflow per outer iteration:
+///   1. Δα_station ⟶ twist_offset_strip via cubic-spline `to_strip` op
+///   2. Strip twists set, mesh normals refreshed, AIC rebuilt, VLM solved
+///   3. Per-strip α_eff and Cl_local computed in each strip's intrinsic
+///      local frame (chord direction, spanwise tangent, lift normal).
+///   4. Spline-interpolate strip α_eff and Cl_local to station values via
+///      the `to_station` op.
+///   5. Run Scirocco at each station's α_eff (fixed-α mode, station's own
+///      airfoil coords, station's Reynolds).
+///   6. Residual R_k = Cl_local_station_k − Cl_2D_station_k.
+///   7. Newton step (current v: FD Jacobian; analytical to come).
 ///
-/// The coupler mutates strip.twist_angle of the supplied solver's mesh.
-/// At exit, strip twists are left at the converged state. The original
-/// twists can be restored by calling GetBaselineTwists() externally and
-/// re-applying them.
+/// Sweep / dihedral / per-station airfoils all fall out of this structure
+/// because every projection happens in the strip's actual 3D local frame,
+/// and the station grid is purely user-defined eta values.
 class ViscousVlmCoupler {
 public:
     ViscousVlmCoupler(VortexLatticeSolver& solver,
                       const FlightCondition& flight,
-                      const CouplerOptions& options = {});
+                      const CouplerOptions& options);
 
     /// @brief Solve the coupled problem.
     CouplerResult Solve();
 
     /// @brief Total derivatives of CL and CD with respect to the freestream
-    /// angle of attack α∞ at the currently-converged state.
-    ///
-    /// Must be called after `Solve()` has converged. Uses the implicit
-    /// function theorem:
-    ///   J · (du/dα) = −∂R/∂α     [forward sensitivity]
-    ///   dF/dα = ∂F/∂α + ∂F/∂u · (du/dα)
-    /// All partials and the Jacobian J = ∂R/∂u are obtained via finite
-    /// differences in this v1 implementation.
-    ///
-    /// On return, the coupler's internal state is left at the converged
-    /// (u*, x) baseline.
+    /// angle of attack α∞ at the currently-converged state. Must be called
+    /// after `Solve()` has converged.
     CoupledGradients ComputeAlphaDerivatives();
 
     /// @brief Baseline (pre-coupling) twist of each strip, radians.
@@ -126,76 +123,82 @@ public:
         return baseline_twist_;
     }
 
-    /// @brief Current Δα per strip, radians.
+    /// @brief Current per-station Δα, radians.
     [[nodiscard]] const VecX& GetDeltaAlpha() const { return delta_alpha_; }
 
-    /// @brief Number of coupling unknowns (= number of strips).
+    /// @brief Number of coupling unknowns (= number of stations).
     [[nodiscard]] Index GetNumUnknowns() const {
-        return static_cast<Index>(strip_polars_.size());
+        return static_cast<Index>(station_polars_.size());
+    }
+
+    /// @brief Strip↔station spline operators built at construction.
+    [[nodiscard]] const StationInterpolation& GetInterpolation() const {
+        return interp_;
     }
 
 private:
-    /// Apply delta_alpha_ to strip twists and refresh the mesh + AIC.
+    /// Apply current per-station Δα to strip twists via the spline operator
+    /// and refresh the mesh + AIC.
     void ApplyTwistsAndRefresh();
 
-    /// Run a VLM solve at the current twist state and return strip Cl and
-    /// α_eff vectors. Also caches the SolutionState for analytical
-    /// linearization use.
-    void EvaluateVlm(VecX& cl_vlm, VecX& alpha_eff);
+    /// Run a VLM solve at the current twist state. Caches the resulting
+    /// SolutionState and AerodynamicResults; returns per-strip α_eff and
+    /// Cl_local computed in each strip's intrinsic local frame.
+    void EvaluateVlm(VecX& cl_local_strip, VecX& alpha_eff_strip);
 
-    /// Compute residual R = Cl_VLM − Cl_2D at the current state.
-    /// Also fills cd_2d_ and dcl2d_dalpha_/dcd2d_dalpha_ for the
-    /// analytical Jacobian and total-derivative chains.
-    VecX ComputeResidual(const VecX& alpha_eff, const VecX& cl_vlm);
+    /// Compute residual R = Cl_local_station − Cl_2D(α_eff_station) by
+    /// interpolating per-strip quantities to stations and calling each
+    /// station's Scirocco solver. Caches Scirocco linearization values.
+    VecX ComputeResidual(const VecX& alpha_eff_strip,
+                         const VecX& cl_local_strip);
 
-    /// Build the analytical Jacobian J = ∂R/∂u using a forward
-    /// propagation through the VLM chain (one cheap forward solve per
-    /// column reusing the cached AIC LU) plus Scirocco's analytical
-    /// dCl_2D/dα. No additional VLM or Scirocco solves needed.
-    MatX BuildJacobianAnalytical();
-
-    /// Aggregated forward-mode response of a single perturbation
-    /// direction through the VLM chain (and Scirocco's linearization).
+    /// Aggregated forward-mode response through the VLM chain + Scirocco
+    /// linearization for a single perturbation direction.
     struct ForwardResponse {
-        VecX dCl_strip;    ///< Per-strip δCl_VLM
-        VecX dAlphaEff;    ///< Per-strip δα_eff (induced + explicit)
-        Scalar dCL_total;  ///< Integrated δCL (stability axis)
-        Scalar dCD_total;  ///< Integrated δCD = δCDi + δCDv
+        VecX dCl_station;        ///< δCl_VLM_local per station
+        VecX dAlphaEff_station;  ///< δα_eff per station (incl. −2·twist term)
+        Scalar dCL_total;        ///< δCL_total (stability axis)
+        Scalar dCD_total;        ///< δCD_total (CDi_nearfield + CDv)
     };
 
-    /// Forward-mode propagation: given a normal-vector perturbation `dn`
-    /// (3*N_vortex), a freestream-direction perturbation `dv_inf`, and a
-    /// per-strip explicit twist perturbation `dtwist_explicit`, computes
-    /// per-strip Cl_VLM / α_eff sensitivities, integrated CL/CD
-    /// sensitivities, and the viscous-drag sensitivity through Scirocco.
-    ForwardResponse RunForwardChain(const VecX& dn, const Vec3& dv_inf,
-                                    const VecX& dtwist_explicit);
+    /// Forward chain. Inputs:
+    ///   dtwist_strip — per-strip twist perturbation (radians). For a
+    ///                  station-Δα perturbation this is `to_strip · e_k`;
+    ///                  zero for an α∞ perturbation.
+    ///   dv_inf       — freestream-direction perturbation. Zero for a
+    ///                  station-Δα perturbation; df_inf/dα · dα for α∞.
+    ForwardResponse RunForwardChain(const VecX& dtwist_strip,
+                                    const Vec3& dv_inf);
+
+    /// Build the analytical Newton Jacobian J = ∂R/∂(Δα_station) by
+    /// running one forward chain per station.
+    MatX BuildJacobianAnalytical();
 
     VortexLatticeSolver& solver_;
     FlightCondition flight_;
     CouplerOptions options_;
     ForceCalculator force_calc_;
+    StationInterpolation interp_;
 
-    /// One 2D solver per VLM strip.
-    std::vector<StripPolarSolver> strip_polars_;
+    /// One 2D solver per coupling station (not per strip).
+    std::vector<StripPolarSolver> station_polars_;
 
-    /// Baseline strip.twist_angle captured before any coupling injection.
+    /// Baseline strip.twist_angle captured before any coupling injection,
+    /// radians.
     VecX baseline_twist_;
 
-    /// Current per-strip Δα (radians).
+    /// Current per-station Δα, radians.
     VecX delta_alpha_;
 
-    /// Cached 2D drag per strip from the last residual evaluation.
-    VecX cd_2d_;
-    /// Cached Scirocco dCl_2D/dα per strip (per radian).
-    VecX dcl2d_dalpha_;
-    /// Cached Scirocco dCd_2D/dα per strip (per radian).
-    VecX dcd2d_dalpha_;
+    /// Cached per-station 2D drag from the last residual evaluation.
+    VecX cd_2d_station_;
+    /// Cached per-station Scirocco dCl_2D/dα (per radian).
+    VecX dcl2d_dalpha_station_;
+    /// Cached per-station Scirocco dCd_2D/dα (per radian).
+    VecX dcd2d_dalpha_station_;
 
-    /// Cached SolutionState from the last EvaluateVlm() call; used by the
-    /// analytical forward chain. Not valid before the first solve.
+    /// Cached SolutionState from the last EvaluateVlm() call.
     SolutionState last_solution_;
-
     /// Cached VLM aerodynamic results from the last evaluation.
     AerodynamicResults last_results_;
 };

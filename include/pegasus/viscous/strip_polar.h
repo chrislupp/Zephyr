@@ -71,6 +71,14 @@ public:
     /// dropped so that the next call performs a fresh BL initialization.
     bool SolveFixedAlpha(Scalar alpha_rad, Scalar reynolds, Scalar mach);
 
+    /// @brief Solve at fixed Cl, Reynolds, Mach (α is internal). Returns
+    /// true on converged solution.
+    bool SolveFixedCl(Scalar cl_target, Scalar reynolds, Scalar mach);
+
+    /// @brief Angle of attack at the most recent converged solve, in
+    /// radians (independent of fixed-α / fixed-Cl mode).
+    [[nodiscard]] Scalar GetAlphaRadians() const;
+
     /// @brief Convergence flag for the most recent solve.
     [[nodiscard]] bool IsConverged() const;
 

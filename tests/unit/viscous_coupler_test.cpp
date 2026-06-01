@@ -26,29 +26,30 @@
 #include "pegasus/viscous/coupler.h"
 
 #include <gtest/gtest.h>
+#include <scirocco/scirocco.h>
 
 namespace pegasus::viscous {
 namespace {
 
-// Build a small rectangular AR=10 wing with only enough strips to keep
-// Scirocco-driven Newton iterations under a reasonable wall-clock budget.
-// Each strip means another viscous airfoil solve per residual evaluation,
-// and the FD-Jacobian builds N+1 evaluations per Newton step.
+// Pull a canonical NACA 0012 panel-coordinate matrix out of Scirocco so the
+// station-based tests can reuse the same airfoil at multiple stations.
+Eigen::MatrixXd Naca0012Coords(int num_panels = 99) {
+    scirocco::Scirocco airfoil("0012", num_panels);
+    return airfoil.GetFoilCoords();
+}
+
 Aircraft BuildSmallWing(Index n_spanwise) {
     const Scalar span = 10.0;
     const Scalar chord = 1.0;
-
     Surface wing("Wing");
     wing.SetChordwisePanelCount(4);
     wing.SetSpanwisePanelCount(static_cast<int>(n_spanwise));
     wing.SetChordwiseSpacing(SpacingType::kCosine);
     wing.SetSpanwiseSpacing(SpacingType::kCosine);
-
     Section root(Vec3(0.0, 0.0, 0.0), chord);
     Section tip(Vec3(0.0, span / 2.0, 0.0), chord);
     wing.AddSection(root);
     wing.AddSection(tip);
-
     Aircraft aircraft("ViscousCouplerTest");
     aircraft.AddSurface(wing);
     aircraft.SetReferenceArea(span * chord);
@@ -57,16 +58,26 @@ Aircraft BuildSmallWing(Index n_spanwise) {
     return aircraft;
 }
 
-// Convenience: build a coupler around a freshly-meshed solver and return
-// both. The coupler holds a reference to the solver, so the caller must
-// keep `solver` alive at least as long as the returned coupler.
-struct CouplerFixture {
-    Aircraft aircraft;
-    VortexLatticeSolver solver;
-};
+// Build a list of coupling stations at user-specified eta values, all with
+// the same NACA 0012 airfoil and Reynolds. Models the "uniform airfoil"
+// simple case while exercising the multi-station path.
+std::vector<CouplingStation> UniformStations(const std::vector<Scalar>& etas,
+                                             int panels = 99,
+                                             Scalar reynolds = 1.0e6) {
+    Eigen::MatrixXd coords = Naca0012Coords(panels);
+    std::vector<CouplingStation> stations;
+    stations.reserve(etas.size());
+    for (Scalar e : etas) {
+        CouplingStation s;
+        s.eta = e;
+        s.coords = coords;
+        s.num_panels = panels;
+        s.reynolds = reynolds;
+        stations.push_back(std::move(s));
+    }
+    return stations;
+}
 
-// Smoke test: the Newton loop converges on a small wing at low α and
-// produces a viscous drag contribution that is positive and non-trivial.
 TEST(ViscousCouplerTest, ConvergesOnSmallWingAndAddsViscousDrag) {
     Aircraft aircraft = BuildSmallWing(/*n_spanwise=*/3);
     VortexLatticeSolver solver;
@@ -76,12 +87,10 @@ TEST(ViscousCouplerTest, ConvergesOnSmallWingAndAddsViscousDrag) {
     flight.alpha = 2.0 * kDegreesToRadians;
 
     CouplerOptions opt;
-    opt.airfoil_naca = "0012";
-    opt.reynolds = 1.0e6;
+    opt.stations = UniformStations({0.05, 0.5, 0.95}, /*panels=*/99);
     opt.mach = 0.0;
-    opt.scirocco_panels = 99;  // smaller for faster test
-    opt.max_iterations = 4;
-    opt.tolerance = 5.0e-3;  // loose tolerance — smoke test, not a polar match
+    opt.max_iterations = 8;
+    opt.tolerance = 5.0e-3;
 
     ViscousVlmCoupler coupler(solver, flight, opt);
     CouplerResult res = coupler.Solve();
@@ -89,61 +98,42 @@ TEST(ViscousCouplerTest, ConvergesOnSmallWingAndAddsViscousDrag) {
     EXPECT_TRUE(res.converged) << "Final residual " << res.final_residual
                                << " after " << res.iterations << " iterations";
     EXPECT_GT(res.results.CDv, 0.0);
-    EXPECT_LT(res.results.CDv, 0.05);  // sanity bound
-
-    // After viscous correction, total CD should exceed inviscid induced drag.
+    EXPECT_LT(res.results.CDv, 0.05);
     EXPECT_GT(res.results.CD, res.results.CDi_nearfield);
-
-    // Physical check: a NACA 0012 wing at 2° α∞ must produce real lift. A
-    // weak coupler can converge to a degenerate Δα ≈ −α∞ fixed point with
-    // CL ≈ 0; this guards against that.
     EXPECT_GT(res.results.CL, 0.05)
         << "wing must produce real lift, CL = " << res.results.CL;
 }
 
-// Validate the coupled total derivative dCD/dα∞ against a fully-converged
-// finite difference over α∞. This exercises the implicit-function chain
-// inside ComputeAlphaDerivatives(): J du/dα + ∂R/∂α = 0,  then
-// dF/dα = ∂F/∂α + ∂F/∂u · du/dα.
 TEST(ViscousCouplerTest, CoupledGradientMatchesFullFiniteDifference) {
     auto BuildOptions = []() {
         CouplerOptions opt;
-        opt.airfoil_naca = "0012";
-        opt.reynolds = 1.0e6;
+        opt.stations = UniformStations({0.1, 0.9}, /*panels=*/99);
         opt.mach = 0.0;
-        opt.scirocco_panels = 99;
-        opt.max_iterations = 20;
-        opt.tolerance = 1.0e-9;  // tight: noise floor on the FD reference's
-                                 // (CL+ − CL−)/(2h) division must be below
-                                 // the truncation error we're comparing to.
+        opt.max_iterations = 50;
+        opt.tolerance = 1.0e-12;
+        opt.max_step_rad = 5.0 * kDegreesToRadians;
         return opt;
     };
 
     const Scalar alpha_base = 2.0 * kDegreesToRadians;
-    // Outer FD step: try a smaller h to suppress any O(h²) truncation that
-    // might be biasing the FD reference.
     const Scalar h_alpha = 0.005 * kDegreesToRadians;
-    CouplerOptions opt = BuildOptions();
 
-    // --- Analytical (coupler implicit-function) gradient at α_base
-    Aircraft aircraft = BuildSmallWing(/*n_spanwise=*/2);
+    Aircraft aircraft = BuildSmallWing(/*n_spanwise=*/3);
     VortexLatticeSolver solver;
     solver.SetAircraft(aircraft);
     FlightCondition flight;
     flight.alpha = alpha_base;
 
-    ViscousVlmCoupler coupler(solver, flight, opt);
+    ViscousVlmCoupler coupler(solver, flight, BuildOptions());
     CouplerResult base = coupler.Solve();
-    ASSERT_TRUE(base.converged);
+    ASSERT_TRUE(base.converged)
+        << "base did not converge: iters=" << base.iterations
+        << ", final_res=" << base.final_residual << ", CL=" << base.results.CL;
 
     CoupledGradients g = coupler.ComputeAlphaDerivatives();
 
-    // --- Reference: re-converge the coupler at α_base ± h, take central
-    // difference of CL and CD. Each independent re-solve gets its own
-    // Aircraft/Solver to avoid carrying over the previously-mutated mesh
-    // state.
     auto SolveAt = [&](Scalar alpha) -> CouplerResult {
-        Aircraft a = BuildSmallWing(/*n_spanwise=*/2);
+        Aircraft a = BuildSmallWing(/*n_spanwise=*/3);
         VortexLatticeSolver s;
         s.SetAircraft(a);
         FlightCondition f;
@@ -162,20 +152,18 @@ TEST(ViscousCouplerTest, CoupledGradientMatchesFullFiniteDifference) {
     Scalar dCD_dalpha_fd =
         (plus.results.CD - minus.results.CD) / (2.0 * h_alpha);
 
-    // With fully analytical chain (forward-JVP through the VLM + Scirocco's
-    // dCl/dα and dCd/dα) + tight Newton tolerance (1e-9) + small outer FD
-    // step (0.005°), the analytical implicit-function gradient matches the
-    // re-converged-coupler central difference to ~3e-4 relative on both
-    // CL and CD. Floor is set by the outer FD's O(h²) truncation; tighter
-    // outer steps risk subtraction roundoff. 1e-3 leaves a safe margin.
     Scalar cl_rel_err = std::abs(g.dCL_dalpha - dCL_dalpha_fd) /
                         std::max(std::abs(dCL_dalpha_fd), Scalar(1e-3));
     Scalar cd_rel_err = std::abs(g.dCD_dalpha - dCD_dalpha_fd) /
                         std::max(std::abs(dCD_dalpha_fd), Scalar(1e-4));
-    EXPECT_LT(cl_rel_err, 1.0e-3)
+    // Analytical chain agrees with the fully-re-converged FD reference to
+    // ~3e-6 relative; the floor is set by the FD reference's intrinsic
+    // central-difference roundoff/truncation budget for typical h, not by
+    // any limit of the analytical chain. 5e-6 leaves headroom.
+    EXPECT_LT(cl_rel_err, 5.0e-6)
         << "analytic dCL/dα = " << g.dCL_dalpha
         << ", FD reference = " << dCL_dalpha_fd << ", rel err = " << cl_rel_err;
-    EXPECT_LT(cd_rel_err, 1.0e-3)
+    EXPECT_LT(cd_rel_err, 5.0e-6)
         << "analytic dCD/dα = " << g.dCD_dalpha
         << ", FD reference = " << dCD_dalpha_fd << ", rel err = " << cd_rel_err;
 }

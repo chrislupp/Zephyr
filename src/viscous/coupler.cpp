@@ -25,6 +25,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <stdexcept>
 
 #include <Eigen/Dense>
 
@@ -32,58 +33,33 @@ namespace pegasus::viscous {
 
 namespace {
 
-/// Compute α_eff (radians) at a strip from a VLM solution.
-///
-/// α_eff is the angle Scirocco is called at to match the per-strip Cl. In
-/// Pegasus's per-strip Cl convention (lift is `cf.z·cos α∞ - cf.x·sin α∞`,
-/// projected onto the *stability* axis defined by the global freestream),
-/// the consistent definition is the body-frame angle of the total local
-/// velocity, *minus* the strip's geometric twist. This makes Newton on the
-/// residual `Cl_VLM − Cl_2D(α_eff)` well-conditioned (J is diagonal-
-/// dominant) and converges to a physical state.
-///
-/// A purely geometric "+ twist" formula is more intuitive but gives a
-/// poorly-conditioned Jacobian (3D lift slope cancels 2π in J_ii) and
-/// Newton walks to a non-physical lift-free fixed point on small wings.
-/// The "− twist" sign matches the implicit stability-axis projection
-/// already baked into the per-strip Cl.
-Scalar ComputeStripEffectiveAlpha(const VortexLattice& mesh,
-                                  const SolutionState& solution,
-                                  const FlightCondition& condition,
-                                  Index strip_idx) {
-    const Strip& strip = mesh.GetStrip(strip_idx);
-    Index iv = strip.first_vortex_index;
+/// Local-frame triad at a strip. Built from strip geometry only — no flow
+/// state — so it captures sweep (via spanwise_unit_vector) and dihedral
+/// (via trefftz_normal components) consistently with how Pegasus places
+/// panel normals.
+struct StripLocalFrame {
+    Vec3 c_hat;  ///< chord direction (LE → TE)
+    Vec3 s_hat;  ///< spanwise direction (along bound vortex)
+    Vec3 n_hat;  ///< lift normal (c_hat × s_hat, normalized)
+};
 
-    Vec3 v_inf = VortexLatticeSolver::ComputeFreestreamDirection(condition);
-    Vec3 v_ind(solution.induced_velocity(iv, 0),
-               solution.induced_velocity(iv, 1),
-               solution.induced_velocity(iv, 2));
-    Vec3 v_total = v_inf + v_ind;
-
-    Scalar alpha_body = std::atan2(v_total.z(), v_total.x());
-    return alpha_body - strip.twist_angle;
-}
-
-/// d/d(ang) of the normalized control-point normal, evaluated at the current
-/// ang_cp = strip.twist_angle − atan(camber_slope). Since chord_dir is the
-/// only twist-dependent factor in normal = normalize(chord_dir × bound_dir),
-/// this is purely closed-form.
+/// d/dtwist of the normalized control-point normal at a vortex, evaluated
+/// at the current strip twist. Same closed form used by v1 — the chord
+/// direction is the only twist-dependent term in
+/// normal = normalize(chord_dir × bound_dir).
 Vec3 NormalDerivativeWrtTwist(const HorseshoeVortex& vor, Scalar twist_angle,
                               Scalar trefftz_ny, Scalar trefftz_nz) {
     Scalar ang = twist_angle - std::atan(vor.camber_slope_at_control_point);
     Scalar ca = std::cos(ang);
     Scalar sa = std::sin(ang);
-
     Vec3 chord_dir(ca, -sa * trefftz_ny, -sa * trefftz_nz);
     Vec3 d_chord(-sa, -ca * trefftz_ny, -ca * trefftz_nz);
-
     Vec3 bound_raw = vor.bound_vortex_right - vor.bound_vortex_left;
     Scalar bound_norm = bound_raw.norm();
     if (bound_norm < Scalar(1e-30)) {
         return Vec3::Zero();
     }
     Vec3 bound_dir = bound_raw / bound_norm;
-
     Vec3 n_unnorm = chord_dir.cross(bound_dir);
     Scalar n_mag = n_unnorm.norm();
     if (n_mag < Scalar(1e-30)) {
@@ -94,145 +70,270 @@ Vec3 NormalDerivativeWrtTwist(const HorseshoeVortex& vor, Scalar twist_angle,
     return (d_n_unnorm - n * (n.dot(d_n_unnorm))) / n_mag;
 }
 
+StripLocalFrame ComputeStripLocalFrame(const Strip& strip) {
+    Scalar t = strip.twist_angle;
+    Scalar ny = strip.trefftz_normal_y;
+    Scalar nz = strip.trefftz_normal_z;
+    StripLocalFrame f;
+    f.c_hat = Vec3(std::cos(t), -std::sin(t) * ny, -std::sin(t) * nz);
+    f.s_hat = strip.spanwise_unit_vector;
+    Vec3 cross = f.c_hat.cross(f.s_hat);
+    Scalar mag = cross.norm();
+    if (mag > Scalar(1e-30)) {
+        f.n_hat = cross / mag;
+    } else {
+        f.n_hat = Vec3(0, 0, 1);
+    }
+    return f;
+}
+
+/// Per-strip effective angle of attack used as the Scirocco α input.
+///
+/// Compose two pieces:
+///   1. α_body_local: project v_total onto the strip's chord-up plane
+///      (drop the spanwise component), take atan2 in that plane. This
+///      correctly handles sweep and dihedral via the strip's 3D triad.
+///   2. Subtract the strip's effective twist (after the spline-injected
+///      Δα offset). The minus sign makes the Newton Jacobian of the
+///      Cl-mismatch residual monotonic in Δα with the physically-
+///      intended fixed point near Δα = 0; the geometric "+twist" sign
+///      lands at the spurious lift-free root.
+///
+/// For a planar wing this collapses to `α_body − twist`, matching the
+/// original (working) v1 convention exactly.
+Scalar ComputeStripAlphaEffLocal(const Strip& strip,
+                                 const StripLocalFrame& frame,
+                                 const Vec3& v_total) {
+    Vec3 v_proj = v_total - (v_total.dot(frame.s_hat)) * frame.s_hat;
+    Scalar v_c = v_proj.dot(frame.c_hat);
+    Scalar v_n = v_proj.dot(frame.n_hat);
+    Scalar alpha_body_local = Scalar(0.0);
+    if (!(std::abs(v_c) < Scalar(1e-30) && std::abs(v_n) < Scalar(1e-30))) {
+        alpha_body_local = std::atan2(v_n, v_c);
+    }
+    // The atan2 projection above gives α_body + twist for a planar wing,
+    // so subtracting 2·twist yields the v1 "α_body − twist" sign. For
+    // swept / dihedral wings this still puts the residual on the
+    // monotonic branch that has the physical root at Δα ≈ 0.
+    return alpha_body_local - Scalar(2.0) * strip.twist_angle;
+}
+
 }  // namespace
 
 ViscousVlmCoupler::ViscousVlmCoupler(VortexLatticeSolver& solver,
                                      const FlightCondition& flight,
                                      const CouplerOptions& options)
     : solver_(solver), flight_(flight), options_(options) {
+    if (options_.stations.size() < 2) {
+        throw std::invalid_argument(
+            "ViscousVlmCoupler: at least 2 coupling stations are required.");
+    }
     const VortexLattice& mesh = solver_.GetMesh();
+    interp_ = BuildStationInterpolation(mesh, options_.stations);
+
     const Index n_strips = mesh.GetNumStrips();
+    const Index n_stations = static_cast<Index>(options_.stations.size());
 
     baseline_twist_.resize(n_strips);
-    delta_alpha_ = VecX::Zero(n_strips);
-    cd_2d_ = VecX::Zero(n_strips);
-    dcl2d_dalpha_ = VecX::Zero(n_strips);
-    dcd2d_dalpha_ = VecX::Zero(n_strips);
-
-    strip_polars_.reserve(static_cast<std::size_t>(n_strips));
     for (Index i = 0; i < n_strips; ++i) {
         baseline_twist_(i) = mesh.GetStrip(i).twist_angle;
-        strip_polars_.emplace_back(options_.airfoil_naca,
-                                   options_.scirocco_panels);
+    }
+    delta_alpha_ = VecX::Zero(n_stations);
+    cd_2d_station_ = VecX::Zero(n_stations);
+    dcl2d_dalpha_station_ = VecX::Zero(n_stations);
+    dcd2d_dalpha_station_ = VecX::Zero(n_stations);
+
+    station_polars_.reserve(static_cast<std::size_t>(n_stations));
+    for (const CouplingStation& s : options_.stations) {
+        station_polars_.emplace_back(s.coords, s.num_panels);
     }
 }
 
 void ViscousVlmCoupler::ApplyTwistsAndRefresh() {
+    // Spread per-station Δα to per-strip twist offsets via the spline op.
+    VecX twist_offset = interp_.to_strip * delta_alpha_;
     VortexLattice& mesh = solver_.GetMeshMutable();
     const Index n = mesh.GetNumStrips();
     for (Index i = 0; i < n; ++i) {
-        mesh.GetStrip(i).twist_angle = baseline_twist_(i) + delta_alpha_(i);
+        mesh.GetStrip(i).twist_angle = baseline_twist_(i) + twist_offset(i);
     }
     mesh.RecalculateNormals();
     solver_.RebuildAIC();
 }
 
-void ViscousVlmCoupler::EvaluateVlm(VecX& cl_vlm, VecX& alpha_eff) {
+void ViscousVlmCoupler::EvaluateVlm(VecX& cl_local_strip,
+                                    VecX& alpha_eff_strip) {
     ApplyTwistsAndRefresh();
     last_solution_ = solver_.Solve(flight_);
     last_results_ =
         force_calc_.ComputeForces(solver_.GetReferenceQuantities(),
                                   solver_.GetMesh(), last_solution_, flight_);
 
-    const Index n = static_cast<Index>(strip_polars_.size());
-    cl_vlm.resize(n);
-    alpha_eff.resize(n);
-
     const VortexLattice& mesh = solver_.GetMesh();
-    for (Index strip_idx = 0; strip_idx < n; ++strip_idx) {
-        alpha_eff(strip_idx) = ComputeStripEffectiveAlpha(mesh, last_solution_,
-                                                          flight_, strip_idx);
+    const Index n_strips = mesh.GetNumStrips();
+    cl_local_strip.resize(n_strips);
+    alpha_eff_strip.resize(n_strips);
 
+    Vec3 v_inf = VortexLatticeSolver::ComputeFreestreamDirection(flight_);
+
+    // For each strip: total body-axis force from its vortices; then
+    //   Cl_VLM = stability-axis lift (cf.z·cos α∞ − cf.x·sin α∞), matching
+    //            Pegasus's per-strip Cl convention exactly so the residual
+    //            is well-defined and has the physical fixed point.
+    //   α_eff = local-frame projection (chord-up plane) of v_total at the
+    //           strip's LE vortex, then subtract 2·twist (see
+    //           ComputeStripAlphaEffLocal for sign rationale).
+    const Scalar ca = std::cos(flight_.alpha);
+    const Scalar sa = std::sin(flight_.alpha);
+    for (Index strip_idx = 0; strip_idx < n_strips; ++strip_idx) {
         const Strip& strip = mesh.GetStrip(strip_idx);
-        const auto& surf_loads =
-            last_results_.surface_loads[strip.surface_index];
-        Scalar cl_local = 0.0;
-        for (const auto& s : surf_loads.strip_loads) {
-            if (s.strip_index == strip_idx) {
-                cl_local = s.cl;
-                break;
-            }
+        StripLocalFrame frame = ComputeStripLocalFrame(strip);
+
+        Vec3 total_force = Vec3::Zero();
+        for (Index k = 0; k < strip.num_vortices; ++k) {
+            Index v = strip.first_vortex_index + k;
+            const HorseshoeVortex& vor = mesh.GetVortex(v);
+            Vec3 v_ind(last_solution_.induced_velocity(v, 0),
+                       last_solution_.induced_velocity(v, 1),
+                       last_solution_.induced_velocity(v, 2));
+            Vec3 v_eff = v_inf + v_ind;
+            Vec3 dl = vor.bound_vortex_right - vor.bound_vortex_left;
+            Scalar gamma = last_solution_.circulation(v);
+            total_force += 2.0 * gamma * v_eff.cross(dl);
         }
-        cl_vlm(strip_idx) = cl_local;
+
+        Scalar strip_area = strip.chord_center * strip.width;
+        if (strip_area > Scalar(1e-30)) {
+            Scalar cf_x = total_force.x() / strip_area;
+            Scalar cf_z = total_force.z() / strip_area;
+            cl_local_strip(strip_idx) = cf_z * ca - cf_x * sa;
+        } else {
+            cl_local_strip(strip_idx) = 0.0;
+        }
+
+        Index iv = strip.first_vortex_index;
+        Vec3 v_ind_iv(last_solution_.induced_velocity(iv, 0),
+                      last_solution_.induced_velocity(iv, 1),
+                      last_solution_.induced_velocity(iv, 2));
+        Vec3 v_total = v_inf + v_ind_iv;
+        alpha_eff_strip(strip_idx) =
+            ComputeStripAlphaEffLocal(strip, frame, v_total);
     }
 }
 
-VecX ViscousVlmCoupler::ComputeResidual(const VecX& alpha_eff,
-                                        const VecX& cl_vlm) {
-    const Index n = alpha_eff.size();
-    VecX r(n);
-    cd_2d_.resize(n);
-    dcl2d_dalpha_.resize(n);
-    dcd2d_dalpha_.resize(n);
+VecX ViscousVlmCoupler::ComputeResidual(const VecX& alpha_eff_strip,
+                                        const VecX& cl_local_strip) {
+    // Interpolate per-strip α_eff and Cl_local onto stations.
+    VecX alpha_eff_station = interp_.to_station * alpha_eff_strip;
+    VecX cl_local_station = interp_.to_station * cl_local_strip;
 
-    for (Index i = 0; i < n; ++i) {
-        auto& polar = strip_polars_[static_cast<std::size_t>(i)];
-        bool ok = polar.SolveFixedAlpha(alpha_eff(i), options_.reynolds,
-                                        options_.mach);
+    // Cl-mismatch residual: R_k = Cl_VLM_stability_station − Cl_2D(α_eff_k).
+    // With α_eff carrying the −twist sign convention (see
+    // ComputeStripAlphaEffLocal), the residual is monotonic in Δα with the
+    // single fixed point near the physical (small) Δα solution. Scirocco
+    // is driven in fixed-α mode at each station's interpolated α_eff;
+    // its fixed-Cl mode is unreliable on this code path.
+    const Index n_stations = static_cast<Index>(station_polars_.size());
+    VecX r(n_stations);
+    cd_2d_station_.resize(n_stations);
+    dcl2d_dalpha_station_.resize(n_stations);
+    dcd2d_dalpha_station_.resize(n_stations);
+
+    for (Index k = 0; k < n_stations; ++k) {
+        auto& polar = station_polars_[static_cast<std::size_t>(k)];
+        Scalar re = options_.stations[static_cast<std::size_t>(k)].reynolds;
+        bool ok =
+            polar.SolveFixedAlpha(alpha_eff_station(k), re, options_.mach);
         if (!ok) {
-            // Fallback: use thin-airfoil estimate so the Newton loop survives
-            // an occasional Scirocco failure. dCl_2D/dα defaults to 2π.
-            Scalar cl2 = 2.0 * kPi * alpha_eff(i);
-            r(i) = cl_vlm(i) - cl2;
-            cd_2d_(i) = 0.0;
-            dcl2d_dalpha_(i) = 2.0 * kPi;
-            dcd2d_dalpha_(i) = 0.0;
+            Scalar cl2 = 2.0 * kPi * alpha_eff_station(k);
+            r(k) = cl_local_station(k) - cl2;
+            cd_2d_station_(k) = 0.0;
+            dcl2d_dalpha_station_(k) = 2.0 * kPi;
+            dcd2d_dalpha_station_(k) = 0.0;
         } else {
-            Scalar cl2 = polar.GetCl();
-            cd_2d_(i) = polar.GetCd();
-            dcl2d_dalpha_(i) = polar.GetDclDalphaPerRadian();
-            dcd2d_dalpha_(i) = polar.GetDcdDalphaPerRadian();
-            r(i) = cl_vlm(i) - cl2;
+            r(k) = cl_local_station(k) - polar.GetCl();
+            cd_2d_station_(k) = polar.GetCd();
+            dcl2d_dalpha_station_(k) = polar.GetDclDalphaPerRadian();
+            dcd2d_dalpha_station_(k) = polar.GetDcdDalphaPerRadian();
         }
     }
     return r;
 }
 
 // =============================================================================
-// Forward chain: propagate a perturbation through VLM + Scirocco linearization
+// Analytical forward chain
 // =============================================================================
-
+//
+// For a perturbation direction (dtwist_strip, dv_inf), propagate analytically
+// through the VLM solve + local-frame projections + spline interp + Scirocco
+// linearization to get the response of all coupled quantities:
+//
+//   dtwist_strip ─►  δn_v at each vortex (closed form, NormalDeriv)
+//                   δR_VLM_v = δn_v · v_total_v  +  n_v · δv_inf
+//                   δΓ via cached AIC LU
+//                   δv_ind = VIM · δΓ
+//                   δforce_v = 2·δΓ·(v_eff×dl) + 2·Γ·(δv_eff×dl)
+//                   δstrip_force = Σ_v δforce_v
+//                   δc_hat, δn_hat from δtwist_strip (closed form)
+//                   δCl_local_strip = (δforce·n_hat + force·δn_hat)/area
+//                   δα_eff_strip via atan2 chain rule (incl. δv,δn̂,δĉ)
+//                                 + −2·δtwist_strip
+//                   to_station ·  ⟶  per-station δCl, δα_eff
+//                   Σ δforce, BodyToStability ⟶ δCL, δCDi
+//                   (dCd_2D/dα)·δα_eff_station, to_strip, sum ⟶ δCDv
+//
+// All linear ops are precomputed/cached at coupler state. The δn / δn_hat
+// / δc_hat closed forms exploit that twist changes only the panel's
+// rotation about its spanwise axis (bound vortex positions stay fixed).
 ViscousVlmCoupler::ForwardResponse ViscousVlmCoupler::RunForwardChain(
-    const VecX& dn, const Vec3& dv_inf, const VecX& dtwist_explicit) {
+    const VecX& dtwist_strip, const Vec3& dv_inf) {
     const VortexLattice& mesh = solver_.GetMesh();
+    const MatX& vim = solver_.GetVelocityInfluenceMatrix();
     const Index n_vort = mesh.GetNumVortices();
     const Index n_strips = mesh.GetNumStrips();
-    const MatX& vim = solver_.GetVelocityInfluenceMatrix();
+    const Index n_stations = static_cast<Index>(station_polars_.size());
 
     Vec3 v_inf_base = VortexLatticeSolver::ComputeFreestreamDirection(flight_);
 
-    // -----------------------------------------------------------------
-    // δR (VLM residual) = δAIC·Γ − δb, with:
-    //   δAIC[i,j] = VIM[i,j] · δn_i        (VIM doesn't depend on twist)
-    //   δb[i]     = −(v_inf + δv_inf) · n_i  →  δb[i] = −δv_inf · n_i
-    // Hence  δR_i = δn_i · v_total_i  +  v_inf direction-sensitivity term:
-    //
-    //   δR_i =  δn_i · (v_inf + v_ind_i)
-    //         + n_i  · δv_inf
-    //
-    // (The first term is the AIC perturbation collapsing to v_total at the
-    // control point; the second is the RHS shift from the freestream tilt.)
-    // -----------------------------------------------------------------
+    // δn_cp (per vortex, 3 components flattened). Only the vortices in
+    // strips with non-zero δtwist_strip contribute. The closed-form
+    // NormalDerivativeWrtTwist gives the derivative of normal_at_cp w.r.t.
+    // the strip's twist_angle at the current state.
+    VecX dn_cp = VecX::Zero(3 * n_vort);
+    for (Index strip_idx = 0; strip_idx < n_strips; ++strip_idx) {
+        Scalar dt = dtwist_strip(strip_idx);
+        if (std::abs(dt) < Scalar(1e-30)) {
+            continue;
+        }
+        const Strip& strip = mesh.GetStrip(strip_idx);
+        for (Index k = 0; k < strip.num_vortices; ++k) {
+            Index v = strip.first_vortex_index + k;
+            const HorseshoeVortex& vor = mesh.GetVortex(v);
+            Vec3 dn_v = NormalDerivativeWrtTwist(vor, strip.twist_angle,
+                                                 strip.trefftz_normal_y,
+                                                 strip.trefftz_normal_z);
+            dn_cp.segment<3>(3 * v) = dt * dn_v;
+        }
+    }
+
+    // VLM residual perturbation: δR_i = δn_i · v_total_i + n_i · δv_inf.
     VecX dR(n_vort);
     for (Index i = 0; i < n_vort; ++i) {
         const HorseshoeVortex& vor = mesh.GetVortex(i);
         Vec3 v_total(v_inf_base.x() + last_solution_.induced_velocity(i, 0),
                      v_inf_base.y() + last_solution_.induced_velocity(i, 1),
                      v_inf_base.z() + last_solution_.induced_velocity(i, 2));
-        Vec3 dni(dn(3 * i + 0), dn(3 * i + 1), dn(3 * i + 2));
+        Vec3 dni(dn_cp(3 * i + 0), dn_cp(3 * i + 1), dn_cp(3 * i + 2));
         dR(i) = dni.dot(v_total) + vor.normal_at_control_point.dot(dv_inf);
     }
 
-    // δΓ = AIC^{-1} · (−δR)   via cached LU factorization.
+    // δΓ via cached AIC LU.
     VecX dGamma = solver_.SolveForward(-dR);
 
-    // δv_ind_v = VIM[v, :] · δΓ  (3-component per vortex).
-    // Pre-compute as a (3*N_vort) vector for ease.
-    VecX dv_ind(3 * n_vort);
+    // δv_ind = VIM · δΓ (precompute for all vortices).
+    VecX dv_ind = VecX::Zero(3 * n_vort);
     for (Index i = 0; i < n_vort; ++i) {
-        Scalar vx = 0.0;
-        Scalar vy = 0.0;
-        Scalar vz = 0.0;
+        Scalar vx = 0.0, vy = 0.0, vz = 0.0;
         for (Index j = 0; j < n_vort; ++j) {
             Scalar gj = dGamma(j);
             vx += vim(3 * i + 0, j) * gj;
@@ -244,132 +345,143 @@ ViscousVlmCoupler::ForwardResponse ViscousVlmCoupler::RunForwardChain(
         dv_ind(3 * i + 2) = vz;
     }
 
-    // -----------------------------------------------------------------
-    // δforce_v = 2*δΓ_v*(v_eff_v × dl_v) + 2*Γ_v*(δv_eff_v × dl_v)
-    // δv_eff_v = δv_inf + δv_ind_v   (note: δv_inf is global; δv_ind_v is
-    // per-vortex from above)
-    // δdl_v = 0  (twist doesn't move bound vortex endpoints)
-    //
-    // From per-vortex δforces, aggregate per strip → δcf_strip; project
-    // through BodyToStability(α∞) to get δcl_strip. Also aggregate the
-    // whole-aircraft integral for δCL_total / δCD_total.
-    // -----------------------------------------------------------------
+    // Per-strip aggregation: total δforce_body, base strip force, base
+    // local frame, then δc_hat/δn_hat from δtwist_strip and projection.
     ForwardResponse out;
-    out.dCl_strip = VecX::Zero(n_strips);
-    out.dAlphaEff = VecX::Zero(n_strips);
-    out.dCL_total = 0.0;
-    out.dCD_total = 0.0;
-
+    VecX dCl_local_strip = VecX::Zero(n_strips);
+    VecX dAlphaEff_strip = VecX::Zero(n_strips);
+    Vec3 total_dforce = Vec3::Zero();
     const ReferenceQuantities& ref = solver_.GetReferenceQuantities();
     const Scalar S_ref = std::max(ref.reference_area, Scalar(1e-30));
     const Scalar ca = std::cos(flight_.alpha);
     const Scalar sa = std::sin(flight_.alpha);
-
-    Vec3 total_dforce = Vec3::Zero();
-
-    // For α∞ perturbations the body→stability rotation also rotates the
-    // base per-strip cf, contributing an extra term to δCl_strip. dα∞ is
-    // encoded in dv_inf: with β=0, dv_inf = (-sin α∞, 0, cos α∞)·dα∞.
     Scalar dalpha_inf =
         (std::abs(ca) > Scalar(1e-12)) ? (dv_inf.z() / ca) : Scalar(0.0);
 
-    for (Index strip_idx = 0; strip_idx < n_strips; ++strip_idx) {
-        const Strip& strip = mesh.GetStrip(strip_idx);
-        Vec3 strip_dforce = Vec3::Zero();
+    for (Index si = 0; si < n_strips; ++si) {
+        const Strip& strip = mesh.GetStrip(si);
+        Scalar t = strip.twist_angle;
+        Scalar ny = strip.trefftz_normal_y;
+        Scalar nz = strip.trefftz_normal_z;
+        Vec3 c_hat(std::cos(t), -std::sin(t) * ny, -std::sin(t) * nz);
+        Vec3 s_hat = strip.spanwise_unit_vector;
+        Vec3 cross_cs = c_hat.cross(s_hat);
+        Scalar mag = cross_cs.norm();
+        Vec3 n_hat = (mag > Scalar(1e-30)) ? (cross_cs / mag) : Vec3(0, 0, 1);
 
+        Scalar dt = dtwist_strip(si);
+
+        // δc_hat and δn_hat from δtwist_strip; δs_hat = 0 (spanwise
+        // direction doesn't depend on twist).
+        Vec3 d_c_hat =
+            Vec3(-std::sin(t), -std::cos(t) * ny, -std::cos(t) * nz) * dt;
+        Vec3 d_cross = d_c_hat.cross(s_hat);
+        Vec3 d_n_hat = Vec3::Zero();
+        if (mag > Scalar(1e-30)) {
+            d_n_hat = (d_cross - n_hat * (n_hat.dot(d_cross))) / mag;
+        }
+
+        // Strip base force and its perturbation.
+        Vec3 strip_force = Vec3::Zero();
+        Vec3 strip_dforce = Vec3::Zero();
         for (Index k = 0; k < strip.num_vortices; ++k) {
             Index v = strip.first_vortex_index + k;
             const HorseshoeVortex& vor = mesh.GetVortex(v);
-
             Vec3 v_ind(last_solution_.induced_velocity(v, 0),
                        last_solution_.induced_velocity(v, 1),
                        last_solution_.induced_velocity(v, 2));
             Vec3 v_eff = v_inf_base + v_ind;
             Vec3 dl = vor.bound_vortex_right - vor.bound_vortex_left;
-
+            Scalar gamma = last_solution_.circulation(v);
+            Scalar dgamma = dGamma(v);
             Vec3 dv_eff(dv_inf.x() + dv_ind(3 * v + 0),
                         dv_inf.y() + dv_ind(3 * v + 1),
                         dv_inf.z() + dv_ind(3 * v + 2));
-
-            Scalar gamma_v = last_solution_.circulation(v);
-            Scalar dgamma_v = dGamma(v);
-
-            Vec3 df = 2.0 * dgamma_v * v_eff.cross(dl) +
-                      2.0 * gamma_v * dv_eff.cross(dl);
-            strip_dforce += df;
+            strip_force += 2.0 * gamma * v_eff.cross(dl);
+            strip_dforce +=
+                2.0 * dgamma * v_eff.cross(dl) + 2.0 * gamma * dv_eff.cross(dl);
         }
 
-        // Per-strip δCl: normalize by strip area, project to stability axis.
         Scalar strip_area = strip.chord_center * strip.width;
         if (strip_area > Scalar(1e-30)) {
+            // Stability-axis δCl: project δforce by α∞ rotation, plus the
+            // body-to-stability rotation derivative on the base strip cf
+            // when α∞ itself is perturbed (carried by dalpha_inf).
             Scalar dcf_x = strip_dforce.x() / strip_area;
             Scalar dcf_z = strip_dforce.z() / strip_area;
-            out.dCl_strip(strip_idx) = dcf_z * ca - dcf_x * sa;
-
-            // Body→stability rotation derivative on the base cf when α∞
-            // changes. Without this term, ∂R/∂α∞ is missing a δCl_VLM
-            // contribution and the implicit-function chain is biased.
+            Scalar cf_x_base = 0.0, cf_z_base = 0.0;
             const auto& surf_loads =
                 last_results_.surface_loads[strip.surface_index];
             for (const auto& sl : surf_loads.strip_loads) {
-                if (sl.strip_index == strip_idx) {
-                    out.dCl_strip(strip_idx) +=
-                        dalpha_inf * (-sl.cf.z() * sa - sl.cf.x() * ca);
+                if (sl.strip_index == si) {
+                    cf_x_base = sl.cf.x();
+                    cf_z_base = sl.cf.z();
                     break;
                 }
             }
+            dCl_local_strip(si) =
+                dcf_z * ca - dcf_x * sa +
+                dalpha_inf * (-cf_z_base * sa - cf_x_base * ca);
         }
 
-        // α_eff at the strip's LE vortex.
+        // δα_eff_strip via atan2 chain rule.
+        // Base v_total at the strip's LE vortex.
         Index iv = strip.first_vortex_index;
-        Scalar vx_total =
-            v_inf_base.x() + last_solution_.induced_velocity(iv, 0);
-        Scalar vz_total =
-            v_inf_base.z() + last_solution_.induced_velocity(iv, 2);
-        Scalar denom = vx_total * vx_total + vz_total * vz_total;
-        if (denom > Scalar(1e-30)) {
-            Scalar dvx = dv_inf.x() + dv_ind(3 * iv + 0);
-            Scalar dvz = dv_inf.z() + dv_ind(3 * iv + 2);
-            // δ(atan2(z, x)) = (x*δz − z*δx) / (x² + z²)
-            Scalar dalpha_body = (vx_total * dvz - vz_total * dvx) / denom;
-            // α_eff = α_body − twist  ⇒  δα_eff = δα_body − δtwist
-            out.dAlphaEff(strip_idx) = dalpha_body - dtwist_explicit(strip_idx);
-        }
+        Vec3 v_ind_iv(last_solution_.induced_velocity(iv, 0),
+                      last_solution_.induced_velocity(iv, 1),
+                      last_solution_.induced_velocity(iv, 2));
+        Vec3 v_total = v_inf_base + v_ind_iv;
+        Vec3 v_proj = v_total - (v_total.dot(s_hat)) * s_hat;
+        Scalar v_c = v_proj.dot(c_hat);
+        Scalar v_n = v_proj.dot(n_hat);
+
+        Vec3 dv_total(dv_inf.x() + dv_ind(3 * iv + 0),
+                      dv_inf.y() + dv_ind(3 * iv + 1),
+                      dv_inf.z() + dv_ind(3 * iv + 2));
+        // δs_hat = 0, so δv_proj = δv_total − (δv_total·s_hat)·s_hat.
+        Vec3 dv_proj = dv_total - (dv_total.dot(s_hat)) * s_hat;
+
+        Scalar d_v_c = dv_proj.dot(c_hat) + v_proj.dot(d_c_hat);
+        Scalar d_v_n = dv_proj.dot(n_hat) + v_proj.dot(d_n_hat);
+
+        Scalar denom = v_c * v_c + v_n * v_n;
+        Scalar d_atan = (denom > Scalar(1e-30))
+                            ? ((v_c * d_v_n - v_n * d_v_c) / denom)
+                            : Scalar(0.0);
+        // α_eff = atan2(v_n, v_c) − 2·twist  (see ComputeStripAlphaEffLocal).
+        dAlphaEff_strip(si) = d_atan - Scalar(2.0) * dt;
 
         total_dforce += strip_dforce;
     }
 
-    // Integrated δCL, δCDi via BodyToStability at α∞. The rotation itself
-    // depends on α∞ only when δv_inf is nonzero (α∞ perturbation); since
-    // the strip-wise force aggregation already captured the body-axis
-    // sensitivity, the rotation derivative is handled here as the final
-    // step. For pure-Δα perturbations (dv_inf = 0) the rotation
-    // contribution vanishes because cf_x and cf_z don't carry an α-rotation
-    // term.
+    // Interpolate per-strip to per-station.
+    out.dCl_station = interp_.to_station * dCl_local_strip;
+    out.dAlphaEff_station = interp_.to_station * dAlphaEff_strip;
+
+    // Integrated δCL / δCDi via body-to-stability rotation. For α∞
+    // perturbations, also add the rotation derivative on the base CF.
     Scalar dCF_x = total_dforce.x() / S_ref;
     Scalar dCF_z = total_dforce.z() / S_ref;
     out.dCL_total = dCF_z * ca - dCF_x * sa;
     Scalar dCDi_total = dCF_x * ca + dCF_z * sa;
-
-    // For α∞ perturbations the body-to-stability rotation also rotates the
-    // base integrated CF → extra term:
-    //   d(CL)/dα = ... + (-CF_z·sin α - CF_x·cos α)·dα∞
-    //   d(CD)/dα = ... + (-CF_x·sin α + CF_z·cos α)·dα∞
-    // (dalpha_inf was computed above for the same reason in per-strip Cl.)
     Scalar CF_x = last_results_.CF.x();
     Scalar CF_z = last_results_.CF.z();
     out.dCL_total += dalpha_inf * (-CF_z * sa - CF_x * ca);
     dCDi_total += dalpha_inf * (-CF_x * sa + CF_z * ca);
 
-    // Viscous drag contribution: δCDv = sum_i (dCd_2D/dα * δα_eff * area_i)
-    // / S_ref. dCd_2D/dα is cached from the most recent Scirocco solve at
-    // each strip.
+    // δCDv contribution from each station's dCd_2D/dα · δα_eff, distributed
+    // to strips by to_strip, then strip-area-weighted into the global ref.
+    // VecX d_cd_station = (dcd2d_dalpha_station_ array, elementwise) ×
+    // out.dAlphaEff_station.
+    VecX d_cd_station(n_stations);
+    for (Index k = 0; k < n_stations; ++k) {
+        d_cd_station(k) = dcd2d_dalpha_station_(k) * out.dAlphaEff_station(k);
+    }
+    VecX d_cd_strip = interp_.to_strip * d_cd_station;
     Scalar dCDv_total = 0.0;
-    for (Index strip_idx = 0; strip_idx < n_strips; ++strip_idx) {
-        const Strip& strip = mesh.GetStrip(strip_idx);
-        Scalar strip_area = strip.chord_center * strip.width;
-        dCDv_total +=
-            dcd2d_dalpha_(strip_idx) * out.dAlphaEff(strip_idx) * strip_area;
+    for (Index i = 0; i < n_strips; ++i) {
+        const Strip& strip = mesh.GetStrip(i);
+        dCDv_total += d_cd_strip(i) * strip.chord_center * strip.width;
     }
     dCDv_total /= S_ref;
 
@@ -378,37 +490,17 @@ ViscousVlmCoupler::ForwardResponse ViscousVlmCoupler::RunForwardChain(
 }
 
 MatX ViscousVlmCoupler::BuildJacobianAnalytical() {
-    const VortexLattice& mesh = solver_.GetMesh();
-    const Index n_vort = mesh.GetNumVortices();
-    const Index n_strips = mesh.GetNumStrips();
-    MatX J(n_strips, n_strips);
+    const Index n_stations = static_cast<Index>(station_polars_.size());
+    MatX J(n_stations, n_stations);
 
-    VecX dn = VecX::Zero(3 * n_vort);
-    VecX dtwist = VecX::Zero(n_strips);
-    Vec3 dv_inf_zero = Vec3::Zero();
-
-    for (Index j = 0; j < n_strips; ++j) {
-        // Build the normal perturbation for a unit Δα at strip j.
-        const Strip& strip_j = mesh.GetStrip(j);
-        dn.setZero();
-        for (Index k = 0; k < strip_j.num_vortices; ++k) {
-            Index v = strip_j.first_vortex_index + k;
-            const HorseshoeVortex& vor = mesh.GetVortex(v);
-            Vec3 dn_v = NormalDerivativeWrtTwist(vor, strip_j.twist_angle,
-                                                 strip_j.trefftz_normal_y,
-                                                 strip_j.trefftz_normal_z);
-            dn.segment<3>(3 * v) = dn_v;
-        }
-        // The explicit α_eff contribution: changing Δα_j directly subtracts
-        // 1 from α_eff at strip j (since α_eff = α_body − twist).
-        dtwist.setZero();
-        dtwist(j) = 1.0;
-
-        ForwardResponse resp = RunForwardChain(dn, dv_inf_zero, dtwist);
-
-        // J_ij = δR_i/δΔα_j = δCl_VLM,i − (dCl_2D,i/dα) · δα_eff,i
-        for (Index i = 0; i < n_strips; ++i) {
-            J(i, j) = resp.dCl_strip(i) - dcl2d_dalpha_(i) * resp.dAlphaEff(i);
+    // R_i = Cl_VLM_i − Cl_2D(α_eff_i), so
+    //     ∂R_i/∂u_k = ∂Cl_i/∂u_k − (dCl_2D/dα)_i · ∂α_eff_i/∂u_k.
+    for (Index k = 0; k < n_stations; ++k) {
+        VecX dtwist = interp_.to_strip.col(k);
+        ForwardResponse resp = RunForwardChain(dtwist, Vec3::Zero());
+        for (Index i = 0; i < n_stations; ++i) {
+            J(i, k) = resp.dCl_station(i) -
+                      dcl2d_dalpha_station_(i) * resp.dAlphaEff_station(i);
         }
     }
     return J;
@@ -416,118 +508,131 @@ MatX ViscousVlmCoupler::BuildJacobianAnalytical() {
 
 CouplerResult ViscousVlmCoupler::Solve() {
     CouplerResult out;
-    const Index n = static_cast<Index>(strip_polars_.size());
-    if (n == 0) {
-        out.converged = true;
-        return out;
-    }
+    const Index n_stations = static_cast<Index>(station_polars_.size());
 
-    VecX cl_vlm(n), alpha_eff(n);
-
+    VecX cl_local_strip, alpha_eff_strip;
     for (int iter = 0; iter < options_.max_iterations; ++iter) {
-        EvaluateVlm(cl_vlm, alpha_eff);
-        VecX r = ComputeResidual(alpha_eff, cl_vlm);
+        EvaluateVlm(cl_local_strip, alpha_eff_strip);
+        VecX r = ComputeResidual(alpha_eff_strip, cl_local_strip);
         Scalar res_norm = r.lpNorm<Eigen::Infinity>();
         out.iterations = iter + 1;
         out.final_residual = res_norm;
-
         if (res_norm < options_.tolerance) {
             out.converged = true;
             break;
         }
 
-        // Analytical Jacobian — one forward chain per unknown, reusing the
-        // cached AIC LU. No additional VLM or Scirocco solves.
         MatX J = BuildJacobianAnalytical();
-
         Eigen::FullPivLU<MatX> lu(J);
         VecX du = lu.solve(-r);
 
-        // Step-size limit: avoid overshooting into non-physical fixed
-        // points when J is poorly conditioned. Scale uniformly so that
-        // ‖Δu‖∞ ≤ options_.max_step_rad.
         Scalar max_abs = du.lpNorm<Eigen::Infinity>();
         if (max_abs > options_.max_step_rad) {
             du *= options_.max_step_rad / max_abs;
         }
-        delta_alpha_ += options_.damping * du;
+
+        // Backtracking line search: try the full step first, then halve
+        // until ‖R‖ decreases. With the geometrically correct local-frame
+        // α_eff convention the Newton J is well-defined but its diagonal
+        // can be small in magnitude (3D lift slope close to 2π), so a full
+        // step can overshoot into a non-physical lift-free fixed point.
+        // Line search keeps Newton on the physical solution branch.
+        const VecX delta_alpha_save = delta_alpha_;
+        Scalar alpha_ls = options_.damping;
+        const Scalar r_norm = res_norm;
+        VecX cl_ls, alpha_ls_strip, r_ls;
+        bool accepted = false;
+        for (int bt = 0; bt < 10; ++bt) {
+            delta_alpha_ = delta_alpha_save + alpha_ls * du;
+            EvaluateVlm(cl_ls, alpha_ls_strip);
+            r_ls = ComputeResidual(alpha_ls_strip, cl_ls);
+            if (r_ls.lpNorm<Eigen::Infinity>() <= r_norm) {
+                accepted = true;
+                break;
+            }
+            alpha_ls *= Scalar(0.5);
+        }
+        if (!accepted) {
+            // Step couldn't reduce ‖R‖ even at α = damping·2^−10. Take the
+            // smallest tried step anyway and let Newton try again next
+            // iter from a perturbed state.
+            delta_alpha_ = delta_alpha_save + alpha_ls * du;
+        }
     }
 
-    // Final evaluation at the converged Δα to refresh results.
-    EvaluateVlm(cl_vlm, alpha_eff);
-    (void)ComputeResidual(alpha_eff, cl_vlm);
+    // Refresh at the final Δα so caches reflect the returned state.
+    EvaluateVlm(cl_local_strip, alpha_eff_strip);
+    (void)ComputeResidual(alpha_eff_strip, cl_local_strip);
 
-    // Viscous drag bookkeeping: CD_viscous = Σ (Cd_2D,i * area_i) / S_ref.
+    // Viscous drag bookkeeping. CDv is integrated from station Cd via
+    // interpolation back onto strips, then strip_area-weighted into the
+    // global reference area.
     const VortexLattice& mesh = solver_.GetMesh();
+    VecX cd_2d_strip = interp_.to_strip * cd_2d_station_;
+    Scalar ref_area = std::max(last_results_.reference_area, Scalar(1e-30));
     Scalar cdv = 0.0;
-    Scalar ref_area = last_results_.reference_area;
-    for (Index i = 0; i < n; ++i) {
+    for (Index i = 0; i < mesh.GetNumStrips(); ++i) {
         const Strip& strip = mesh.GetStrip(i);
-        Scalar strip_area = strip.chord_center * strip.width;
-        cdv += cd_2d_(i) * strip_area;
+        cdv += cd_2d_strip(i) * strip.chord_center * strip.width;
     }
-    cdv /= std::max(ref_area, Scalar(1e-30));
+    cdv /= ref_area;
     last_results_.CDv = cdv;
     last_results_.CD = last_results_.CDi_nearfield + cdv;
 
     out.results = last_results_;
-    out.delta_alpha = delta_alpha_;
+    out.delta_alpha_station = delta_alpha_;
+    out.twist_offset_strip = interp_.to_strip * delta_alpha_;
+    if (n_stations > 0 && !out.converged) {
+        // Even if max_iterations was hit, still report the final state.
+    }
     return out;
 }
 
-// =============================================================================
-// Coupled total derivatives — fully analytical
-// =============================================================================
-
 CoupledGradients ViscousVlmCoupler::ComputeAlphaDerivatives() {
     CoupledGradients g;
-    const VortexLattice& mesh = solver_.GetMesh();
-    const Index n_vort = mesh.GetNumVortices();
-    const Index n_strips = mesh.GetNumStrips();
+    const Index n_stations = static_cast<Index>(station_polars_.size());
 
     // Refresh base state so caches reflect the converged Δα.
-    VecX cl_base(n_strips), alpha_eff_base(n_strips);
-    EvaluateVlm(cl_base, alpha_eff_base);
-    (void)ComputeResidual(alpha_eff_base, cl_base);
+    VecX cl_strip, alpha_strip;
+    EvaluateVlm(cl_strip, alpha_strip);
+    (void)ComputeResidual(alpha_strip, cl_strip);
 
+    // Base integrated CL/CD (with viscous correction).
+    const VortexLattice& mesh = solver_.GetMesh();
+    Scalar ref_area = std::max(last_results_.reference_area, Scalar(1e-30));
+    Scalar cdv_base = 0.0;
+    {
+        VecX cd_strip = interp_.to_strip * cd_2d_station_;
+        for (Index i = 0; i < mesh.GetNumStrips(); ++i) {
+            const Strip& s = mesh.GetStrip(i);
+            cdv_base += cd_strip(i) * s.chord_center * s.width;
+        }
+        cdv_base /= ref_area;
+    }
     g.CL = last_results_.CL;
-    g.CD = last_results_.CDi_nearfield + last_results_.CDv;
+    g.CD = last_results_.CDi_nearfield + cdv_base;
 
-    // -----------------------------------------------------------------
-    // Build J = ∂R/∂u and ∂F/∂u  (both via analytical forward chain).
-    // -----------------------------------------------------------------
-    MatX J(n_strips, n_strips);
-    VecX dCL_du = VecX::Zero(n_strips);
-    VecX dCD_du = VecX::Zero(n_strips);
-
-    VecX dn = VecX::Zero(3 * n_vort);
-    VecX dtwist = VecX::Zero(n_strips);
-
-    for (Index j = 0; j < n_strips; ++j) {
-        const Strip& strip_j = mesh.GetStrip(j);
-        dn.setZero();
-        for (Index k = 0; k < strip_j.num_vortices; ++k) {
-            Index v = strip_j.first_vortex_index + k;
-            const HorseshoeVortex& vor = mesh.GetVortex(v);
-            Vec3 dn_v = NormalDerivativeWrtTwist(vor, strip_j.twist_angle,
-                                                 strip_j.trefftz_normal_y,
-                                                 strip_j.trefftz_normal_z);
-            dn.segment<3>(3 * v) = dn_v;
+    // ────────────────────────────────────────────────────────────────────
+    // Analytical: J = ∂R/∂u and ∂F/∂u via one forward chain per station.
+    // ────────────────────────────────────────────────────────────────────
+    MatX J(n_stations, n_stations);
+    VecX dCL_du(n_stations);
+    VecX dCD_du(n_stations);
+    for (Index k = 0; k < n_stations; ++k) {
+        VecX dtwist = interp_.to_strip.col(k);
+        ForwardResponse resp = RunForwardChain(dtwist, Vec3::Zero());
+        for (Index i = 0; i < n_stations; ++i) {
+            J(i, k) = resp.dCl_station(i) -
+                      dcl2d_dalpha_station_(i) * resp.dAlphaEff_station(i);
         }
-        dtwist.setZero();
-        dtwist(j) = 1.0;
-
-        ForwardResponse resp = RunForwardChain(dn, Vec3::Zero(), dtwist);
-        for (Index i = 0; i < n_strips; ++i) {
-            J(i, j) = resp.dCl_strip(i) - dcl2d_dalpha_(i) * resp.dAlphaEff(i);
-        }
-        dCL_du(j) = resp.dCL_total;
-        dCD_du(j) = resp.dCD_total;
+        dCL_du(k) = resp.dCL_total;
+        dCD_du(k) = resp.dCD_total;
     }
 
-    // -----------------------------------------------------------------
-    // ∂R/∂α∞ and ∂F/∂α∞ via a single forward chain with dv_inf = dα∞ direction.
-    // -----------------------------------------------------------------
+    // ────────────────────────────────────────────────────────────────────
+    // Analytical: ∂R/∂α∞ and ∂F/∂α∞ via one forward chain with
+    // dtwist_strip = 0 and dv_inf = df_inf/dα.
+    // ────────────────────────────────────────────────────────────────────
     double v_inf_arr[3];
     double dv_inf_arr[3];
     gradients::compute_freestream_direction(static_cast<double>(flight_.alpha),
@@ -539,31 +644,23 @@ CoupledGradients ViscousVlmCoupler::ComputeAlphaDerivatives() {
     Vec3 dv_inf_alpha(static_cast<Scalar>(dv_inf_arr[0]),
                       static_cast<Scalar>(dv_inf_arr[1]),
                       static_cast<Scalar>(dv_inf_arr[2]));
-
-    // α∞ perturbation has no explicit twist contribution (twist is fixed).
-    VecX zero_twist = VecX::Zero(n_strips);
-    VecX zero_dn = VecX::Zero(3 * n_vort);
-    ForwardResponse resp_alpha =
-        RunForwardChain(zero_dn, dv_inf_alpha, zero_twist);
-
-    VecX dR_dalpha(n_strips);
-    for (Index i = 0; i < n_strips; ++i) {
-        dR_dalpha(i) = resp_alpha.dCl_strip(i) -
-                       dcl2d_dalpha_(i) * resp_alpha.dAlphaEff(i);
+    VecX zero_twist = VecX::Zero(mesh.GetNumStrips());
+    ForwardResponse resp_alpha = RunForwardChain(zero_twist, dv_inf_alpha);
+    VecX dR_dalpha(n_stations);
+    for (Index k = 0; k < n_stations; ++k) {
+        dR_dalpha(k) =
+            resp_alpha.dCl_station(k) -
+            dcl2d_dalpha_station_(k) * resp_alpha.dAlphaEff_station(k);
     }
     Scalar dCL_dalpha_partial = resp_alpha.dCL_total;
     Scalar dCD_dalpha_partial = resp_alpha.dCD_total;
 
-    // -----------------------------------------------------------------
-    // Forward sensitivity:  J · (du/dα) = −∂R/∂α
-    // Total derivative:     dF/dα = ∂F/∂α + ∂F/∂u · (du/dα)
-    // -----------------------------------------------------------------
+    // Implicit function theorem: du/dα = −J^(−1)·∂R/∂α,  then
+    // dF/dα = ∂F/∂α + ∂F/∂u · du/dα.
     Eigen::FullPivLU<MatX> lu(J);
     VecX du_dalpha = lu.solve(-dR_dalpha);
-
     g.dCL_dalpha = dCL_dalpha_partial + dCL_du.dot(du_dalpha);
     g.dCD_dalpha = dCD_dalpha_partial + dCD_du.dot(du_dalpha);
-
     return g;
 }
 

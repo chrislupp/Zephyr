@@ -61,6 +61,36 @@ bool StripPolarSolver::SolveFixedAlpha(Scalar alpha_rad, Scalar reynolds,
     return converged;
 }
 
+bool StripPolarSolver::SolveFixedCl(Scalar cl_target, Scalar reynolds,
+                                    Scalar mach) {
+    // Scirocco interprets cl ≥ 0 as a target-Cl request and internally
+    // solves for the matching α. Seed with the thin-airfoil estimate
+    // (α ≈ Cl/(2π)) so Scirocco's Newton starts close to the converged α.
+    // For negative target Cl Scirocco's fixed-Cl mode doesn't engage
+    // (it requires cl ≥ 0); we punt to fixed-α at the thin-airfoil
+    // estimate, which is the right behavior for symmetric airfoils.
+    Scalar alpha_seed_deg =
+        static_cast<double>(cl_target / (2.0 * kPi)) * kRadiansToDegrees;
+    if (cl_target < Scalar(0.0)) {
+        return SolveFixedAlpha(cl_target / (2.0 * kPi), reynolds, mach);
+    }
+    solver_->SetOper(alpha_seed_deg, static_cast<double>(cl_target),
+                     static_cast<double>(reynolds), static_cast<double>(mach));
+    solver_->GetState().oper.initbl = !warm_started_;
+    const bool converged = solver_->Solve() && solver_->IsConverged();
+    if (converged) {
+        warm_started_ = true;
+        solver_->ComputeSensitivities();
+    } else {
+        warm_started_ = false;
+    }
+    return converged;
+}
+
+Scalar StripPolarSolver::GetAlphaRadians() const {
+    return static_cast<Scalar>(solver_->GetAlpha()) * kDegreesToRadians;
+}
+
 bool StripPolarSolver::IsConverged() const {
     return solver_->IsConverged();
 }

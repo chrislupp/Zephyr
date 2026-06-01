@@ -26,6 +26,8 @@
 #include <sstream>
 #include <stdexcept>
 
+#include <scirocco/scirocco.h>
+
 namespace pegasus {
 
 namespace {
@@ -243,12 +245,24 @@ FlightCondition ViscousVlmDiscipline::BuildFlightCondition(
 
 viscous::CouplerOptions ViscousVlmDiscipline::BuildCouplerOptions() const {
     viscous::CouplerOptions opt;
-    opt.airfoil_naca = airfoil_naca_;
-    opt.reynolds = reynolds_;
     opt.mach = mach_override_;
-    opt.scirocco_panels = scirocco_panels_;
     opt.max_iterations = max_iter_;
     opt.tolerance = tolerance_;
+
+    // v1 placeholder: build a small uniform 2-station list at eta = 0.05 /
+    // 0.95 using the NACA designator from options. A future revision will
+    // accept per-station coords directly as discipline inputs to enable
+    // shape-DV optimization.
+    scirocco::Scirocco airfoil(airfoil_naca_, scirocco_panels_);
+    Eigen::MatrixXd coords = airfoil.GetFoilCoords();
+    viscous::CouplingStation root_station;
+    root_station.eta = 0.05;
+    root_station.coords = coords;
+    root_station.num_panels = scirocco_panels_;
+    root_station.reynolds = reynolds_;
+    viscous::CouplingStation tip_station = root_station;
+    tip_station.eta = 0.95;
+    opt.stations = {root_station, tip_station};
     return opt;
 }
 
