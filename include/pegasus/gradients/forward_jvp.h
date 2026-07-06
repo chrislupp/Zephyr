@@ -80,6 +80,37 @@ VortexGeometryPerturbation PropagateNodePerturbationsToVortex(
     const SurfaceMesh& surface_mesh, Index first_vortex, Index nx, Index ny,
     const MeshNodeGradients& delta_nodes);
 
+/// @brief A batch of vortex geometry perturbations (K directions at once).
+///
+/// Column k holds one perturbation direction; rows follow the same 3*N
+/// layout as VortexGeometryPerturbation. Batched JVPs evaluate the
+/// analytical Biot-Savart derivative kernels once per panel pair and apply
+/// them to every direction, instead of re-running the O(N^2) kernel sweep
+/// per direction — the dominant cost of coupled aerostructural Jacobians.
+struct VortexGeometryPerturbationBatch {
+    MatX d_rv1;     ///< Left bound vortex endpoints [3*N x K]
+    MatX d_rv2;     ///< Right bound vortex endpoints [3*N x K]
+    MatX d_rc;      ///< Control points [3*N x K]
+    MatX d_normal;  ///< Panel normals [3*N x K]
+
+    void Resize(Index n, Index k) {
+        d_rv1 = MatX::Zero(3 * n, k);
+        d_rv2 = MatX::Zero(3 * n, k);
+        d_rc = MatX::Zero(3 * n, k);
+        d_normal = MatX::Zero(3 * n, k);
+    }
+
+    /// Copies a single perturbation into column k
+    void SetColumn(Index k, const VortexGeometryPerturbation& pert) {
+        d_rv1.col(k) = pert.d_rv1;
+        d_rv2.col(k) = pert.d_rv2;
+        d_rc.col(k) = pert.d_rc;
+        d_normal.col(k) = pert.d_normal;
+    }
+
+    [[nodiscard]] Index NumDirections() const { return d_rv1.cols(); }
+};
+
 /// @brief Compute forward-mode JVP of VLM residual w.r.t. vortex geometry.
 ///
 /// Computes delta(AIC * Gamma - b) given perturbations in vortex geometry.
@@ -126,5 +157,40 @@ VecX ComputePerVortexForceTotalJVP(const VortexLatticeSolver& solver,
                                    const FlightCondition& condition,
                                    const VortexGeometryPerturbation& delta_geom,
                                    const VecX& delta_gamma);
+
+/// @brief Batched ComputeResidualGeometryJVP over K perturbation directions.
+///
+/// Mathematically identical to calling ComputeResidualGeometryJVP once per
+/// column of the batch, but the analytical Biot-Savart derivative kernels
+/// are evaluated once per panel pair and contracted with all K directions,
+/// so the kernel sweep cost is O(N^2) instead of O(K * N^2).
+///
+/// @param solver VLM solver (mesh, AIC parameters)
+/// @param solution Forward solution (circulation values)
+/// @param condition Flight condition (for freestream direction)
+/// @param batch K geometry perturbation directions
+/// @return Residual perturbations (N x K), column k for direction k
+MatX ComputeResidualGeometryJVPBatch(
+    const VortexLatticeSolver& solver, const SolutionState& solution,
+    const FlightCondition& condition,
+    const VortexGeometryPerturbationBatch& batch);
+
+/// @brief Batched ComputePerVortexForceTotalJVP over K directions.
+///
+/// Mathematically identical to the per-direction function; the VIM
+/// geometry-derivative kernels are evaluated once per panel pair, and the
+/// VIM * delta_Gamma term is a single matrix product.
+///
+/// @param solver VLM solver (mesh, VIM)
+/// @param solution Forward solution (circulation, induced velocity)
+/// @param condition Flight condition
+/// @param batch K geometry perturbation directions
+/// @param delta_gammas Circulation perturbations (N x K), column k from the
+///                     forward AIC solve of direction k
+/// @return Per-vortex force perturbations (3N x K)
+MatX ComputePerVortexForceTotalJVPBatch(
+    const VortexLatticeSolver& solver, const SolutionState& solution,
+    const FlightCondition& condition,
+    const VortexGeometryPerturbationBatch& batch, const MatX& delta_gammas);
 
 }  // namespace pegasus::gradients

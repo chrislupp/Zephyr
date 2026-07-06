@@ -221,6 +221,13 @@ public:
     /// @return Solution vector x
     [[nodiscard]] VecX SolveForward(const VecX& rhs) const;
 
+    /// @brief Matrix-RHS overload of SolveForward: one back-substitution
+    /// per column, reusing the cached LU factorization.
+    ///
+    /// @param rhs Right-hand side matrix (N x K)
+    /// @return Solution matrix (N x K)
+    [[nodiscard]] MatX SolveForward(const MatX& rhs) const;
+
     /// @}
 
 private:

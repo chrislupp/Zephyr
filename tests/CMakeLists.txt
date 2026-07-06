@@ -47,6 +47,7 @@ add_executable(pegasus_unit_tests
     unit/flight_constraints_test.cpp
     unit/section_test.cpp
     unit/aerodynamic_results_test.cpp
+    unit/forward_jvp_batch_test.cpp
 )
 
 if(PEGASUS_ENABLE_VISCOUS_COUPLING)

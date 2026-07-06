@@ -467,4 +467,219 @@ VecX ComputePerVortexForceTotalJVP(const VortexLatticeSolver& solver,
     return delta_F;
 }
 
+// ============================================================================
+// ComputeResidualGeometryJVPBatch
+// ============================================================================
+
+MatX ComputeResidualGeometryJVPBatch(
+    const VortexLatticeSolver& solver, const SolutionState& solution,
+    const FlightCondition& condition,
+    const VortexGeometryPerturbationBatch& batch) {
+    const VortexLattice& mesh = solver.GetMesh();
+    const Index n = mesh.GetNumVortices();
+    const Index kk = batch.NumDirections();
+
+    MatX delta_R = MatX::Zero(n, kk);
+
+    MeshArrays arrays = ExtractMeshArrays(mesh);
+
+    double beta_pg =
+        std::sqrt(std::max(0.01, 1.0 - condition.mach * condition.mach));
+    double core_chord_frac = mesh.GetVortexCoreRadiusChordFraction();
+    double core_width_frac = mesh.GetVortexCoreRadiusWidthFraction();
+
+    double v_inf[3];
+    compute_freestream_direction(condition.alpha, condition.beta, v_inf);
+
+    // Row-parallel sweep: each row i evaluates its kernels once and
+    // contracts them with every perturbation direction
+#ifdef _OPENMP
+#pragma omp parallel for schedule(dynamic, 8)
+#endif
+    for (Index i = 0; i < n; ++i) {
+        // Part 1: rc and normal contributions (row gradient, weights=Gamma)
+        double d_rc_out[3] = {0, 0, 0};
+        double d_normal_aic[3] = {0, 0, 0};
+
+        analytical_aic_row_gradient_rc(
+            arrays.rv1.data(), arrays.rv2.data(), &arrays.rc[3 * i],
+            &arrays.normal[3 * i], arrays.chord.data(),
+            arrays.component_idx.data(), static_cast<int>(n),
+            static_cast<int>(i), arrays.component_idx[i], core_chord_frac,
+            core_width_frac, beta_pg, solution.circulation.data(), d_rc_out,
+            d_normal_aic);
+
+        Eigen::RowVector3d w_rc(d_rc_out[0], d_rc_out[1], d_rc_out[2]);
+        Eigen::RowVector3d w_n(d_normal_aic[0] + v_inf[0],
+                               d_normal_aic[1] + v_inf[1],
+                               d_normal_aic[2] + v_inf[2]);
+
+        delta_R.row(i) += w_rc * batch.d_rc.middleRows(3 * i, 3);
+        delta_R.row(i) += w_n * batch.d_normal.middleRows(3 * i, 3);
+
+        // Part 2: rv1/rv2 column contributions. The VJPs seeded with
+        // normal_i give d(AIC[i,j])/d(rv1_j, rv2_j); evaluate once per
+        // pair and contract with all directions.
+        const double* rc_i = &arrays.rc[3 * i];
+        const double* normal_i = &arrays.normal[3 * i];
+
+        for (Index j = 0; j < n; ++j) {
+            double gamma_j = solution.circulation(j);
+            if (std::abs(gamma_j) < 1e-30)
+                continue;
+
+            const double* rv1_j = &arrays.rv1[3 * j];
+            const double* rv2_j = &arrays.rv2[3 * j];
+            double strip_width_j = compute_strip_width(rv1_j, rv2_j);
+            bool same_component =
+                (arrays.component_idx[j] == arrays.component_idx[i]);
+            double core_radius = compute_core_radius(
+                strip_width_j, same_component, arrays.chord[j], core_chord_frac,
+                core_width_frac);
+            bool include_bound = (i != j);
+
+            double vjp_rv1[3], vjp_rv2[3];
+            horseshoe_velocity_vjp_bound_left(rc_i, rv1_j, rv2_j, beta_pg,
+                                              core_radius, include_bound,
+                                              normal_i, vjp_rv1);
+            horseshoe_velocity_vjp_bound_right(rc_i, rv1_j, rv2_j, beta_pg,
+                                               core_radius, include_bound,
+                                               normal_i, vjp_rv2);
+
+            Eigen::RowVector3d w1(gamma_j * vjp_rv1[0], gamma_j * vjp_rv1[1],
+                                  gamma_j * vjp_rv1[2]);
+            Eigen::RowVector3d w2(gamma_j * vjp_rv2[0], gamma_j * vjp_rv2[1],
+                                  gamma_j * vjp_rv2[2]);
+
+            delta_R.row(i) += w1 * batch.d_rv1.middleRows(3 * j, 3);
+            delta_R.row(i) += w2 * batch.d_rv2.middleRows(3 * j, 3);
+        }
+    }
+
+    return delta_R;
+}
+
+// ============================================================================
+// ComputePerVortexForceTotalJVPBatch
+// ============================================================================
+
+MatX ComputePerVortexForceTotalJVPBatch(
+    const VortexLatticeSolver& solver, const SolutionState& solution,
+    const FlightCondition& condition,
+    const VortexGeometryPerturbationBatch& batch, const MatX& delta_gammas) {
+    const VortexLattice& mesh = solver.GetMesh();
+    const MatX& vim = solver.GetVelocityInfluenceMatrix();
+    const Index n = mesh.GetNumVortices();
+    const Index kk = batch.NumDirections();
+
+    MatX delta_F = MatX::Zero(3 * n, kk);
+
+    MeshArrays arrays = ExtractMeshArrays(mesh);
+
+    double beta_pg =
+        std::sqrt(std::max(0.01, 1.0 - condition.mach * condition.mach));
+    double core_chord_frac = mesh.GetVortexCoreRadiusChordFraction();
+    double core_width_frac = mesh.GetVortexCoreRadiusWidthFraction();
+
+    double v_inf[3];
+    compute_freestream_direction(condition.alpha, condition.beta, v_inf);
+
+    // Term 3a for all vortices and directions in one product:
+    // delta_V_ind (from delta_Gamma) = VIM * delta_Gamma
+    MatX dv_from_dgamma = vim * delta_gammas;  // (3N x K)
+
+#ifdef _OPENMP
+#pragma omp parallel for schedule(dynamic, 8)
+#endif
+    for (Index i = 0; i < n; ++i) {
+        double gamma_i = solution.circulation(i);
+
+        Eigen::Vector3d v_eff(v_inf[0] + solution.induced_velocity(i, 0),
+                              v_inf[1] + solution.induced_velocity(i, 1),
+                              v_inf[2] + solution.induced_velocity(i, 2));
+        Eigen::Vector3d dl(arrays.rv2[3 * i + 0] - arrays.rv1[3 * i + 0],
+                           arrays.rv2[3 * i + 1] - arrays.rv1[3 * i + 1],
+                           arrays.rv2[3 * i + 2] - arrays.rv1[3 * i + 2]);
+
+        Eigen::Matrix3d skew_veff;
+        skew_veff << 0, -v_eff.z(), v_eff.y(), v_eff.z(), 0, -v_eff.x(),
+            -v_eff.y(), v_eff.x(), 0;
+        Eigen::Matrix3d skew_dl;
+        skew_dl << 0, -dl.z(), dl.y(), dl.z(), 0, -dl.x(), -dl.y(), dl.x(), 0;
+
+        // Term 1: 2 * delta_Gamma_i * (V_eff x dl) for every direction
+        Eigen::Vector3d v_cross_dl = v_eff.cross(dl);
+        delta_F.middleRows(3 * i, 3).noalias() +=
+            2.0 * v_cross_dl * delta_gammas.row(i);
+
+        // Term 2: 2 * Gamma_i * (V_eff x delta_dl)
+        delta_F.middleRows(3 * i, 3).noalias() +=
+            2.0 * gamma_i * skew_veff *
+            (batch.d_rv2.middleRows(3 * i, 3) -
+             batch.d_rv1.middleRows(3 * i, 3));
+
+        // Term 3: 2 * Gamma_i * (delta_V_ind x dl), with
+        // delta_V_ind = VIM*delta_Gamma (precomputed) + delta_VIM*Gamma.
+        // The geometry part evaluates the pair kernels once, assembling
+        // 3x3 Jacobians applied to all directions. Contributions through
+        // rc_i are shared across j and accumulate into one 3x3.
+        Eigen::MatrixXd dv_geom = Eigen::MatrixXd::Zero(3, kk);
+        Eigen::Matrix3d J_rc_sum = Eigen::Matrix3d::Zero();
+
+        const double* rc_i_ptr = &arrays.rc[3 * i];
+
+        for (Index j = 0; j < n; ++j) {
+            double gamma_j = solution.circulation(j);
+            if (std::abs(gamma_j) < 1e-30)
+                continue;
+
+            const double* rv1_j_ptr = &arrays.rv1[3 * j];
+            const double* rv2_j_ptr = &arrays.rv2[3 * j];
+
+            bool same_component =
+                (arrays.component_idx[j] == arrays.component_idx[i]);
+            double sw = compute_strip_width(rv1_j_ptr, rv2_j_ptr);
+            double core_radius =
+                compute_core_radius(sw, same_component, arrays.chord[j],
+                                    core_chord_frac, core_width_frac);
+            bool include_bound = (i != j);
+
+            // 3x3 Jacobians of the horseshoe velocity: row m = VJP(e_m)
+            double seed[3], res[3];
+            Eigen::Matrix3d J_rc, J_rv1, J_rv2;
+            for (int m = 0; m < 3; ++m) {
+                seed[0] = seed[1] = seed[2] = 0.0;
+                seed[m] = 1.0;
+                horseshoe_velocity_vjp_field_point(
+                    rc_i_ptr, rv1_j_ptr, rv2_j_ptr, beta_pg, core_radius,
+                    include_bound, seed, res);
+                J_rc.row(m) << res[0], res[1], res[2];
+                horseshoe_velocity_vjp_bound_left(
+                    rc_i_ptr, rv1_j_ptr, rv2_j_ptr, beta_pg, core_radius,
+                    include_bound, seed, res);
+                J_rv1.row(m) << res[0], res[1], res[2];
+                horseshoe_velocity_vjp_bound_right(
+                    rc_i_ptr, rv1_j_ptr, rv2_j_ptr, beta_pg, core_radius,
+                    include_bound, seed, res);
+                J_rv2.row(m) << res[0], res[1], res[2];
+            }
+
+            J_rc_sum.noalias() += gamma_j * J_rc;
+            dv_geom.noalias() +=
+                gamma_j * J_rv1 * batch.d_rv1.middleRows(3 * j, 3);
+            dv_geom.noalias() +=
+                gamma_j * J_rv2 * batch.d_rv2.middleRows(3 * j, 3);
+        }
+
+        dv_geom.noalias() += J_rc_sum * batch.d_rc.middleRows(3 * i, 3);
+
+        // (delta_V_ind x dl) = -dl x delta_V_ind = -skew(dl) * delta_V_ind
+        delta_F.middleRows(3 * i, 3).noalias() +=
+            2.0 * gamma_i * (-skew_dl) *
+            (dv_from_dgamma.middleRows(3 * i, 3) + dv_geom);
+    }
+
+    return delta_F;
+}
+
 }  // namespace pegasus::gradients

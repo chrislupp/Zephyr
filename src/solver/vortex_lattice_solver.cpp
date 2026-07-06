@@ -254,4 +254,8 @@ VecX VortexLatticeSolver::SolveForward(const VecX& rhs) const {
     return aic_lu_.solve(rhs);
 }
 
+MatX VortexLatticeSolver::SolveForward(const MatX& rhs) const {
+    return aic_lu_.solve(rhs);
+}
+
 }  // namespace pegasus
