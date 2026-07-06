@@ -237,6 +237,19 @@ install(EXPORT pegasus-targets
     DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/Pegasus
 )
 
+# Record which optional dependencies are in the installed link interface so
+# PegasusConfig.cmake can re-find them for downstream projects
+if(PEGASUS_ENABLE_OPENMP AND OpenMP_CXX_FOUND)
+    set(PEGASUS_CONFIG_NEEDS_OPENMP TRUE)
+else()
+    set(PEGASUS_CONFIG_NEEDS_OPENMP FALSE)
+endif()
+if(PEGASUS_ENABLE_VTK AND VTK_FOUND)
+    set(PEGASUS_CONFIG_NEEDS_VTK TRUE)
+else()
+    set(PEGASUS_CONFIG_NEEDS_VTK FALSE)
+endif()
+
 configure_package_config_file(
     "${CMAKE_CURRENT_SOURCE_DIR}/cmake/PegasusConfig.cmake.in"
     "${CMAKE_CURRENT_BINARY_DIR}/PegasusConfig.cmake"
