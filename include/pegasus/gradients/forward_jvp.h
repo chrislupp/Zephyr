@@ -193,4 +193,46 @@ MatX ComputePerVortexForceTotalJVPBatch(
     const FlightCondition& condition,
     const VortexGeometryPerturbationBatch& batch, const MatX& delta_gammas);
 
+// ============================================================================
+// Reverse-mode VJPs (adjoint of the geometry -> {residual, force} maps)
+// ============================================================================
+
+/// @brief Reverse-mode VJP of the VLM residual w.r.t. vortex geometry.
+///
+/// Exact transpose of ComputeResidualGeometryJVP: given an adjoint seed on the
+/// residual (bar_R, N x 1), accumulates the adjoint on the vortex geometry,
+///   {d_rc, d_normal, d_rv1, d_rv2} += (d delta_R / d geom)^T * bar_R,
+/// returned as a MeshGradients seed suitable for PropagateMeshGradientsToNodes.
+/// Uses the same analytical kernels as the forward JVP, so the two are exact
+/// transposes by construction.
+///
+/// @param solver VLM solver (mesh, AIC parameters, circulation)
+/// @param solution Forward solution (circulation values)
+/// @param condition Flight condition (freestream direction)
+/// @param bar_R Adjoint seed on the residual (N x 1)
+/// @return Geometry adjoint seed (MeshGradients)
+MeshGradients ComputeResidualGeometryVJP(const VortexLatticeSolver& solver,
+                                         const SolutionState& solution,
+                                         const FlightCondition& condition,
+                                         const VecX& bar_R);
+
+/// @brief Reverse-mode VJP of the per-vortex force w.r.t. vortex geometry.
+///
+/// Exact transpose of the geometry-dependent terms of
+/// ComputePerVortexForceTotalJVP (the bound-segment dl term and the induced
+/// velocity geometry term): given an adjoint seed on the per-vortex forces
+/// (bar_F, 3N x 1), accumulates
+///   {d_rc, d_rv1, d_rv2} += (d delta_F / d geom)^T * bar_F.
+/// The circulation part of the force VJP is provided separately by
+/// per_vortex_force_circulation_vjp.
+///
+/// @param solver VLM solver (mesh, VIM)
+/// @param solution Forward solution (circulation, induced velocity)
+/// @param condition Flight condition
+/// @param bar_F Adjoint seed on the per-vortex forces (3N x 1)
+/// @return Geometry adjoint seed (MeshGradients)
+MeshGradients ComputePerVortexForceGeometryVJP(
+    const VortexLatticeSolver& solver, const SolutionState& solution,
+    const FlightCondition& condition, const VecX& bar_F);
+
 }  // namespace pegasus::gradients

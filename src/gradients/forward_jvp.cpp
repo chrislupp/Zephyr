@@ -682,4 +682,192 @@ MatX ComputePerVortexForceTotalJVPBatch(
     return delta_F;
 }
 
+// ============================================================================
+// ComputeResidualGeometryVJP (transpose of ComputeResidualGeometryJVP)
+// ============================================================================
+
+MeshGradients ComputeResidualGeometryVJP(const VortexLatticeSolver& solver,
+                                         const SolutionState& solution,
+                                         const FlightCondition& condition,
+                                         const VecX& bar_R) {
+    const VortexLattice& mesh = solver.GetMesh();
+    const Index n = mesh.GetNumVortices();
+
+    MeshGradients g;
+    g.Resize(n);
+
+    MeshArrays arrays = ExtractMeshArrays(mesh);
+
+    double beta_pg =
+        std::sqrt(std::max(0.01, 1.0 - condition.mach * condition.mach));
+    double core_chord_frac = mesh.GetVortexCoreRadiusChordFraction();
+    double core_width_frac = mesh.GetVortexCoreRadiusWidthFraction();
+
+    double v_inf[3];
+    compute_freestream_direction(condition.alpha, condition.beta, v_inf);
+
+    for (Index i = 0; i < n; ++i) {
+        double bri = bar_R(i);
+        if (std::abs(bri) < 1e-300)
+            continue;
+
+        // Part 1 transpose: rc and normal seeds.
+        double d_rc_out[3] = {0, 0, 0};
+        double d_normal_aic[3] = {0, 0, 0};
+        analytical_aic_row_gradient_rc(
+            arrays.rv1.data(), arrays.rv2.data(), &arrays.rc[3 * i],
+            &arrays.normal[3 * i], arrays.chord.data(),
+            arrays.component_idx.data(), static_cast<int>(n),
+            static_cast<int>(i), arrays.component_idx[i], core_chord_frac,
+            core_width_frac, beta_pg, solution.circulation.data(), d_rc_out,
+            d_normal_aic);
+
+        for (int k = 0; k < 3; ++k) {
+            g.d_rc[3 * i + k] += d_rc_out[k] * bri;
+            g.d_normal[3 * i + k] += (d_normal_aic[k] + v_inf[k]) * bri;
+        }
+
+        // Part 2 transpose: rv1/rv2 column seeds. Same kernels as the forward,
+        // contracted with bar_R(i) and scattered to column j.
+        const double* rc_i = &arrays.rc[3 * i];
+        const double* normal_i = &arrays.normal[3 * i];
+        for (Index j = 0; j < n; ++j) {
+            double gamma_j = solution.circulation(j);
+            if (std::abs(gamma_j) < 1e-30)
+                continue;
+
+            const double* rv1_j = &arrays.rv1[3 * j];
+            const double* rv2_j = &arrays.rv2[3 * j];
+            double strip_width_j = compute_strip_width(rv1_j, rv2_j);
+            bool same_component =
+                (arrays.component_idx[j] == arrays.component_idx[i]);
+            double core_radius = compute_core_radius(
+                strip_width_j, same_component, arrays.chord[j], core_chord_frac,
+                core_width_frac);
+            bool include_bound = (i != j);
+
+            double vjp_rv1[3], vjp_rv2[3];
+            horseshoe_velocity_vjp_bound_left(rc_i, rv1_j, rv2_j, beta_pg,
+                                              core_radius, include_bound,
+                                              normal_i, vjp_rv1);
+            horseshoe_velocity_vjp_bound_right(rc_i, rv1_j, rv2_j, beta_pg,
+                                               core_radius, include_bound,
+                                               normal_i, vjp_rv2);
+            double gb = gamma_j * bri;
+            for (int k = 0; k < 3; ++k) {
+                g.d_rv1[3 * j + k] += gb * vjp_rv1[k];
+                g.d_rv2[3 * j + k] += gb * vjp_rv2[k];
+            }
+        }
+    }
+
+    return g;
+}
+
+// ============================================================================
+// ComputePerVortexForceGeometryVJP (transpose of the geometry terms of
+// ComputePerVortexForceTotalJVP)
+// ============================================================================
+
+MeshGradients ComputePerVortexForceGeometryVJP(
+    const VortexLatticeSolver& solver, const SolutionState& solution,
+    const FlightCondition& condition, const VecX& bar_F) {
+    const VortexLattice& mesh = solver.GetMesh();
+    const Index n = mesh.GetNumVortices();
+
+    MeshGradients g;
+    g.Resize(n);
+
+    MeshArrays arrays = ExtractMeshArrays(mesh);
+
+    double beta_pg =
+        std::sqrt(std::max(0.01, 1.0 - condition.mach * condition.mach));
+    double core_chord_frac = mesh.GetVortexCoreRadiusChordFraction();
+    double core_width_frac = mesh.GetVortexCoreRadiusWidthFraction();
+
+    double v_inf[3];
+    compute_freestream_direction(condition.alpha, condition.beta, v_inf);
+
+    for (Index i = 0; i < n; ++i) {
+        double gamma_i = solution.circulation(i);
+
+        Eigen::Vector3d v_eff(v_inf[0] + solution.induced_velocity(i, 0),
+                              v_inf[1] + solution.induced_velocity(i, 1),
+                              v_inf[2] + solution.induced_velocity(i, 2));
+        Eigen::Vector3d dl(arrays.rv2[3 * i + 0] - arrays.rv1[3 * i + 0],
+                           arrays.rv2[3 * i + 1] - arrays.rv1[3 * i + 1],
+                           arrays.rv2[3 * i + 2] - arrays.rv1[3 * i + 2]);
+        Eigen::Vector3d s(bar_F(3 * i + 0), bar_F(3 * i + 1), bar_F(3 * i + 2));
+
+        Eigen::Matrix3d skew_veff;
+        skew_veff << 0, -v_eff.z(), v_eff.y(), v_eff.z(), 0, -v_eff.x(),
+            -v_eff.y(), v_eff.x(), 0;
+        Eigen::Matrix3d skew_dl;
+        skew_dl << 0, -dl.z(), dl.y(), dl.z(), 0, -dl.x(), -dl.y(), dl.x(), 0;
+
+        // Term 2 transpose: dF_i = 2*gamma_i*skew_veff*(d_rv2_i - d_rv1_i).
+        Eigen::Vector3d bar2 = 2.0 * gamma_i * skew_veff.transpose() * s;
+        for (int k = 0; k < 3; ++k) {
+            g.d_rv2[3 * i + k] += bar2(k);
+            g.d_rv1[3 * i + k] -= bar2(k);
+        }
+
+        // Term 3b transpose: dF_i = 2*gamma_i*(-skew_dl)*dv_geom_i, so the
+        // adjoint on dv_geom_i is bar_dv = 2*gamma_i*(-skew_dl)^T * s.
+        Eigen::Vector3d bar_dv = 2.0 * gamma_i * (-skew_dl).transpose() * s;
+
+        Eigen::Matrix3d J_rc_sum = Eigen::Matrix3d::Zero();
+        const double* rc_i_ptr = &arrays.rc[3 * i];
+        for (Index j = 0; j < n; ++j) {
+            double gamma_j = solution.circulation(j);
+            if (std::abs(gamma_j) < 1e-30)
+                continue;
+
+            const double* rv1_j_ptr = &arrays.rv1[3 * j];
+            const double* rv2_j_ptr = &arrays.rv2[3 * j];
+            bool same_component =
+                (arrays.component_idx[j] == arrays.component_idx[i]);
+            double sw = compute_strip_width(rv1_j_ptr, rv2_j_ptr);
+            double core_radius =
+                compute_core_radius(sw, same_component, arrays.chord[j],
+                                    core_chord_frac, core_width_frac);
+            bool include_bound = (i != j);
+
+            double seed[3], res[3];
+            Eigen::Matrix3d J_rc, J_rv1, J_rv2;
+            for (int m = 0; m < 3; ++m) {
+                seed[0] = seed[1] = seed[2] = 0.0;
+                seed[m] = 1.0;
+                horseshoe_velocity_vjp_field_point(
+                    rc_i_ptr, rv1_j_ptr, rv2_j_ptr, beta_pg, core_radius,
+                    include_bound, seed, res);
+                J_rc.row(m) << res[0], res[1], res[2];
+                horseshoe_velocity_vjp_bound_left(
+                    rc_i_ptr, rv1_j_ptr, rv2_j_ptr, beta_pg, core_radius,
+                    include_bound, seed, res);
+                J_rv1.row(m) << res[0], res[1], res[2];
+                horseshoe_velocity_vjp_bound_right(
+                    rc_i_ptr, rv1_j_ptr, rv2_j_ptr, beta_pg, core_radius,
+                    include_bound, seed, res);
+                J_rv2.row(m) << res[0], res[1], res[2];
+            }
+
+            J_rc_sum.noalias() += gamma_j * J_rc;
+            Eigen::Vector3d br1 = gamma_j * J_rv1.transpose() * bar_dv;
+            Eigen::Vector3d br2 = gamma_j * J_rv2.transpose() * bar_dv;
+            for (int k = 0; k < 3; ++k) {
+                g.d_rv1[3 * j + k] += br1(k);
+                g.d_rv2[3 * j + k] += br2(k);
+            }
+        }
+
+        Eigen::Vector3d brc = J_rc_sum.transpose() * bar_dv;
+        for (int k = 0; k < 3; ++k) {
+            g.d_rc[3 * i + k] += brc(k);
+        }
+    }
+
+    return g;
+}
+
 }  // namespace pegasus::gradients
