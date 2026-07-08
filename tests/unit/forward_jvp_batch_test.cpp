@@ -199,6 +199,62 @@ TEST(ForwardJvpBatchTest, GeometryVJPsAreExactTransposes) {
     EXPECT_NEAR(lhs_F, rhs_F, 1e-9 * std::max(1.0, std::abs(lhs_F)));
 }
 
+// The forward JVP chain (residual -> circulation -> per-vortex forces) must
+// match a full re-solve for an arbitrary mesh-node perturbation.
+TEST(ForwardJvpBatchTest, MeshPerturbationJVPMatchesResolve) {
+    const Index nx = 3, ny = 6, n = nx * ny;
+    SurfaceMesh sm = BuildTwistedMesh(nx, ny, 1.0, 4.0);
+    MeshInput input;
+    input.surfaces.push_back(sm);
+    input.reference.reference_area = 4.0;
+    input.reference.reference_chord = 1.0;
+    input.reference.reference_span = 4.0;
+    FlightCondition condition;
+    condition.alpha = 0.08;
+
+    VortexLatticeSolver solver;
+    solver.SetMesh(input);
+    SolutionState solution = solver.Solve(condition);
+    ASSERT_TRUE(solution.is_valid);
+    ForceCalculator fc;
+
+    std::mt19937 gen(2);
+    std::uniform_real_distribution<Scalar> dist(-1.0, 1.0);
+    MeshNodeGradients dn(nx, ny);
+    for (Index d = 0; d < dn.d_nodes.size(); ++d)
+        dn.d_nodes[d] = dist(gen);
+
+    // Forward JVP prediction of the per-vortex force change.
+    auto pert = PropagateNodePerturbationsToVortex(sm, 0, nx, ny, dn);
+    VecX dR = ComputeResidualGeometryJVP(solver, solution, condition, pert);
+    VecX dgamma = -solver.SolveForward(dR);
+    VecX dF_jvp =
+        ComputePerVortexForceTotalJVP(solver, solution, condition, pert, dgamma);
+
+    // Re-solve at the perturbed mesh.
+    auto resolve = [&](double sgn) {
+        SurfaceMesh smp = sm;
+        for (Index i = 0; i <= nx; ++i)
+            for (Index j = 0; j <= ny; ++j) {
+                Vec3 p = sm.GetNode(i, j);
+                for (int k = 0; k < 3; ++k)
+                    p(k) += sgn * 1e-6 * dn(i, j, k);
+                smp.SetNode(i, j, p);
+            }
+        MeshInput ip;
+        ip.surfaces.push_back(smp);
+        ip.reference = input.reference;
+        VortexLatticeSolver s;
+        s.SetMesh(ip);
+        SolutionState sol = s.Solve(condition);
+        return fc.ComputePerVortexForces(s.GetMesh(), sol, condition).forces;
+    };
+    VecX dF_fd = (resolve(1.0) - resolve(-1.0)) / (2e-6);
+    EXPECT_LT((dF_jvp - dF_fd).norm(), 1e-4 * std::max(1.0, dF_fd.norm()))
+        << "JVP vs re-solve mismatch: |dF_jvp|=" << dF_jvp.norm()
+        << " |dF_fd|=" << dF_fd.norm();
+}
+
 }  // namespace
 }  // namespace gradients
 }  // namespace pegasus
