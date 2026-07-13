@@ -51,16 +51,29 @@ add_executable(pegasus_unit_tests
 )
 
 if(PEGASUS_ENABLE_VISCOUS_COUPLING)
-    if(PEGASUS_ENABLE_SCIROCCO)
-        target_sources(pegasus_unit_tests PRIVATE
-            unit/viscous_strip_polar_test.cpp
-            unit/viscous_coupler_test.cpp
-        )
-    endif()
     if(PEGASUS_ENABLE_BORA)
         target_sources(pegasus_unit_tests PRIVATE
             unit/viscous_bora_polar_test.cpp
             unit/viscous_coupler_bora_test.cpp
+        )
+    endif()
+
+    # The Scirocco tests run full viscous panel + boundary-layer solves and
+    # take several minutes, so they live in their own opt-in executable
+    # (PEGASUS_ENABLE_SCIROCCO_TESTS=ON) and are never part of the default
+    # ctest run or CI.
+    if(PEGASUS_ENABLE_SCIROCCO AND PEGASUS_ENABLE_SCIROCCO_TESTS)
+        add_executable(pegasus_scirocco_tests
+            unit/viscous_strip_polar_test.cpp
+            unit/viscous_coupler_test.cpp
+        )
+        target_link_libraries(pegasus_scirocco_tests
+            PRIVATE
+                pegasus
+                GTest::gtest_main
+        )
+        gtest_discover_tests(pegasus_scirocco_tests
+            PROPERTIES LABELS scirocco
         )
     endif()
 endif()

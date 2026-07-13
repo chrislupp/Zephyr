@@ -41,6 +41,9 @@ option(PEGASUS_ENABLE_SCIROCCO
 option(PEGASUS_ENABLE_BORA
     "Enable the Bora (NeuralFoil) 2D backend for viscous coupling"
     OFF)
+option(PEGASUS_ENABLE_SCIROCCO_TESTS
+    "Build and register the Scirocco viscous tests (slow: several minutes)"
+    OFF)
 set(PEGASUS_SCIROCCO_SOURCE_DIR
     "${CMAKE_CURRENT_SOURCE_DIR}/../ProjectTrysil/scirocco"
     CACHE PATH "Path to the Scirocco/Trysil source tree")

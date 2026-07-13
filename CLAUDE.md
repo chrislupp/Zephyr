@@ -50,6 +50,9 @@ run-clang-tidy -p build -header-filter='include/pegasus/' 'src/.*\.cpp$'
 - `PEGASUS_BUILD_EXAMPLES=ON|OFF` - Enable/disable example programs (default: ON)
 - `PEGASUS_ENABLE_VTK=ON|OFF` - Enable VTK visualization export (default: ON)
 - `PEGASUS_BUILD_PHILOTE=ON|OFF` - Build Philote-Cpp MDO discipline interface (default: OFF)
+- `PEGASUS_ENABLE_VISCOUS_COUPLING=ON|OFF` - Viscous-inviscid coupling module (default: OFF); backends: `PEGASUS_ENABLE_SCIROCCO` (default ON), `PEGASUS_ENABLE_BORA` (default OFF)
+- `PEGASUS_ENABLE_SCIROCCO_TESTS=ON|OFF` - Opt-in slow Scirocco viscous tests (default: OFF; several minutes, never run in CI). Run via `./build/tests/pegasus_scirocco_tests` or `ctest -L scirocco`
+- `PEGASUS_ENABLE_ACCELERATE=ON|OFF` - Apple Accelerate LAPACK for the AIC LU (default: OFF, macOS only)
 
 ## Code Organization
 
