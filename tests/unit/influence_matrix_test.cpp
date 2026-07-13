@@ -25,6 +25,7 @@
 #include "pegasus/geometry/surface.h"
 #include "pegasus/solver/vortex_lattice.h"
 
+#include <algorithm>
 #include <cmath>
 
 #include <gtest/gtest.h>
@@ -475,6 +476,176 @@ TEST_F(InfluenceMatrixTest, InducedVelocityWithYSymmetry) {
     Vec3 field_point(0.5, 0.0, 0.5);
     Vec3 vel = builder.ComputeInducedVelocity(field_point, circulation);
     EXPECT_TRUE(vel.allFinite());
+}
+
+// ============================================================================
+// Assembly regression tests: the optimized source-major sweep must
+// reproduce the straightforward per-pair assembly built from the public
+// Biot-Savart kernel (real vortex + symmetry images + per-pair core radii).
+// ============================================================================
+
+/// Reference velocity-influence assembly: the direct (i, j) double loop
+/// with per-pair core radii and symmetry images, mirroring the pre-sweep
+/// implementation.
+MatX ReferenceVelocityMatrix(const VortexLattice& mesh, Scalar pg,
+                             const SymmetryConfig& sym, Scalar chord_frac,
+                             Scalar width_frac) {
+    const Index n = mesh.GetNumVortices();
+    MatX wc_gam = MatX::Zero(3 * n, n);
+
+    for (Index i = 0; i < n; ++i) {
+        const HorseshoeVortex& vor_i = mesh.GetVortex(i);
+        const Vec3 fp = vor_i.control_point;
+
+        for (Index j = 0; j < n; ++j) {
+            const HorseshoeVortex& vor_j = mesh.GetVortex(j);
+            const Vec3 left = vor_j.bound_vortex_left;
+            const Vec3 right = vor_j.bound_vortex_right;
+
+            const Scalar panel_width = (right - left).norm();
+            Scalar core = 0.0001 * panel_width;
+            if (vor_i.component_index != vor_j.component_index) {
+                core = std::max(chord_frac * vor_j.local_chord,
+                                width_frac * panel_width);
+            }
+
+            Vec3 vel = ComputeHorseshoeVortexVelocity(fp, left, right, pg, core,
+                                                      i != j);
+
+            if (sym.y_symmetry != SymmetryType::kNone) {
+                const Scalar y_offset = 2.0 * sym.y_symmetry_plane;
+                const Vec3 yl(right.x(), y_offset - right.y(), right.z());
+                const Vec3 yr(left.x(), y_offset - left.y(), left.z());
+                bool include_bound = true;
+                if (sym.y_symmetry == SymmetryType::kSymmetric) {
+                    const Vec3 mid = 0.5 * (yl + yr);
+                    include_bound = (fp - mid).squaredNorm() >= kEpsilon;
+                }
+                const auto y_sign =
+                    static_cast<Scalar>(static_cast<int>(sym.y_symmetry));
+                vel += y_sign * ComputeHorseshoeVortexVelocity(
+                                    fp, yl, yr, pg, core, include_bound);
+            }
+
+            if (sym.z_symmetry != SymmetryType::kNone) {
+                const Scalar z_offset = 2.0 * sym.z_symmetry_plane;
+                const Vec3 zl(right.x(), right.y(), z_offset - right.z());
+                const Vec3 zr(left.x(), left.y(), z_offset - left.z());
+                const auto z_sign =
+                    static_cast<Scalar>(static_cast<int>(sym.z_symmetry));
+                vel += z_sign * ComputeHorseshoeVortexVelocity(fp, zl, zr, pg,
+                                                               core, true);
+
+                if (sym.y_symmetry != SymmetryType::kNone) {
+                    const Scalar y_offset = 2.0 * sym.y_symmetry_plane;
+                    const Vec3 yzl(left.x(), y_offset - left.y(),
+                                   z_offset - left.z());
+                    const Vec3 yzr(right.x(), y_offset - right.y(),
+                                   z_offset - right.z());
+                    const auto y_sign =
+                        static_cast<Scalar>(static_cast<int>(sym.y_symmetry));
+                    vel += y_sign * z_sign *
+                           ComputeHorseshoeVortexVelocity(fp, yzl, yzr, pg,
+                                                          core, true);
+                }
+            }
+
+            wc_gam(3 * i + 0, j) = vel.x();
+            wc_gam(3 * i + 1, j) = vel.y();
+            wc_gam(3 * i + 2, j) = vel.z();
+        }
+    }
+    return wc_gam;
+}
+
+class AssemblyRegressionTest : public ::testing::Test {
+protected:
+    /// Wing + tail so the mesh has two components (exercises both core
+    /// radii paths).
+    static Aircraft CreateTwoComponentAircraft() {
+        Aircraft aircraft("Regression");
+
+        Surface wing("Wing");
+        wing.SetChordwisePanelCount(3);
+        wing.SetSpanwisePanelCount(5);
+        wing.SetChordwiseSpacing(SpacingType::kUniform);
+        wing.SetSpanwiseSpacing(SpacingType::kUniform);
+        wing.AddSection(Section(Vec3(0, -2, 0), 1.0, 0.0));
+        wing.AddSection(Section(Vec3(0.2, 2, 0.1), 0.7, 0.0));
+        aircraft.AddSurface(wing);
+
+        Surface tail("Tail");
+        tail.SetChordwisePanelCount(2);
+        tail.SetSpanwisePanelCount(3);
+        tail.SetChordwiseSpacing(SpacingType::kUniform);
+        tail.SetSpanwiseSpacing(SpacingType::kUniform);
+        tail.AddSection(Section(Vec3(4, -1, 0.5), 0.5, 0.0));
+        tail.AddSection(Section(Vec3(4, 1, 0.5), 0.5, 0.0));
+        aircraft.AddSurface(tail);
+
+        aircraft.SetReferenceArea(4.0);
+        aircraft.SetReferenceChord(1.0);
+        aircraft.SetReferenceSpan(4.0);
+        return aircraft;
+    }
+
+    void ExpectMatchesReference(const SymmetryConfig& sym, Scalar mach) {
+        Aircraft aircraft = CreateTwoComponentAircraft();
+        VortexLattice mesh;
+        mesh.GenerateFromAircraft(aircraft);
+
+        InfluenceMatrixBuilder builder(mesh);
+        builder.SetMachNumber(mach);
+        builder.SetSymmetry(sym);
+
+        MatX vim;
+        MatX aic = builder.BuildNormalwashMatrix(&vim);
+        MatX reference = ReferenceVelocityMatrix(
+            mesh, builder.GetPrandtlGlauertFactor(), sym, 0.0001, 0.0001);
+
+        const Scalar scale =
+            std::max(reference.cwiseAbs().maxCoeff(), Scalar(1.0));
+        EXPECT_LE((vim - reference).cwiseAbs().maxCoeff(), 1e-14 * scale);
+
+        // AIC must equal the normal projection of the reference matrix.
+        const Index n = mesh.GetNumVortices();
+        Scalar max_aic_diff = 0.0;
+        for (Index i = 0; i < n; ++i) {
+            const Vec3& normal = mesh.GetVortex(i).normal_at_control_point;
+            for (Index j = 0; j < n; ++j) {
+                const Scalar expected = reference(3 * i + 0, j) * normal.x() +
+                                        reference(3 * i + 1, j) * normal.y() +
+                                        reference(3 * i + 2, j) * normal.z();
+                max_aic_diff =
+                    std::max(max_aic_diff, std::abs(aic(i, j) - expected));
+            }
+        }
+        EXPECT_LE(max_aic_diff, 1e-14 * scale);
+    }
+};
+
+TEST_F(AssemblyRegressionTest, MatchesReferenceNoSymmetry) {
+    ExpectMatchesReference(SymmetryConfig{}, 0.0);
+}
+
+TEST_F(AssemblyRegressionTest, MatchesReferenceWithMach) {
+    ExpectMatchesReference(SymmetryConfig{}, 0.3);
+}
+
+TEST_F(AssemblyRegressionTest, MatchesReferenceYSymmetric) {
+    SymmetryConfig sym;
+    sym.y_symmetry = SymmetryType::kSymmetric;
+    sym.y_symmetry_plane = 0.0;
+    ExpectMatchesReference(sym, 0.0);
+}
+
+TEST_F(AssemblyRegressionTest, MatchesReferenceYAntisymmetricZSymmetric) {
+    SymmetryConfig sym;
+    sym.y_symmetry = SymmetryType::kAntisymmetric;
+    sym.y_symmetry_plane = 0.0;
+    sym.z_symmetry = SymmetryType::kSymmetric;
+    sym.z_symmetry_plane = -0.5;
+    ExpectMatchesReference(sym, 0.15);
 }
 
 }  // namespace

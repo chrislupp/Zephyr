@@ -92,6 +92,32 @@ if(PEGASUS_ENABLE_OPENMP)
     endif()
 endif()
 
+# BLAS/LAPACK-backed Eigen dense kernels (optional). Speeds up the LU
+# factorizations and large matrix products; results agree with Eigen's
+# built-in kernels to machine precision but are not bitwise identical.
+option(PEGASUS_ENABLE_BLAS_LAPACK
+    "Back Eigen dense factorizations/products with BLAS + LAPACKE"
+    OFF)
+if(PEGASUS_ENABLE_BLAS_LAPACK)
+    find_library(PEGASUS_OPENBLAS_LIBRARY NAMES openblas
+        HINTS /opt/homebrew/opt/openblas/lib /usr/local/opt/openblas/lib)
+    find_path(PEGASUS_LAPACKE_INCLUDE_DIR lapacke.h
+        HINTS /opt/homebrew/opt/openblas/include
+              /usr/local/opt/openblas/include)
+    if(NOT PEGASUS_OPENBLAS_LIBRARY OR NOT PEGASUS_LAPACKE_INCLUDE_DIR)
+        message(FATAL_ERROR
+            "PEGASUS_ENABLE_BLAS_LAPACK=ON requires OpenBLAS with LAPACKE "
+            "(e.g. `brew install openblas`)."
+        )
+    endif()
+    message(STATUS "Eigen BLAS/LAPACKE backend: ${PEGASUS_OPENBLAS_LIBRARY}")
+    # PUBLIC: Eigen's inline kernels must compile identically in every TU
+    # that links pegasus (mixing would violate the ODR).
+    target_compile_definitions(pegasus PUBLIC EIGEN_USE_BLAS EIGEN_USE_LAPACKE)
+    target_include_directories(pegasus PUBLIC ${PEGASUS_LAPACKE_INCLUDE_DIR})
+    target_link_libraries(pegasus PUBLIC ${PEGASUS_OPENBLAS_LIBRARY})
+endif()
+
 # VTK support (optional)
 option(PEGASUS_ENABLE_VTK "Enable VTK visualization export" ON)
 if(PEGASUS_ENABLE_VTK)
