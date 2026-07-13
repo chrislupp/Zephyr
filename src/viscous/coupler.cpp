@@ -190,7 +190,10 @@ void ViscousVlmCoupler::ApplyTwistsAndRefresh() {
         mesh.GetStrip(i).twist_angle = baseline_twist_(i) + twist_offset(i);
     }
     mesh.RecalculateNormals();
-    solver_.RebuildAIC();
+    // Twist offsets only rotate normals (vortex positions are unchanged),
+    // so the AIC can be re-projected from the cached velocity influence
+    // matrix — identical to a full rebuild, without the kernel assembly.
+    solver_.ReprojectAIC();
 }
 
 void ViscousVlmCoupler::EvaluateVlm(VecX& cl_local_strip,

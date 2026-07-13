@@ -417,6 +417,77 @@ TEST_F(VortexLatticeSolverTest, SetAircraftPopulatesReferenceQuantities) {
     EXPECT_NEAR(ref.moment_reference_point.x(), 0.25, 1e-10);
 }
 
+TEST_F(VortexLatticeSolverTest, ReprojectAicMatchesRebuildAfterTwistChange) {
+    Aircraft aircraft = CreateRectangularWing(4.0, 1.0, 4, 4);
+    VortexLatticeSolver solver;
+    solver.SetAircraft(aircraft);
+
+    FlightCondition flight;
+    flight.alpha = 0.05;
+    (void)solver.Solve(flight);  // builds AIC + velocity influence matrix
+
+    // Normals-only change: exactly what the viscous coupler injects.
+    VortexLattice& mesh = solver.GetMeshMutable();
+    for (Index i = 0; i < mesh.GetNumStrips(); ++i) {
+        mesh.GetStrip(i).twist_angle += 0.01 * static_cast<Scalar>(i + 1);
+    }
+    mesh.RecalculateNormals();
+
+    solver.ReprojectAIC();
+    const MatX aic_reprojected = solver.GetAICMatrix();
+
+    solver.RebuildAIC();
+    const MatX aic_rebuilt = solver.GetAICMatrix();
+
+    // The velocity influence matrix is twist-invariant, so the reprojection
+    // must reproduce the full rebuild exactly (same projection code, same
+    // kernel-assembled velocity matrix).
+    EXPECT_EQ((aic_reprojected - aic_rebuilt).cwiseAbs().maxCoeff(), 0.0);
+}
+
+TEST_F(VortexLatticeSolverTest, ReprojectAicFallsBackWhenGeometryMoves) {
+    Aircraft aircraft = CreateRectangularWing(4.0, 1.0, 4, 4);
+    VortexLatticeSolver solver;
+    solver.SetAircraft(aircraft);
+
+    FlightCondition flight;
+    flight.alpha = 0.05;
+    (void)solver.Solve(flight);
+
+    // Move a vortex position: the cached velocity influence matrix is now
+    // stale, so ReprojectAIC must detect it and fall back to RebuildAIC.
+    VortexLattice& mesh = solver.GetMeshMutable();
+    mesh.GetVortex(0).bound_vortex_left.z() += 0.05;
+    mesh.GetVortex(0).control_point.z() += 0.05;
+
+    solver.ReprojectAIC();
+    const MatX aic_after_reproject = solver.GetAICMatrix();
+
+    solver.RebuildAIC();
+    const MatX aic_rebuilt = solver.GetAICMatrix();
+
+    EXPECT_EQ((aic_after_reproject - aic_rebuilt).cwiseAbs().maxCoeff(), 0.0);
+}
+
+TEST_F(VortexLatticeSolverTest, SolveForwardResidualAtMachinePrecision) {
+    Aircraft aircraft = CreateRectangularWing(4.0, 1.0, 4, 6);
+    VortexLatticeSolver solver;
+    solver.SetAircraft(aircraft);
+
+    FlightCondition flight;
+    flight.alpha = 0.05;
+    (void)solver.Solve(flight);
+
+    const MatX& aic = solver.GetAICMatrix();
+    const Index n = aic.rows();
+    const VecX b = VecX::LinSpaced(n, -1.0, 1.0);
+    const VecX x = solver.SolveForward(b);
+
+    // Backward error of the factorization backend (Eigen or Accelerate)
+    // must sit at machine precision.
+    EXPECT_LT((aic * x - b).norm() / b.norm(), 1e-12);
+}
+
 TEST_F(VortexLatticeSolverTest, SetReferencePoint) {
     VortexLatticeSolver solver;
     Vec3 ref(0.25, 0.0, 0.0);

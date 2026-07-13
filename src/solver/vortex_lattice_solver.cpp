@@ -22,6 +22,14 @@
 
 #include <cmath>
 #include <stdexcept>
+#include <string>
+
+#ifdef PEGASUS_USE_ACCELERATE
+#define ACCELERATE_NEW_LAPACK
+#include <Accelerate/Accelerate.h>
+static_assert(sizeof(__LAPACK_int) == sizeof(int),
+              "Pegasus expects the LP64 Accelerate LAPACK interface.");
+#endif
 
 namespace pegasus {
 
@@ -81,10 +89,113 @@ void VortexLatticeSolver::RebuildAIC() {
     aic_matrix_ = builder.BuildNormalwashMatrix(&velocity_influence_matrix_);
 
     // LU factorization for efficient solving
-    aic_lu_.compute(aic_matrix_);
+    FactorizeAIC();
+    CaptureGeometrySnapshot();
 
     aic_valid_ = true;
     unit_responses_valid_ = false;  // Need to recompute unit responses
+}
+
+void VortexLatticeSolver::ReprojectAIC() {
+    // Valid only while the vortex positions (and Mach/symmetry, which
+    // invalidate aic_valid_ on change) match the cached velocity influence
+    // matrix; anything else falls back to the full rebuild. Both paths
+    // produce the exact same AIC.
+    if (!aic_valid_ || velocity_influence_matrix_.size() == 0 ||
+        !GeometryMatchesSnapshot()) {
+        RebuildAIC();
+        return;
+    }
+
+    InfluenceMatrixBuilder builder(mesh_);
+    aic_matrix_ = builder.ProjectOntoNormals(velocity_influence_matrix_);
+    FactorizeAIC();
+    unit_responses_valid_ = false;
+}
+
+void VortexLatticeSolver::FactorizeAIC() {
+#ifdef PEGASUS_USE_ACCELERATE
+    aic_lu_factors_ = aic_matrix_;
+    const auto n = static_cast<__LAPACK_int>(aic_lu_factors_.rows());
+    aic_lu_pivots_.resize(static_cast<std::size_t>(n));
+    __LAPACK_int info = 0;
+    dgetrf_(&n, &n, aic_lu_factors_.data(), &n, aic_lu_pivots_.data(), &info);
+    if (info != 0) {
+        throw std::runtime_error(
+            "VortexLatticeSolver: Accelerate dgetrf failed (info = " +
+            std::to_string(info) + ").");
+    }
+#else
+    aic_lu_.compute(aic_matrix_);
+#endif
+}
+
+VecX VortexLatticeSolver::SolveFactored(const VecX& rhs) const {
+#ifdef PEGASUS_USE_ACCELERATE
+    VecX x = rhs;  // dgetrs solves in place
+    const auto n = static_cast<__LAPACK_int>(aic_lu_factors_.rows());
+    const __LAPACK_int nrhs = 1;
+    __LAPACK_int info = 0;
+    const char trans = 'N';
+    dgetrs_(&trans, &n, &nrhs, aic_lu_factors_.data(), &n,
+            aic_lu_pivots_.data(), x.data(), &n, &info);
+    if (info != 0) {
+        throw std::runtime_error(
+            "VortexLatticeSolver: Accelerate dgetrs failed (info = " +
+            std::to_string(info) + ").");
+    }
+    return x;
+#else
+    return aic_lu_.solve(rhs);
+#endif
+}
+
+MatX VortexLatticeSolver::SolveFactored(const MatX& rhs) const {
+#ifdef PEGASUS_USE_ACCELERATE
+    MatX x = rhs;  // dgetrs solves in place
+    const auto n = static_cast<__LAPACK_int>(aic_lu_factors_.rows());
+    const auto nrhs = static_cast<__LAPACK_int>(x.cols());
+    __LAPACK_int info = 0;
+    const char trans = 'N';
+    dgetrs_(&trans, &n, &nrhs, aic_lu_factors_.data(), &n,
+            aic_lu_pivots_.data(), x.data(), &n, &info);
+    if (info != 0) {
+        throw std::runtime_error(
+            "VortexLatticeSolver: Accelerate dgetrs failed (info = " +
+            std::to_string(info) + ").");
+    }
+    return x;
+#else
+    return aic_lu_.solve(rhs);
+#endif
+}
+
+void VortexLatticeSolver::CaptureGeometrySnapshot() {
+    const Index n = mesh_.GetNumVortices();
+    aic_geometry_snapshot_.resize(9, n);
+    for (Index j = 0; j < n; ++j) {
+        const HorseshoeVortex& vor = mesh_.GetVortex(j);
+        aic_geometry_snapshot_.block<3, 1>(0, j) = vor.bound_vortex_left;
+        aic_geometry_snapshot_.block<3, 1>(3, j) = vor.bound_vortex_right;
+        aic_geometry_snapshot_.block<3, 1>(6, j) = vor.control_point;
+    }
+}
+
+bool VortexLatticeSolver::GeometryMatchesSnapshot() const {
+    const Index n = mesh_.GetNumVortices();
+    if (aic_geometry_snapshot_.cols() != n) {
+        return false;
+    }
+    for (Index j = 0; j < n; ++j) {
+        const HorseshoeVortex& vor = mesh_.GetVortex(j);
+        if (aic_geometry_snapshot_.block<3, 1>(0, j) != vor.bound_vortex_left ||
+            aic_geometry_snapshot_.block<3, 1>(3, j) !=
+                vor.bound_vortex_right ||
+            aic_geometry_snapshot_.block<3, 1>(6, j) != vor.control_point) {
+            return false;
+        }
+    }
+    return true;
 }
 
 VecX VortexLatticeSolver::BuildUnitFreestreamRHS(int component) const {
@@ -156,14 +267,12 @@ void VortexLatticeSolver::SolveUnitResponses() {
 
     // Unit freestream velocities (u, v, w)
     for (int k = 0; k < 3; ++k) {
-        VecX rhs = BuildUnitFreestreamRHS(k);
-        unit_circulation_.col(k) = aic_lu_.solve(rhs);
+        unit_circulation_.col(k) = SolveFactored(BuildUnitFreestreamRHS(k));
     }
 
     // Unit rotation rates (p, q, r)
     for (int k = 0; k < 3; ++k) {
-        VecX rhs = BuildUnitRotationRHS(k);
-        unit_circulation_.col(3 + k) = aic_lu_.solve(rhs);
+        unit_circulation_.col(3 + k) = SolveFactored(BuildUnitRotationRHS(k));
     }
 
     unit_responses_valid_ = true;
@@ -259,11 +368,11 @@ SolutionState VortexLatticeSolver::Solve(const FlightCondition& condition) {
 }
 
 VecX VortexLatticeSolver::SolveForward(const VecX& rhs) const {
-    return aic_lu_.solve(rhs);
+    return SolveFactored(rhs);
 }
 
 MatX VortexLatticeSolver::SolveForward(const MatX& rhs) const {
-    return aic_lu_.solve(rhs);
+    return SolveFactored(rhs);
 }
 
 }  // namespace pegasus

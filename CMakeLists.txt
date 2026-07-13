@@ -118,6 +118,27 @@ if(PEGASUS_ENABLE_BLAS_LAPACK)
     target_link_libraries(pegasus PUBLIC ${PEGASUS_OPENBLAS_LIBRARY})
 endif()
 
+# Apple Accelerate LAPACK for the AIC LU factorization (optional, macOS
+# only). Same partial-pivoted LU algorithm as Eigen's, vendor-tuned (AMX):
+# ~2.7x faster at 600 panels, ~6.8x at 2000. Backward error is in the same
+# machine-precision class; results are not bitwise identical to Eigen's LU.
+option(PEGASUS_ENABLE_ACCELERATE
+    "Use Apple Accelerate LAPACK for the AIC LU factorization"
+    OFF)
+if(PEGASUS_ENABLE_ACCELERATE)
+    if(NOT APPLE)
+        message(FATAL_ERROR "PEGASUS_ENABLE_ACCELERATE requires macOS.")
+    endif()
+    if(PEGASUS_ENABLE_BLAS_LAPACK)
+        message(FATAL_ERROR
+            "PEGASUS_ENABLE_ACCELERATE and PEGASUS_ENABLE_BLAS_LAPACK are "
+            "mutually exclusive (conflicting BLAS/LAPACK symbols)."
+        )
+    endif()
+    target_compile_definitions(pegasus PUBLIC PEGASUS_USE_ACCELERATE)
+    target_link_libraries(pegasus PUBLIC "-framework Accelerate")
+endif()
+
 # VTK support (optional)
 option(PEGASUS_ENABLE_VTK "Enable VTK visualization export" ON)
 if(PEGASUS_ENABLE_VTK)

@@ -415,7 +415,17 @@ MatX InfluenceMatrixBuilder::BuildNormalwashMatrix() const {
 MatX InfluenceMatrixBuilder::BuildNormalwashMatrix(
     MatX* velocity_matrix) const {
     MatX wc_gam = BuildVelocityInfluenceMatrix();
+    MatX aic = ProjectOntoNormals(wc_gam);
 
+    if (velocity_matrix != nullptr) {
+        *velocity_matrix = std::move(wc_gam);
+    }
+
+    return aic;
+}
+
+MatX InfluenceMatrixBuilder::ProjectOntoNormals(
+    const MatX& velocity_matrix) const {
     const Index n = mesh_.GetNumVortices();
     MatX aic(n, n);
 
@@ -434,17 +444,13 @@ MatX InfluenceMatrixBuilder::BuildNormalwashMatrix(
     // Project velocity influence onto panel normals, column by column so
     // both matrices are traversed contiguously (column-major storage).
     for (Index j = 0; j < n; ++j) {
-        const Scalar* col = wc_gam.data() + 3 * n * j;
+        const Scalar* col = velocity_matrix.data() + 3 * n * j;
         Scalar* aic_col = aic.data() + n * j;
         for (Index i = 0; i < n; ++i) {
             const auto idx = static_cast<std::size_t>(i);
             aic_col[i] = col[3 * i + 0] * nx[idx] + col[3 * i + 1] * ny[idx] +
                          col[3 * i + 2] * nz[idx];
         }
-    }
-
-    if (velocity_matrix != nullptr) {
-        *velocity_matrix = std::move(wc_gam);
     }
 
     return aic;

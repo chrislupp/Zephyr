@@ -160,6 +160,22 @@ public:
     /// Call this after modifying the mesh or changing Mach number.
     void RebuildAIC();
 
+    /// @brief Refreshes the AIC after a normals-only mesh change.
+    ///
+    /// The velocity influence matrix depends only on the vortex geometry
+    /// (positions, Mach, symmetry), not on the panel normals, so when only
+    /// the normals changed (e.g. strip twist offsets injected by the
+    /// viscous coupler followed by RecalculateNormals()) the AIC can be
+    /// recomputed as the normal projection of the cached velocity matrix
+    /// and re-factorized — skipping the expensive Biot-Savart kernel
+    /// assembly with results identical to RebuildAIC().
+    ///
+    /// Safety: the vortex positions captured at the last RebuildAIC() are
+    /// compared exactly against the current mesh; on any mismatch (or if
+    /// no valid AIC exists) this falls back to a full RebuildAIC(). Either
+    /// path yields the exact same AIC as a full rebuild.
+    void ReprojectAIC();
+
     /// @brief Solves for unit freestream responses.
     ///
     /// Computes circulation distribution for:
@@ -241,6 +257,21 @@ private:
     [[nodiscard]] VecX CombineUnitResponses(
         const FlightCondition& condition) const;
 
+    /// @brief Factorizes the current AIC matrix (Eigen partial-pivoted LU,
+    /// or Accelerate dgetrf when built with PEGASUS_ENABLE_ACCELERATE).
+    void FactorizeAIC();
+
+    /// @brief Back-substitution through the cached AIC factorization.
+    [[nodiscard]] VecX SolveFactored(const VecX& rhs) const;
+    [[nodiscard]] MatX SolveFactored(const MatX& rhs) const;
+
+    /// @brief Captures the vortex positions backing the current AIC.
+    void CaptureGeometrySnapshot();
+
+    /// @brief True if the mesh vortex positions exactly match the snapshot
+    /// captured at the last RebuildAIC().
+    [[nodiscard]] bool GeometryMatchesSnapshot() const;
+
     VortexLattice mesh_;
     SymmetryConfig symmetry_;
     Vec3 reference_point_{0, 0, 0};
@@ -249,8 +280,19 @@ private:
     // AIC matrix and factorization
     MatX aic_matrix_;
     MatX velocity_influence_matrix_;
+#ifdef PEGASUS_USE_ACCELERATE
+    // In-place dgetrf factors and pivots (Accelerate LAPACK). Same
+    // partial-pivoted LU algorithm as Eigen's, vendor-tuned.
+    MatX aic_lu_factors_;
+    std::vector<int> aic_lu_pivots_;
+#else
     Eigen::PartialPivLU<MatX> aic_lu_;
+#endif
     bool aic_valid_{false};
+
+    // Vortex positions (bound endpoints + control points, 9 x N) captured
+    // at the last RebuildAIC(); ReprojectAIC()'s exactness guard.
+    MatX aic_geometry_snapshot_;
 
     // Unit freestream responses (6 columns: u, v, w, p, q, r)
     MatX unit_circulation_;

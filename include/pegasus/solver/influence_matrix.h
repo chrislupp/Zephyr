@@ -134,6 +134,19 @@ public:
     /// @return AIC matrix
     MatX BuildNormalwashMatrix(MatX* velocity_matrix) const;
 
+    /// @brief Projects a velocity influence matrix onto the current panel
+    /// normals: AIC(i, j) = n_i · V(i, j).
+    ///
+    /// The velocity influence matrix depends only on the vortex geometry
+    /// (positions, Mach, symmetry) — not on the panel normals — so when
+    /// only the normals change (e.g. twist offsets injected by the viscous
+    /// coupler), the AIC can be recomputed from a cached velocity matrix
+    /// with results identical to a full BuildNormalwashMatrix rebuild.
+    ///
+    /// @param velocity_matrix Velocity influence matrix (3N x N)
+    /// @return AIC matrix (N x N)
+    [[nodiscard]] MatX ProjectOntoNormals(const MatX& velocity_matrix) const;
+
     /// @}
 
     /// @name Velocity Computation
