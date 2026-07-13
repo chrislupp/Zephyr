@@ -32,6 +32,14 @@ VortexLatticeSolver::~VortexLatticeSolver() = default;
 void VortexLatticeSolver::SetAircraft(const Aircraft& aircraft) {
     mesh_.GenerateFromAircraft(aircraft);
 
+    // Mirror the SetMesh path: consumers that normalize through
+    // GetReferenceQuantities() (e.g. the viscous coupler) must see the
+    // aircraft's reference quantities, not the 1.0 defaults.
+    ref_quantities_.reference_area = aircraft.GetReferenceArea();
+    ref_quantities_.reference_chord = aircraft.GetReferenceChord();
+    ref_quantities_.reference_span = aircraft.GetReferenceSpan();
+    ref_quantities_.moment_reference_point = aircraft.GetMomentReferencePoint();
+
     // Use aircraft moment reference point for rotation calculations
     reference_point_ = aircraft.GetMomentReferencePoint();
 

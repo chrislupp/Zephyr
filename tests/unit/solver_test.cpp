@@ -400,6 +400,23 @@ TEST_F(VortexLatticeSolverTest, GetReferenceQuantities) {
     EXPECT_NEAR(ref.reference_span, 1.0, 1e-10);
 }
 
+TEST_F(VortexLatticeSolverTest, SetAircraftPopulatesReferenceQuantities) {
+    Aircraft aircraft = CreateRectangularWing(4.0, 1.0, 4, 4);
+    aircraft.SetReferenceArea(4.0);
+    aircraft.SetReferenceChord(1.0);
+    aircraft.SetReferenceSpan(4.0);
+    aircraft.SetMomentReferencePoint(Vec3(0.25, 0.0, 0.0));
+
+    VortexLatticeSolver solver;
+    solver.SetAircraft(aircraft);
+
+    const auto& ref = solver.GetReferenceQuantities();
+    EXPECT_NEAR(ref.reference_area, 4.0, 1e-10);
+    EXPECT_NEAR(ref.reference_chord, 1.0, 1e-10);
+    EXPECT_NEAR(ref.reference_span, 4.0, 1e-10);
+    EXPECT_NEAR(ref.moment_reference_point.x(), 0.25, 1e-10);
+}
+
 TEST_F(VortexLatticeSolverTest, SetReferencePoint) {
     VortexLatticeSolver solver;
     Vec3 ref(0.25, 0.0, 0.0);
