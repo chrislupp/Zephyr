@@ -23,8 +23,13 @@
 #include "pegasus/gradients/analytical_forces.h"
 #include "pegasus/solver/vortex_lattice.h"
 
+#ifdef PEGASUS_HAS_SCIROCCO
+#include "pegasus/viscous/strip_polar.h"
+#endif
+
 #include <algorithm>
 #include <cmath>
+#include <memory>
 #include <stdexcept>
 
 #include <Eigen/Dense>
@@ -147,9 +152,32 @@ ViscousVlmCoupler::ViscousVlmCoupler(VortexLatticeSolver& solver,
     dcl2d_dalpha_station_ = VecX::Zero(n_stations);
     dcd2d_dalpha_station_ = VecX::Zero(n_stations);
 
-    station_polars_.reserve(static_cast<std::size_t>(n_stations));
-    for (const CouplingStation& s : options_.stations) {
-        station_polars_.emplace_back(s.coords, s.num_panels);
+    switch (options_.backend) {
+        case AirfoilSolverBackend::kScirocco: {
+#ifdef PEGASUS_HAS_SCIROCCO
+            station_polars_.reserve(static_cast<std::size_t>(n_stations));
+            for (const CouplingStation& s : options_.stations) {
+                station_polars_.push_back(
+                    std::make_unique<StripPolarSolver>(s.coords, s.num_panels));
+            }
+#else
+            throw std::runtime_error(
+                "ViscousVlmCoupler: the Scirocco backend was requested but "
+                "Pegasus was built without it (PEGASUS_ENABLE_SCIROCCO).");
+#endif
+            break;
+        }
+        case AirfoilSolverBackend::kBora: {
+#ifdef PEGASUS_HAS_BORA
+            station_polars_ =
+                CreateBoraStationSolvers(options_.stations, options_.bora);
+#else
+            throw std::runtime_error(
+                "ViscousVlmCoupler: the Bora backend was requested but "
+                "Pegasus was built without it (PEGASUS_ENABLE_BORA).");
+#endif
+            break;
+        }
     }
 }
 
@@ -254,7 +282,7 @@ VecX ViscousVlmCoupler::ComputeResidual(const VecX& alpha_eff_strip,
 #pragma omp parallel for schedule(dynamic, 1)
 #endif
     for (Index k = 0; k < n_stations; ++k) {
-        auto& polar = station_polars_[static_cast<std::size_t>(k)];
+        AirfoilSolver& polar = *station_polars_[static_cast<std::size_t>(k)];
         Scalar re = options_.stations[static_cast<std::size_t>(k)].reynolds;
         bool ok =
             polar.SolveFixedAlpha(alpha_eff_station(k), re, options_.mach);
@@ -341,8 +369,10 @@ ViscousVlmCoupler::ForwardResponse ViscousVlmCoupler::RunForwardChain(
         dR(i) = dni.dot(v_total) + vor.normal_at_control_point.dot(dv_inf);
     }
 
-    // δΓ via cached AIC LU.
-    VecX dGamma = solver_.SolveForward(-dR);
+    // δΓ via cached AIC LU. The explicit VecX picks the vector-RHS
+    // SolveForward overload (the Eigen expression -dR would convert to
+    // either the vector or the batched matrix RHS).
+    VecX dGamma = solver_.SolveForward(VecX(-dR));
 
     // δv_ind = VIM · δΓ (precompute for all vortices).
     VecX dv_ind = VecX::Zero(3 * n_vort);
@@ -759,7 +789,8 @@ CoupledShapeGradients ViscousVlmCoupler::ComputeShapeDerivatives() {
     g.dCL_dcoords.resize(static_cast<std::size_t>(n_stations));
     g.dCD_dcoords.resize(static_cast<std::size_t>(n_stations));
     for (Index k = 0; k < n_stations; ++k) {
-        auto& polar = station_polars_[static_cast<std::size_t>(k)];
+        const AirfoilSolver& polar =
+            *station_polars_[static_cast<std::size_t>(k)];
         const Eigen::MatrixXd& dcl_dx = polar.GetDclDx();
         const Eigen::MatrixXd& dcd_dx = polar.GetDcdDx();
 

@@ -33,11 +33,21 @@ option(PEGASUS_BUILD_TESTS "Build unit tests" ON)
 option(PEGASUS_BUILD_EXAMPLES "Build example programs" ON)
 option(PEGASUS_ENABLE_OPENMP "Enable OpenMP parallelization" OFF)
 option(PEGASUS_ENABLE_VISCOUS_COUPLING
-    "Build the viscous-inviscid coupling module (requires Scirocco/Trysil)"
+    "Build the viscous-inviscid coupling module (requires at least one 2D backend)"
+    OFF)
+option(PEGASUS_ENABLE_SCIROCCO
+    "Enable the Scirocco/Trysil 2D backend for viscous coupling"
+    ON)
+option(PEGASUS_ENABLE_BORA
+    "Enable the Bora (NeuralFoil) 2D backend for viscous coupling"
     OFF)
 set(PEGASUS_SCIROCCO_SOURCE_DIR
     "${CMAKE_CURRENT_SOURCE_DIR}/../ProjectTrysil/scirocco"
     CACHE PATH "Path to the Scirocco/Trysil source tree")
+set(PEGASUS_BORA_SOURCE_DIR
+    "${CMAKE_CURRENT_SOURCE_DIR}/../airfoils/Bora"
+    CACHE PATH
+    "Path to the Bora source tree (used if no installed Bora package is found)")
 
 # Export compile commands for IDE support
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
@@ -106,37 +116,106 @@ if(PEGASUS_ENABLE_VTK)
     endif()
 endif()
 
-# Viscous-inviscid coupling with Scirocco/Trysil (optional)
+# Viscous-inviscid coupling (optional). The coupler core is backend-
+# agnostic; at least one 2D airfoil backend (Scirocco and/or Bora) must be
+# enabled alongside it.
 if(PEGASUS_ENABLE_VISCOUS_COUPLING)
-    if(NOT EXISTS "${PEGASUS_SCIROCCO_SOURCE_DIR}/CMakeLists.txt")
+    if(NOT PEGASUS_ENABLE_SCIROCCO AND NOT PEGASUS_ENABLE_BORA)
         message(FATAL_ERROR
-            "PEGASUS_ENABLE_VISCOUS_COUPLING=ON but Scirocco was not found "
-            "at ${PEGASUS_SCIROCCO_SOURCE_DIR}. Set PEGASUS_SCIROCCO_SOURCE_DIR "
-            "to point at a Scirocco/Trysil source tree."
+            "PEGASUS_ENABLE_VISCOUS_COUPLING=ON requires at least one 2D "
+            "backend: set PEGASUS_ENABLE_SCIROCCO=ON and/or "
+            "PEGASUS_ENABLE_BORA=ON."
         )
     endif()
 
-    # Suppress Scirocco's tests / examples / Philote / HDF5 / native-march when
-    # consumed as a subdirectory; we only need its library target.
-    set(SCIROCCO_BUILD_TESTS OFF CACHE BOOL "" FORCE)
-    set(SCIROCCO_BUILD_EXAMPLES OFF CACHE BOOL "" FORCE)
-    set(SCIROCCO_BUILD_PHILOTE OFF CACHE BOOL "" FORCE)
-    set(SCIROCCO_HDF5_OUTPUT OFF CACHE BOOL "" FORCE)
-    set(SCIROCCO_NATIVE_ARCH OFF CACHE BOOL "" FORCE)
-    set(SCIROCCO_BUILD_PROBES OFF CACHE BOOL "" FORCE)
-    set(SCIROCCO_BUILD_SENSITIVITY_DEBUG_TESTS OFF CACHE BOOL "" FORCE)
-
-    add_subdirectory(${PEGASUS_SCIROCCO_SOURCE_DIR}
-                     ${CMAKE_BINARY_DIR}/_deps/scirocco-build
-                     EXCLUDE_FROM_ALL)
-
-    # Collect and add the viscous-coupling sources to the main library
-    file(GLOB_RECURSE PEGASUS_VISCOUS_SOURCES
-        ${CMAKE_CURRENT_SOURCE_DIR}/src/viscous/*.cpp
+    # Backend-agnostic coupler core.
+    target_sources(pegasus PRIVATE
+        ${CMAKE_CURRENT_SOURCE_DIR}/src/viscous/coupler.cpp
+        ${CMAKE_CURRENT_SOURCE_DIR}/src/viscous/coupling_station.cpp
     )
-    target_sources(pegasus PRIVATE ${PEGASUS_VISCOUS_SOURCES})
-    target_link_libraries(pegasus PUBLIC scirocco)
     target_compile_definitions(pegasus PUBLIC PEGASUS_HAS_VISCOUS_COUPLING)
+
+    # Scirocco/Trysil viscous panel + boundary-layer backend.
+    if(PEGASUS_ENABLE_SCIROCCO)
+        if(NOT EXISTS "${PEGASUS_SCIROCCO_SOURCE_DIR}/CMakeLists.txt")
+            message(FATAL_ERROR
+                "PEGASUS_ENABLE_SCIROCCO=ON but Scirocco was not found "
+                "at ${PEGASUS_SCIROCCO_SOURCE_DIR}. Set "
+                "PEGASUS_SCIROCCO_SOURCE_DIR to point at a Scirocco/Trysil "
+                "source tree."
+            )
+        endif()
+
+        # Suppress Scirocco's tests / examples / Philote / HDF5 / native-march
+        # when consumed as a subdirectory; we only need its library target.
+        set(SCIROCCO_BUILD_TESTS OFF CACHE BOOL "" FORCE)
+        set(SCIROCCO_BUILD_EXAMPLES OFF CACHE BOOL "" FORCE)
+        set(SCIROCCO_BUILD_PHILOTE OFF CACHE BOOL "" FORCE)
+        set(SCIROCCO_HDF5_OUTPUT OFF CACHE BOOL "" FORCE)
+        set(SCIROCCO_NATIVE_ARCH OFF CACHE BOOL "" FORCE)
+        set(SCIROCCO_BUILD_PROBES OFF CACHE BOOL "" FORCE)
+        set(SCIROCCO_BUILD_SENSITIVITY_DEBUG_TESTS OFF CACHE BOOL "" FORCE)
+
+        add_subdirectory(${PEGASUS_SCIROCCO_SOURCE_DIR}
+                         ${CMAKE_BINARY_DIR}/_deps/scirocco-build
+                         EXCLUDE_FROM_ALL)
+
+        target_sources(pegasus PRIVATE
+            ${CMAKE_CURRENT_SOURCE_DIR}/src/viscous/strip_polar.cpp
+        )
+        target_link_libraries(pegasus PUBLIC scirocco)
+        target_compile_definitions(pegasus PUBLIC PEGASUS_HAS_SCIROCCO)
+    endif()
+
+    # Bora (NeuralFoil) neural-surrogate backend. Prefer an installed
+    # package; fall back to a source-tree add_subdirectory. Bora is a C++20
+    # library, so its wrapper translation unit is compiled separately as an
+    # object library — the rest of Pegasus (and its public headers) stay
+    # C++17.
+    if(PEGASUS_ENABLE_BORA)
+        find_package(Bora CONFIG QUIET)
+        if(NOT Bora_FOUND)
+            if(NOT EXISTS "${PEGASUS_BORA_SOURCE_DIR}/CMakeLists.txt")
+                message(FATAL_ERROR
+                    "PEGASUS_ENABLE_BORA=ON but no installed Bora package "
+                    "was found and no source tree exists at "
+                    "${PEGASUS_BORA_SOURCE_DIR}. Install Bora or set "
+                    "PEGASUS_BORA_SOURCE_DIR."
+                )
+            endif()
+            # Suppress Bora's tests / examples / Philote / native-march when
+            # consumed as a subdirectory; we only need its library target.
+            set(BUILD_TESTS OFF CACHE BOOL "" FORCE)
+            set(BUILD_EXAMPLES OFF CACHE BOOL "" FORCE)
+            set(BORA_NATIVE_ARCH OFF CACHE BOOL "" FORCE)
+            set(BORA_BUILD_PHILOTE OFF CACHE BOOL "" FORCE)
+            add_subdirectory(${PEGASUS_BORA_SOURCE_DIR}
+                             ${CMAKE_BINARY_DIR}/_deps/bora-build
+                             EXCLUDE_FROM_ALL)
+        else()
+            message(STATUS "Bora found: ${Bora_VERSION}")
+        endif()
+
+        add_library(pegasus_bora_backend OBJECT
+            ${CMAKE_CURRENT_SOURCE_DIR}/src/viscous/bora_polar.cpp
+        )
+        target_compile_features(pegasus_bora_backend PRIVATE cxx_std_20)
+        target_include_directories(pegasus_bora_backend PRIVATE
+            ${CMAKE_CURRENT_SOURCE_DIR}/include
+        )
+        target_link_libraries(pegasus_bora_backend PRIVATE
+            Bora::Bora
+            Eigen3::Eigen
+        )
+        target_compile_options(pegasus_bora_backend PRIVATE
+            $<$<CXX_COMPILER_ID:GNU,Clang,AppleClang>:-Wall -Wextra -Wpedantic>
+            $<$<CXX_COMPILER_ID:MSVC>:/W4>
+        )
+
+        target_sources(pegasus PRIVATE $<TARGET_OBJECTS:pegasus_bora_backend>)
+        target_link_libraries(pegasus PUBLIC Bora::Bora)
+        target_compile_definitions(pegasus PUBLIC PEGASUS_HAS_BORA)
+    endif()
 endif()
 
 
@@ -248,6 +327,13 @@ if(PEGASUS_ENABLE_VTK AND VTK_FOUND)
     set(PEGASUS_CONFIG_NEEDS_VTK TRUE)
 else()
     set(PEGASUS_CONFIG_NEEDS_VTK FALSE)
+endif()
+# Bora can only be re-found downstream when it was consumed as an installed
+# package (a source-tree add_subdirectory has no package config to find).
+if(PEGASUS_ENABLE_VISCOUS_COUPLING AND PEGASUS_ENABLE_BORA AND Bora_FOUND)
+    set(PEGASUS_CONFIG_NEEDS_BORA TRUE)
+else()
+    set(PEGASUS_CONFIG_NEEDS_BORA FALSE)
 endif()
 
 configure_package_config_file(

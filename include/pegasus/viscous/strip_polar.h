@@ -22,6 +22,7 @@
 #define PEGASUS_VISCOUS_STRIP_POLAR_H_
 
 #include "pegasus/core/types.h"
+#include "pegasus/viscous/airfoil_solver.h"
 
 #include <memory>
 #include <string>
@@ -44,7 +45,7 @@ namespace pegasus::viscous {
 ///
 /// All α inputs/outputs are in radians at this interface; the wrapper
 /// internally converts to/from Scirocco's degree convention.
-class StripPolarSolver {
+class StripPolarSolver final : public AirfoilSolver {
 public:
     /// @brief Construct from a NACA 4-digit designator.
     explicit StripPolarSolver(const std::string& naca = "0012",
@@ -57,7 +58,7 @@ public:
     /// repaneling.
     StripPolarSolver(const Eigen::MatrixXd& coords, int num_panels);
 
-    ~StripPolarSolver();
+    ~StripPolarSolver() override;
     StripPolarSolver(StripPolarSolver&&) noexcept;
     StripPolarSolver& operator=(StripPolarSolver&&) noexcept;
     StripPolarSolver(const StripPolarSolver&) = delete;
@@ -69,7 +70,8 @@ public:
     /// On success, sensitivities are pre-computed and the warm-start state
     /// is cached for the next call. On failure, the warm-start state is
     /// dropped so that the next call performs a fresh BL initialization.
-    bool SolveFixedAlpha(Scalar alpha_rad, Scalar reynolds, Scalar mach);
+    bool SolveFixedAlpha(Scalar alpha_rad, Scalar reynolds,
+                         Scalar mach) override;
 
     /// @brief Solve at fixed Cl, Reynolds, Mach (α is internal). Returns
     /// true on converged solution.
@@ -77,10 +79,10 @@ public:
 
     /// @brief Angle of attack at the most recent converged solve, in
     /// radians (independent of fixed-α / fixed-Cl mode).
-    [[nodiscard]] Scalar GetAlphaRadians() const;
+    [[nodiscard]] Scalar GetAlphaRadians() const override;
 
     /// @brief Convergence flag for the most recent solve.
-    [[nodiscard]] bool IsConverged() const;
+    [[nodiscard]] bool IsConverged() const override;
 
     /// @brief Whether the next solve will reuse a cached BL state.
     [[nodiscard]] bool IsWarmStarted() const { return warm_started_; }
@@ -90,24 +92,24 @@ public:
     void ResetBoundaryLayer() { warm_started_ = false; }
 
     /// @brief Section lift coefficient from the most recent converged solve.
-    [[nodiscard]] Scalar GetCl() const;
+    [[nodiscard]] Scalar GetCl() const override;
     /// @brief Section drag coefficient from the most recent converged solve.
-    [[nodiscard]] Scalar GetCd() const;
+    [[nodiscard]] Scalar GetCd() const override;
     /// @brief Section pitching moment coefficient from the most recent
     /// converged solve.
-    [[nodiscard]] Scalar GetCm() const;
+    [[nodiscard]] Scalar GetCm() const override;
 
     /// @brief dCl/dα in units of per-radian.
-    [[nodiscard]] Scalar GetDclDalphaPerRadian() const;
+    [[nodiscard]] Scalar GetDclDalphaPerRadian() const override;
     /// @brief dCd/dα in units of per-radian.
-    [[nodiscard]] Scalar GetDcdDalphaPerRadian() const;
+    [[nodiscard]] Scalar GetDcdDalphaPerRadian() const override;
 
     /// @brief dCl / d(panel-node-coords). Returns a 2×N matrix matching the
     /// Scirocco-internal panel layout (which may differ from input coords if
     /// repaneling occurred).
-    [[nodiscard]] const Eigen::MatrixXd& GetDclDx() const;
+    [[nodiscard]] const Eigen::MatrixXd& GetDclDx() const override;
     /// @brief dCd / d(panel-node-coords) — same layout as GetDclDx.
-    [[nodiscard]] const Eigen::MatrixXd& GetDcdDx() const;
+    [[nodiscard]] const Eigen::MatrixXd& GetDcdDx() const override;
 
     /// @brief Number of panels in the Scirocco-internal airfoil. May differ
     /// from `num_panels` passed at construction if Scirocco repaneled.

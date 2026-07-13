@@ -51,10 +51,18 @@ add_executable(pegasus_unit_tests
 )
 
 if(PEGASUS_ENABLE_VISCOUS_COUPLING)
-    target_sources(pegasus_unit_tests PRIVATE
-        unit/viscous_strip_polar_test.cpp
-        unit/viscous_coupler_test.cpp
-    )
+    if(PEGASUS_ENABLE_SCIROCCO)
+        target_sources(pegasus_unit_tests PRIVATE
+            unit/viscous_strip_polar_test.cpp
+            unit/viscous_coupler_test.cpp
+        )
+    endif()
+    if(PEGASUS_ENABLE_BORA)
+        target_sources(pegasus_unit_tests PRIVATE
+            unit/viscous_bora_polar_test.cpp
+            unit/viscous_coupler_bora_test.cpp
+        )
+    endif()
 endif()
 
 target_link_libraries(pegasus_unit_tests

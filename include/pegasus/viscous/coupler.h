@@ -25,9 +25,11 @@
 #include "pegasus/aero/force_calculator.h"
 #include "pegasus/core/types.h"
 #include "pegasus/solver/vortex_lattice_solver.h"
+#include "pegasus/viscous/airfoil_solver.h"
+#include "pegasus/viscous/bora_polar.h"
 #include "pegasus/viscous/coupling_station.h"
-#include "pegasus/viscous/strip_polar.h"
 
+#include <memory>
 #include <vector>
 
 namespace pegasus::viscous {
@@ -42,7 +44,16 @@ struct CouplerOptions {
     /// User-supplied 2D viscous stations (≥ 2, strictly increasing eta).
     std::vector<CouplingStation> stations;
 
-    /// Freestream Mach (passed to Scirocco's compressibility correction).
+    /// 2D airfoil solver run at every station. The corresponding backend
+    /// must have been compiled in (PEGASUS_ENABLE_SCIROCCO /
+    /// PEGASUS_ENABLE_BORA); otherwise the coupler constructor throws.
+    AirfoilSolverBackend backend = AirfoilSolverBackend::kScirocco;
+
+    /// Settings for the Bora backend (used when backend == kBora).
+    BoraOptions bora;
+
+    /// Freestream Mach (passed to Scirocco's compressibility correction;
+    /// the Bora backend is incompressible and ignores it).
     Scalar mach = 0.0;
 
     /// Maximum Newton outer iterations.
@@ -88,11 +99,13 @@ struct CoupledGradients {
 /// @brief Total derivatives of integrated outputs w.r.t. per-station
 /// airfoil coordinates, via the coupled adjoint.
 ///
-/// `dCL_dcoords[k]` and `dCD_dcoords[k]` are 2×N_k matrices matching the
-/// (Scirocco-internal) panel layout of station `k`. Includes the implicit
-/// coupling: changing station-k coordinates changes Cl_2D_k, which shifts
-/// the residual at station k, which propagates through J to perturb every
-/// Δα_station, which feeds back into all integrated outputs.
+/// `dCL_dcoords[k]` and `dCD_dcoords[k]` use the backend's native shape
+/// parameterization for station `k`: 2×N_k matrices over Scirocco's
+/// internal panel-node coordinates, or 18×1 matrices over Bora's Kulfan
+/// (CST) parameters. Includes the implicit coupling: changing station-k
+/// shape changes Cl_2D_k, which shifts the residual at station k, which
+/// propagates through J to perturb every Δα_station, which feeds back into
+/// all integrated outputs.
 struct CoupledShapeGradients {
     std::vector<Eigen::MatrixXd> dCL_dcoords;
     std::vector<Eigen::MatrixXd> dCD_dcoords;
@@ -109,8 +122,8 @@ struct CoupledShapeGradients {
 ///      local frame (chord direction, spanwise tangent, lift normal).
 ///   4. Spline-interpolate strip α_eff and Cl_local to station values via
 ///      the `to_station` op.
-///   5. Run Scirocco at each station's α_eff (fixed-α mode, station's own
-///      airfoil coords, station's Reynolds).
+///   5. Run the 2D airfoil backend (Scirocco or Bora) at each station's
+///      α_eff (fixed-α mode, station's own airfoil, station's Reynolds).
 ///   6. Residual R_k = Cl_local_station_k − Cl_2D_station_k.
 ///   7. Newton step (current v: FD Jacobian; analytical to come).
 ///
@@ -167,11 +180,11 @@ private:
 
     /// Compute residual R = Cl_local_station − Cl_2D(α_eff_station) by
     /// interpolating per-strip quantities to stations and calling each
-    /// station's Scirocco solver. Caches Scirocco linearization values.
+    /// station's 2D solver. Caches the 2D linearization values.
     VecX ComputeResidual(const VecX& alpha_eff_strip,
                          const VecX& cl_local_strip);
 
-    /// Aggregated forward-mode response through the VLM chain + Scirocco
+    /// Aggregated forward-mode response through the VLM chain + 2D-solver
     /// linearization for a single perturbation direction.
     struct ForwardResponse {
         VecX dCl_station;        ///< δCl_VLM_local per station
@@ -199,8 +212,9 @@ private:
     ForceCalculator force_calc_;
     StationInterpolation interp_;
 
-    /// One 2D solver per coupling station (not per strip).
-    std::vector<StripPolarSolver> station_polars_;
+    /// One 2D solver per coupling station (not per strip); the concrete
+    /// type is selected by CouplerOptions::backend.
+    std::vector<std::unique_ptr<AirfoilSolver>> station_polars_;
 
     /// Baseline strip.twist_angle captured before any coupling injection,
     /// radians.
@@ -211,9 +225,9 @@ private:
 
     /// Cached per-station 2D drag from the last residual evaluation.
     VecX cd_2d_station_;
-    /// Cached per-station Scirocco dCl_2D/dα (per radian).
+    /// Cached per-station 2D dCl_2D/dα (per radian).
     VecX dcl2d_dalpha_station_;
-    /// Cached per-station Scirocco dCd_2D/dα (per radian).
+    /// Cached per-station 2D dCd_2D/dα (per radian).
     VecX dcd2d_dalpha_station_;
 
     /// Cached SolutionState from the last EvaluateVlm() call.

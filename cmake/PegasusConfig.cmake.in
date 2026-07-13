@@ -11,6 +11,10 @@ if(@PEGASUS_CONFIG_NEEDS_VTK@)
     find_dependency(VTK COMPONENTS CommonCore CommonDataModel IOXML)
 endif()
 
+if(@PEGASUS_CONFIG_NEEDS_BORA@)
+    find_dependency(Bora CONFIG)
+endif()
+
 include("${CMAKE_CURRENT_LIST_DIR}/PegasusTargets.cmake")
 
 check_required_components(Pegasus)
