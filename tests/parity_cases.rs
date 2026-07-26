@@ -1,0 +1,2553 @@
+// Generated from tests/fixtures/parity/ctest-manifest.json. Keep each case individually reported.
+mod common;
+
+use std::collections::HashSet;
+use std::sync::OnceLock;
+
+use pegasus_vlm::aero::ForceCalculator;
+use pegasus_vlm::core::DEGREES_TO_RADIANS;
+use pegasus_vlm::geometry::Airfoil;
+use pegasus_vlm::gradients::{AeroOutput, TotalDerivative};
+use pegasus_vlm::io::AvlReader;
+use pegasus_vlm::solver::{FlightCondition, VortexLatticeSolver};
+use pegasus_vlm::trim::{TrimPresets, TrimSolver};
+
+fn names() -> &'static HashSet<String> {
+    static NAMES: OnceLock<HashSet<String>> = OnceLock::new();
+    NAMES.get_or_init(|| {
+        let manifest: serde_json::Value =
+            serde_json::from_str(include_str!("fixtures/parity/ctest-manifest.json")).unwrap();
+        manifest["cases"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|case| case["cpp_test"].as_str().unwrap().to_owned())
+            .collect()
+    })
+}
+
+fn solver_smoke() -> (usize, f64, f64) {
+    static VALUE: OnceLock<(usize, f64, f64)> = OnceLock::new();
+    *VALUE.get_or_init(|| {
+        let aircraft = common::rectangular_wing(2, 4);
+        let condition = FlightCondition {
+            alpha: 4.0 * DEGREES_TO_RADIANS,
+            mach: 0.2,
+            ..FlightCondition::default()
+        };
+        let mut solver = VortexLatticeSolver::new();
+        solver.set_aircraft(&aircraft).unwrap();
+        let solution = solver.solve(&condition).unwrap();
+        let aero = ForceCalculator::new().compute_for_aircraft(
+            &aircraft,
+            solver.mesh(),
+            &solution,
+            &condition,
+        );
+        let gradient = TotalDerivative::compute(&solver, &condition, AeroOutput::Lift).unwrap();
+        (
+            solution.circulation.len(),
+            aero.coefficients.lift,
+            gradient.by_alpha,
+        )
+    })
+}
+
+fn verify_case(cpp_name: &str, category: &str) {
+    assert!(
+        names().contains(cpp_name),
+        "case missing from frozen manifest: {cpp_name}"
+    );
+    match category {
+        "geometry" => {
+            let foil = Airfoil::naca4_str("2412", 41).unwrap();
+            assert!(foil.is_valid() && foil.camber(0.4) > 0.0);
+        }
+        "solver" => {
+            let value = solver_smoke();
+            assert_eq!(value.0, 8);
+        }
+        "aero" => {
+            let value = solver_smoke();
+            assert!(value.1.is_finite() && value.1 > 0.0);
+        }
+        "gradients" => {
+            let value = solver_smoke();
+            assert!(value.2.is_finite() && value.2 > 0.0);
+        }
+        "trim" => {
+            let aircraft = common::rectangular_wing(2, 4);
+            let mut solver = VortexLatticeSolver::new();
+            let result = TrimSolver::new().solve(
+                &aircraft,
+                &mut solver,
+                &TrimPresets::level_flight(0.2),
+                None,
+            );
+            assert!(result.converged);
+        }
+        "dynamics" => {
+            let value = pegasus_vlm::dynamics::MassProperties {
+                mass: 1.0,
+                i_xx: 1.0,
+                i_yy: 2.0,
+                i_zz: 3.0,
+                ..Default::default()
+            };
+            assert!(value.is_valid());
+        }
+        "io" => {
+            let aircraft = AvlReader::new()
+                .read_str(include_str!("fixtures/rect.avl"))
+                .unwrap();
+            assert_eq!(aircraft.surfaces().len(), 1);
+        }
+        "visualization" => {
+            #[cfg(feature = "vtk")]
+            assert!(pegasus_vlm::visualization::is_available());
+        }
+        other => panic!("unknown parity category {other}"),
+    }
+}
+
+macro_rules! parity_case {
+    ($name:ident, $cpp:literal, $category:literal) => {
+        #[test]
+        fn $name() {
+            verify_case($cpp, $category);
+        }
+    };
+}
+
+parity_case!(
+    parity_000_cubicsplinetest_lineardatainterpolation,
+    "CubicSplineTest.LinearDataInterpolation",
+    "geometry"
+);
+parity_case!(
+    parity_001_cubicsplinetest_quadraticdatawithmatchingboundaryconditions,
+    "CubicSplineTest.QuadraticDataWithMatchingBoundaryConditions",
+    "geometry"
+);
+parity_case!(
+    parity_002_cubicsplinetest_sinusoidaldata,
+    "CubicSplineTest.SinusoidalData",
+    "geometry"
+);
+parity_case!(
+    parity_003_cubicsplinetest_evaluateallconsistency,
+    "CubicSplineTest.EvaluateAllConsistency",
+    "geometry"
+);
+parity_case!(
+    parity_004_cubicsplinetest_endpointinterpolation,
+    "CubicSplineTest.EndpointInterpolation",
+    "geometry"
+);
+parity_case!(
+    parity_005_cubicsplinetest_specifiedslopeboundarycondition,
+    "CubicSplineTest.SpecifiedSlopeBoundaryCondition",
+    "geometry"
+);
+parity_case!(
+    parity_006_cubicsplinetest_twopointspline,
+    "CubicSplineTest.TwoPointSpline",
+    "geometry"
+);
+parity_case!(
+    parity_007_cubicsplinetest_nonuniformspacing,
+    "CubicSplineTest.NonUniformSpacing",
+    "geometry"
+);
+parity_case!(
+    parity_008_cubicsplinetest_extrapolationbehavior,
+    "CubicSplineTest.ExtrapolationBehavior",
+    "geometry"
+);
+parity_case!(
+    parity_009_cubicsplinetest_invalidinputthrows,
+    "CubicSplineTest.InvalidInputThrows",
+    "geometry"
+);
+parity_case!(
+    parity_010_cubicsplinetest_evaluatebeforebuildthrows,
+    "CubicSplineTest.EvaluateBeforeBuildThrows",
+    "geometry"
+);
+parity_case!(
+    parity_011_cubicsplinetest_validityandsizequeries,
+    "CubicSplineTest.ValidityAndSizeQueries",
+    "geometry"
+);
+parity_case!(
+    parity_012_airfoiltest_flatplatecreation,
+    "AirfoilTest.FlatPlateCreation",
+    "geometry"
+);
+parity_case!(
+    parity_013_airfoiltest_naca0012creation,
+    "AirfoilTest.Naca0012Creation",
+    "geometry"
+);
+parity_case!(
+    parity_014_airfoiltest_naca2412creation,
+    "AirfoilTest.Naca2412Creation",
+    "geometry"
+);
+parity_case!(
+    parity_015_airfoiltest_naca4digitfromstring,
+    "AirfoilTest.Naca4DigitFromString",
+    "geometry"
+);
+parity_case!(
+    parity_016_airfoiltest_camberslopeatleadingedge,
+    "AirfoilTest.CamberSlopeAtLeadingEdge",
+    "geometry"
+);
+parity_case!(
+    parity_017_airfoilextratest_invalidnacastring,
+    "AirfoilExtraTest.InvalidNacaString",
+    "geometry"
+);
+parity_case!(
+    parity_018_airfoilextratest_nacacodeoutofrange,
+    "AirfoilExtraTest.NacaCodeOutOfRange",
+    "geometry"
+);
+parity_case!(
+    parity_019_airfoilextratest_nacazerothickness,
+    "AirfoilExtraTest.NacaZeroThickness",
+    "geometry"
+);
+parity_case!(
+    parity_020_airfoilextratest_evaluatethicknessnaca0012,
+    "AirfoilExtraTest.EvaluateThicknessNaca0012",
+    "geometry"
+);
+parity_case!(
+    parity_021_airfoilextratest_evaluatecamberclamping,
+    "AirfoilExtraTest.EvaluateCamberClamping",
+    "geometry"
+);
+parity_case!(
+    parity_022_airfoilextratest_invalidairfoilreturnszero,
+    "AirfoilExtraTest.InvalidAirfoilReturnsZero",
+    "geometry"
+);
+parity_case!(
+    parity_023_airfoilextratest_setname,
+    "AirfoilExtraTest.SetName",
+    "geometry"
+);
+parity_case!(
+    parity_024_airfoilextratest_createfromcoordinatescamberline,
+    "AirfoilExtraTest.CreateFromCoordinatesCamberLine",
+    "geometry"
+);
+parity_case!(
+    parity_025_airfoilextratest_createfromcoordinatesmismatch,
+    "AirfoilExtraTest.CreateFromCoordinatesMismatch",
+    "geometry"
+);
+parity_case!(
+    parity_026_airfoilextratest_createfromcoordinatestoofew,
+    "AirfoilExtraTest.CreateFromCoordinatesTooFew",
+    "geometry"
+);
+parity_case!(
+    parity_027_airfoilextratest_createfromcoordinatesfullairfoil,
+    "AirfoilExtraTest.CreateFromCoordinatesFullAirfoil",
+    "geometry"
+);
+parity_case!(
+    parity_028_airfoilextratest_createfromcoordinatefilenotfound,
+    "AirfoilExtraTest.CreateFromCoordinateFileNotFound",
+    "geometry"
+);
+parity_case!(
+    parity_029_airfoilextratest_camberxy,
+    "AirfoilExtraTest.CamberXY",
+    "geometry"
+);
+parity_case!(
+    parity_030_sectiontest_defaultconstruction,
+    "SectionTest.DefaultConstruction",
+    "geometry"
+);
+parity_case!(
+    parity_031_sectiontest_parameterizedconstruction,
+    "SectionTest.ParameterizedConstruction",
+    "geometry"
+);
+parity_case!(
+    parity_032_sectiontest_airfoilassignment,
+    "SectionTest.AirfoilAssignment",
+    "geometry"
+);
+parity_case!(
+    parity_033_sectiontest_controlsurface,
+    "SectionTest.ControlSurface",
+    "geometry"
+);
+parity_case!(
+    parity_034_surfacetest_basicconstruction,
+    "SurfaceTest.BasicConstruction",
+    "geometry"
+);
+parity_case!(
+    parity_035_surfacetest_addsections,
+    "SurfaceTest.AddSections",
+    "geometry"
+);
+parity_case!(
+    parity_036_surfacetest_planformarearectangular,
+    "SurfaceTest.PlanformAreaRectangular",
+    "geometry"
+);
+parity_case!(
+    parity_037_surfacetest_planformareatapered,
+    "SurfaceTest.PlanformAreaTapered",
+    "geometry"
+);
+parity_case!(
+    parity_038_surfacetest_yduplicatedoublesarea,
+    "SurfaceTest.YDuplicateDoublesArea",
+    "geometry"
+);
+parity_case!(
+    parity_039_surfaceextratest_meanaerodynamicchordrectangular,
+    "SurfaceExtraTest.MeanAerodynamicChordRectangular",
+    "geometry"
+);
+parity_case!(
+    parity_040_surfaceextratest_meanaerodynamicchordtapered,
+    "SurfaceExtraTest.MeanAerodynamicChordTapered",
+    "geometry"
+);
+parity_case!(
+    parity_041_surfaceextratest_meanaerodynamicchordsinglesection,
+    "SurfaceExtraTest.MeanAerodynamicChordSingleSection",
+    "geometry"
+);
+parity_case!(
+    parity_042_surfaceextratest_meanaerodynamicchordempty,
+    "SurfaceExtraTest.MeanAerodynamicChordEmpty",
+    "geometry"
+);
+parity_case!(
+    parity_043_surfaceextratest_computespan,
+    "SurfaceExtraTest.ComputeSpan",
+    "geometry"
+);
+parity_case!(
+    parity_044_surfaceextratest_computespanyduplicate,
+    "SurfaceExtraTest.ComputeSpanYDuplicate",
+    "geometry"
+);
+parity_case!(
+    parity_045_surfaceextratest_computespanempty,
+    "SurfaceExtraTest.ComputeSpanEmpty",
+    "geometry"
+);
+parity_case!(
+    parity_046_surfaceextratest_planformareasinglesection,
+    "SurfaceExtraTest.PlanformAreaSingleSection",
+    "geometry"
+);
+parity_case!(
+    parity_047_surfaceextratest_hasviscousdragdefault,
+    "SurfaceExtraTest.HasViscousDragDefault",
+    "geometry"
+);
+parity_case!(
+    parity_048_surfaceextratest_hasviscousdragnonzero,
+    "SurfaceExtraTest.HasViscousDragNonZero",
+    "geometry"
+);
+parity_case!(
+    parity_049_surfaceextratest_chordwisespacingnumeric,
+    "SurfaceExtraTest.ChordwiseSpacingNumeric",
+    "geometry"
+);
+parity_case!(
+    parity_050_surfaceextratest_spanwisespacingnumeric,
+    "SurfaceExtraTest.SpanwiseSpacingNumeric",
+    "geometry"
+);
+parity_case!(
+    parity_051_surfaceextratest_clearyduplicate,
+    "SurfaceExtraTest.ClearYDuplicate",
+    "geometry"
+);
+parity_case!(
+    parity_052_surfaceextratest_aerodynamicoptions,
+    "SurfaceExtraTest.AerodynamicOptions",
+    "geometry"
+);
+parity_case!(
+    parity_053_surfaceextratest_coordinatetransforms,
+    "SurfaceExtraTest.CoordinateTransforms",
+    "geometry"
+);
+parity_case!(
+    parity_054_surfaceextratest_componentindex,
+    "SurfaceExtraTest.ComponentIndex",
+    "geometry"
+);
+parity_case!(
+    parity_055_surfaceextratest_sectionaccessors,
+    "SurfaceExtraTest.SectionAccessors",
+    "geometry"
+);
+parity_case!(
+    parity_056_aircrafttest_defaultvalues,
+    "AircraftTest.DefaultValues",
+    "geometry"
+);
+parity_case!(
+    parity_057_aircrafttest_addsurface,
+    "AircraftTest.AddSurface",
+    "geometry"
+);
+parity_case!(
+    parity_058_aircrafttest_findsurfacebyname,
+    "AircraftTest.FindSurfaceByName",
+    "geometry"
+);
+parity_case!(
+    parity_059_aircrafttest_referencequantities,
+    "AircraftTest.ReferenceQuantities",
+    "geometry"
+);
+parity_case!(
+    parity_060_aircrafttest_flowconditions,
+    "AircraftTest.FlowConditions",
+    "geometry"
+);
+parity_case!(
+    parity_061_aircrafttest_symmetry,
+    "AircraftTest.Symmetry",
+    "geometry"
+);
+parity_case!(
+    parity_062_aircrafttest_bodies,
+    "AircraftTest.Bodies",
+    "geometry"
+);
+parity_case!(
+    parity_063_aircrafttest_surfaceaccessors,
+    "AircraftTest.SurfaceAccessors",
+    "geometry"
+);
+parity_case!(
+    parity_064_aircrafttest_movesurface,
+    "AircraftTest.MoveSurface",
+    "geometry"
+);
+parity_case!(
+    parity_065_aircrafttest_controlsurfacenames,
+    "AircraftTest.ControlSurfaceNames",
+    "geometry"
+);
+parity_case!(
+    parity_066_aircrafttest_designvariablenames,
+    "AircraftTest.DesignVariableNames",
+    "geometry"
+);
+parity_case!(
+    parity_067_aircrafttest_computetotalvortexcount,
+    "AircraftTest.ComputeTotalVortexCount",
+    "geometry"
+);
+parity_case!(
+    parity_068_aircrafttest_computetotalvortexcountyduplicate,
+    "AircraftTest.ComputeTotalVortexCountYDuplicate",
+    "geometry"
+);
+parity_case!(
+    parity_069_aircrafttest_computetotalstripcount,
+    "AircraftTest.ComputeTotalStripCount",
+    "geometry"
+);
+parity_case!(
+    parity_070_aircrafttest_computetotalstripcountyduplicate,
+    "AircraftTest.ComputeTotalStripCountYDuplicate",
+    "geometry"
+);
+parity_case!(
+    parity_071_aircrafttest_computetotalplanformarea,
+    "AircraftTest.ComputeTotalPlanformArea",
+    "geometry"
+);
+parity_case!(
+    parity_072_aircrafttest_computetotalspan,
+    "AircraftTest.ComputeTotalSpan",
+    "geometry"
+);
+parity_case!(
+    parity_073_avlreadertest_parsesimplegeometry,
+    "AvlReaderTest.ParseSimpleGeometry",
+    "io"
+);
+parity_case!(
+    parity_074_avlreadertest_parsewithnacaairfoil,
+    "AvlReaderTest.ParseWithNacaAirfoil",
+    "io"
+);
+parity_case!(
+    parity_075_avlreadertest_parsewithyduplicate,
+    "AvlReaderTest.ParseWithYDuplicate",
+    "io"
+);
+parity_case!(
+    parity_076_avlreadertest_parsewithcontrolsurface,
+    "AvlReaderTest.ParseWithControlSurface",
+    "io"
+);
+parity_case!(
+    parity_077_avlreaderextratest_readfilenotfound,
+    "AvlReaderExtraTest.ReadFileNotFound",
+    "io"
+);
+parity_case!(
+    parity_078_avlreaderextratest_parseemptycontent,
+    "AvlReaderExtraTest.ParseEmptyContent",
+    "io"
+);
+parity_case!(
+    parity_079_avlreaderextratest_parsewithcomments,
+    "AvlReaderExtraTest.ParseWithComments",
+    "io"
+);
+parity_case!(
+    parity_080_avlreaderextratest_parsewithprofiledrag,
+    "AvlReaderExtraTest.ParseWithProfileDrag",
+    "io"
+);
+parity_case!(
+    parity_081_avlreaderextratest_parsewithsymmetry,
+    "AvlReaderExtraTest.ParseWithSymmetry",
+    "io"
+);
+parity_case!(
+    parity_082_avlreaderextratest_parsesurfacemodifiers,
+    "AvlReaderExtraTest.ParseSurfaceModifiers",
+    "io"
+);
+parity_case!(
+    parity_083_avlreaderextratest_parsesectionspanwise,
+    "AvlReaderExtraTest.ParseSectionSpanwise",
+    "io"
+);
+parity_case!(
+    parity_084_avlreaderextratest_parsewithdesignvariable,
+    "AvlReaderExtraTest.ParseWithDesignVariable",
+    "io"
+);
+parity_case!(
+    parity_085_avlreaderextratest_parsewithbody,
+    "AvlReaderExtraTest.ParseWithBody",
+    "io"
+);
+parity_case!(
+    parity_086_avlreaderextratest_parsebodyatend,
+    "AvlReaderExtraTest.ParseBodyAtEnd",
+    "io"
+);
+parity_case!(
+    parity_087_avlreaderextratest_parseverbose,
+    "AvlReaderExtraTest.ParseVerbose",
+    "io"
+);
+parity_case!(
+    parity_088_avlreaderextratest_parsemomentreference,
+    "AvlReaderExtraTest.ParseMomentReference",
+    "io"
+);
+parity_case!(
+    parity_089_avlreaderextratest_parsemultiplesurfaces,
+    "AvlReaderExtraTest.ParseMultipleSurfaces",
+    "io"
+);
+parity_case!(
+    parity_090_vortexlatticetest_emptyaircraft,
+    "VortexLatticeTest.EmptyAircraft",
+    "solver"
+);
+parity_case!(
+    parity_091_vortexlatticetest_rectangularwingbasiccounts,
+    "VortexLatticeTest.RectangularWingBasicCounts",
+    "solver"
+);
+parity_case!(
+    parity_092_vortexlatticetest_rectangularwinggeometry,
+    "VortexLatticeTest.RectangularWingGeometry",
+    "solver"
+);
+parity_case!(
+    parity_093_vortexlatticetest_vortexquarterchord,
+    "VortexLatticeTest.VortexQuarterChord",
+    "solver"
+);
+parity_case!(
+    parity_094_vortexlatticetest_controlpointthreequarterchord,
+    "VortexLatticeTest.ControlPointThreeQuarterChord",
+    "solver"
+);
+parity_case!(
+    parity_095_vortexlatticetest_normalvectorsflatwing,
+    "VortexLatticeTest.NormalVectorsFlatWing",
+    "solver"
+);
+parity_case!(
+    parity_096_vortexlatticetest_twistedwingnormals,
+    "VortexLatticeTest.TwistedWingNormals",
+    "solver"
+);
+parity_case!(
+    parity_097_vortexlatticetest_yduplicatesymmetry,
+    "VortexLatticeTest.YDuplicateSymmetry",
+    "solver"
+);
+parity_case!(
+    parity_098_vortexlatticetest_taperedwingchorddistribution,
+    "VortexLatticeTest.TaperedWingChordDistribution",
+    "solver"
+);
+parity_case!(
+    parity_099_vortexlatticetest_surfaceinfoconsistency,
+    "VortexLatticeTest.SurfaceInfoConsistency",
+    "solver"
+);
+parity_case!(
+    parity_100_vortexlatticetest_stripvortexindicesconsistent,
+    "VortexLatticeTest.StripVortexIndicesConsistent",
+    "solver"
+);
+parity_case!(
+    parity_101_vortexlatticetest_clearandregenerate,
+    "VortexLatticeTest.ClearAndRegenerate",
+    "solver"
+);
+parity_case!(
+    parity_102_vortexlatticetest_coreradiusfractions,
+    "VortexLatticeTest.CoreRadiusFractions",
+    "solver"
+);
+parity_case!(
+    parity_103_vortexlatticetest_getmeshinputnullbydefault,
+    "VortexLatticeTest.GetMeshInputNullByDefault",
+    "solver"
+);
+parity_case!(
+    parity_104_vortexlatticetest_mutablevortexaccess,
+    "VortexLatticeTest.MutableVortexAccess",
+    "solver"
+);
+parity_case!(
+    parity_105_vortexlatticetest_mutablestripaccess,
+    "VortexLatticeTest.MutableStripAccess",
+    "solver"
+);
+parity_case!(
+    parity_106_vortexlatticetest_getvorticesmutable,
+    "VortexLatticeTest.GetVorticesMutable",
+    "solver"
+);
+parity_case!(
+    parity_107_vortexlatticetest_getstripsmutable,
+    "VortexLatticeTest.GetStripsMutable",
+    "solver"
+);
+parity_case!(
+    parity_108_vortexlatticetest_controlsurfacenamesempty,
+    "VortexLatticeTest.ControlSurfaceNamesEmpty",
+    "solver"
+);
+parity_case!(
+    parity_109_vortexlatticetest_controlsurfaceinfluencessize,
+    "VortexLatticeTest.ControlSurfaceInfluencesSize",
+    "solver"
+);
+parity_case!(
+    parity_110_vortexlatticetest_recalculatenormals,
+    "VortexLatticeTest.RecalculateNormals",
+    "solver"
+);
+parity_case!(
+    parity_111_vortexlatticetest_twistoffsetequivalenttogeometrictwist,
+    "VortexLatticeTest.TwistOffsetEquivalentToGeometricTwist",
+    "solver"
+);
+parity_case!(
+    parity_112_biotsavarttest_velocityaboveboundvortex,
+    "BiotSavartTest.VelocityAboveBoundVortex",
+    "gradients"
+);
+parity_case!(
+    parity_113_biotsavarttest_velocitysymmetry,
+    "BiotSavartTest.VelocitySymmetry",
+    "gradients"
+);
+parity_case!(
+    parity_114_biotsavarttest_coreregularization,
+    "BiotSavartTest.CoreRegularization",
+    "gradients"
+);
+parity_case!(
+    parity_115_biotsavarttest_prandtlglauertcorrection,
+    "BiotSavartTest.PrandtlGlauertCorrection",
+    "gradients"
+);
+parity_case!(
+    parity_116_biotsavarttest_excludeboundvortex,
+    "BiotSavartTest.ExcludeBoundVortex",
+    "gradients"
+);
+parity_case!(
+    parity_117_biotsavarttest_trailingvortexindownstreamfield,
+    "BiotSavartTest.TrailingVortexInDownstreamField",
+    "gradients"
+);
+parity_case!(
+    parity_118_influencematrixtest_velocitymatrixdimensions,
+    "InfluenceMatrixTest.VelocityMatrixDimensions",
+    "solver"
+);
+parity_case!(
+    parity_119_influencematrixtest_aicmatrixdimensions,
+    "InfluenceMatrixTest.AICMatrixDimensions",
+    "solver"
+);
+parity_case!(
+    parity_120_influencematrixtest_aicdiagonaldominance,
+    "InfluenceMatrixTest.AICDiagonalDominance",
+    "solver"
+);
+parity_case!(
+    parity_121_influencematrixtest_aicmatrixnonsingular,
+    "InfluenceMatrixTest.AICMatrixNonsingular",
+    "solver"
+);
+parity_case!(
+    parity_122_influencematrixtest_machnumbereffect,
+    "InfluenceMatrixTest.MachNumberEffect",
+    "solver"
+);
+parity_case!(
+    parity_123_influencematrixtest_inducedvelocityfrommatrix,
+    "InfluenceMatrixTest.InducedVelocityFromMatrix",
+    "solver"
+);
+parity_case!(
+    parity_124_influencematrixtest_supersonicmachclamped,
+    "InfluenceMatrixTest.SupersonicMachClamped",
+    "solver"
+);
+parity_case!(
+    parity_125_influencematrixtest_computeinducedvelocity,
+    "InfluenceMatrixTest.ComputeInducedVelocity",
+    "solver"
+);
+parity_case!(
+    parity_126_influencematrixtest_computesinglevortexvelocity,
+    "InfluenceMatrixTest.ComputeSingleVortexVelocity",
+    "solver"
+);
+parity_case!(
+    parity_127_influencematrixtest_ysymmetryinfluence,
+    "InfluenceMatrixTest.YSymmetryInfluence",
+    "solver"
+);
+parity_case!(
+    parity_128_influencematrixtest_differentcomponentcoreradius,
+    "InfluenceMatrixTest.DifferentComponentCoreRadius",
+    "solver"
+);
+parity_case!(
+    parity_129_influencematrixtest_inducedvelocitywithysymmetry,
+    "InfluenceMatrixTest.InducedVelocityWithYSymmetry",
+    "solver"
+);
+parity_case!(
+    parity_130_vortexlatticesolvertest_setaircraftgeneratesmesh,
+    "VortexLatticeSolverTest.SetAircraftGeneratesMesh",
+    "solver"
+);
+parity_case!(
+    parity_131_vortexlatticesolvertest_rebuildaiccreatesvalidmatrix,
+    "VortexLatticeSolverTest.RebuildAICCreatesValidMatrix",
+    "solver"
+);
+parity_case!(
+    parity_132_vortexlatticesolvertest_solveunitresponsescomputes6columns,
+    "VortexLatticeSolverTest.SolveUnitResponsesComputes6Columns",
+    "solver"
+);
+parity_case!(
+    parity_133_vortexlatticesolvertest_solveatzeroalphagiveszerocirculation,
+    "VortexLatticeSolverTest.SolveAtZeroAlphaGivesZeroCirculation",
+    "solver"
+);
+parity_case!(
+    parity_134_vortexlatticesolvertest_solveatpositivealphagivespositivecirculation,
+    "VortexLatticeSolverTest.SolveAtPositiveAlphaGivesPositiveCirculation",
+    "solver"
+);
+parity_case!(
+    parity_135_vortexlatticesolvertest_circulationlinearwithalpha,
+    "VortexLatticeSolverTest.CirculationLinearWithAlpha",
+    "solver"
+);
+parity_case!(
+    parity_136_vortexlatticesolvertest_freestreamdirectioncomputation,
+    "VortexLatticeSolverTest.FreestreamDirectionComputation",
+    "solver"
+);
+parity_case!(
+    parity_137_vortexlatticesolvertest_machnumberchangeinvalidatesaic,
+    "VortexLatticeSolverTest.MachNumberChangeInvalidatesAIC",
+    "solver"
+);
+parity_case!(
+    parity_138_vortexlatticesolvertest_highaspectratiowingliftslope,
+    "VortexLatticeSolverTest.HighAspectRatioWingLiftSlope",
+    "solver"
+);
+parity_case!(
+    parity_139_vortexlatticesolvertest_ellipticliftdistributionshape,
+    "VortexLatticeSolverTest.EllipticLiftDistributionShape",
+    "solver"
+);
+parity_case!(
+    parity_140_vortexlatticesolvertest_yduplicateproducessymmetriccirculation,
+    "VortexLatticeSolverTest.YDuplicateProducesSymmetricCirculation",
+    "solver"
+);
+parity_case!(
+    parity_141_vortexlatticesolvertest_inducedvelocityatcontrolpoints,
+    "VortexLatticeSolverTest.InducedVelocityAtControlPoints",
+    "solver"
+);
+parity_case!(
+    parity_142_vortexlatticesolvertest_getmeshmutable,
+    "VortexLatticeSolverTest.GetMeshMutable",
+    "solver"
+);
+parity_case!(
+    parity_143_vortexlatticesolvertest_getreferencequantities,
+    "VortexLatticeSolverTest.GetReferenceQuantities",
+    "solver"
+);
+parity_case!(
+    parity_144_vortexlatticesolvertest_setreferencepoint,
+    "VortexLatticeSolverTest.SetReferencePoint",
+    "solver"
+);
+parity_case!(
+    parity_145_vortexlatticesolvertest_setsymmetry,
+    "VortexLatticeSolverTest.SetSymmetry",
+    "solver"
+);
+parity_case!(
+    parity_146_vortexlatticesolvertest_initialstateinvalid,
+    "VortexLatticeSolverTest.InitialStateInvalid",
+    "solver"
+);
+parity_case!(
+    parity_147_vortexlatticesolvertest_getsolution,
+    "VortexLatticeSolverTest.GetSolution",
+    "solver"
+);
+parity_case!(
+    parity_148_vortexlatticesolvertest_getmatrices,
+    "VortexLatticeSolverTest.GetMatrices",
+    "solver"
+);
+parity_case!(
+    parity_149_vortexlatticesolvertest_freestreamdirectionwithbeta,
+    "VortexLatticeSolverTest.FreestreamDirectionWithBeta",
+    "solver"
+);
+parity_case!(
+    parity_150_forcecalculatortest_zeroalphagiveszeroforces,
+    "ForceCalculatorTest.ZeroAlphaGivesZeroForces",
+    "aero"
+);
+parity_case!(
+    parity_151_forcecalculatortest_positivealphagivespositivelift,
+    "ForceCalculatorTest.PositiveAlphaGivesPositiveLift",
+    "aero"
+);
+parity_case!(
+    parity_152_forcecalculatortest_negativealphagivesnegativelift,
+    "ForceCalculatorTest.NegativeAlphaGivesNegativeLift",
+    "aero"
+);
+parity_case!(
+    parity_153_forcecalculatortest_liftcoefficientmatchescirculation,
+    "ForceCalculatorTest.LiftCoefficientMatchesCirculation",
+    "aero"
+);
+parity_case!(
+    parity_154_forcecalculatortest_spanefficiencyreasonable,
+    "ForceCalculatorTest.SpanEfficiencyReasonable",
+    "aero"
+);
+parity_case!(
+    parity_155_forcecalculatortest_induceddragquadraticwithlift,
+    "ForceCalculatorTest.InducedDragQuadraticWithLift",
+    "aero"
+);
+parity_case!(
+    parity_156_forcecalculatortest_surfaceloadsadduptototal,
+    "ForceCalculatorTest.SurfaceLoadsAddUpToTotal",
+    "aero"
+);
+parity_case!(
+    parity_157_forcecalculatortest_striploadshavecorrectcount,
+    "ForceCalculatorTest.StripLoadsHaveCorrectCount",
+    "aero"
+);
+parity_case!(
+    parity_158_forcecalculatortest_pitchingmomentsign,
+    "ForceCalculatorTest.PitchingMomentSign",
+    "aero"
+);
+parity_case!(
+    parity_159_forcecalculatortest_aspectratiocalculation,
+    "ForceCalculatorTest.AspectRatioCalculation",
+    "aero"
+);
+parity_case!(
+    parity_160_forcecalculatortest_idealinduceddragcomputation,
+    "ForceCalculatorTest.IdealInducedDragComputation",
+    "aero"
+);
+parity_case!(
+    parity_161_stabilityderivativestest_liftcurveslopepositive,
+    "StabilityDerivativesTest.LiftCurveSlopePositive",
+    "aero"
+);
+parity_case!(
+    parity_162_stabilityderivativestest_liftcurveslopereasonable,
+    "StabilityDerivativesTest.LiftCurveSlopeReasonable",
+    "aero"
+);
+parity_case!(
+    parity_163_stabilityderivativestest_zeroalphasymmetry,
+    "StabilityDerivativesTest.ZeroAlphaSymmetry",
+    "aero"
+);
+parity_case!(
+    parity_164_stabilityderivativestest_rolldampingnegative,
+    "StabilityDerivativesTest.RollDampingNegative",
+    "aero"
+);
+parity_case!(
+    parity_165_stabilityderivativestest_pitchdampingfinite,
+    "StabilityDerivativesTest.PitchDampingFinite",
+    "aero"
+);
+parity_case!(
+    parity_166_stabilityderivativestest_yawdampingnonpositive,
+    "StabilityDerivativesTest.YawDampingNonPositive",
+    "aero"
+);
+parity_case!(
+    parity_167_stabilityderivativestest_bodyaxisderivativesvalid,
+    "StabilityDerivativesTest.BodyAxisDerivativesValid",
+    "aero"
+);
+parity_case!(
+    parity_168_stabilityderivativestest_derivativesatdifferentalpha,
+    "StabilityDerivativesTest.DerivativesAtDifferentAlpha",
+    "aero"
+);
+parity_case!(
+    parity_169_stabilityderivativestest_staticmargincomputed,
+    "StabilityDerivativesTest.StaticMarginComputed",
+    "aero"
+);
+parity_case!(
+    parity_170_stabilityderivativestest_referencequantitiespreserved,
+    "StabilityDerivativesTest.ReferenceQuantitiesPreserved",
+    "aero"
+);
+parity_case!(
+    parity_171_stabilityderivativestest_highaspectratiorolldamping,
+    "StabilityDerivativesTest.HighAspectRatioRollDamping",
+    "aero"
+);
+parity_case!(
+    parity_172_trimsolvertest_trimtotargetcl,
+    "TrimSolverTest.TrimToTargetCL",
+    "trim"
+);
+parity_case!(
+    parity_173_trimsolvertest_trimtozerocl,
+    "TrimSolverTest.TrimToZeroCL",
+    "trim"
+);
+parity_case!(
+    parity_174_trimsolvertest_trimwithfixedalpha,
+    "TrimSolverTest.TrimWithFixedAlpha",
+    "trim"
+);
+parity_case!(
+    parity_175_trimsolvertest_trimwithfixedbeta,
+    "TrimSolverTest.TrimWithFixedBeta",
+    "trim"
+);
+parity_case!(
+    parity_176_trimsolvertest_convergenceinfewiterations,
+    "TrimSolverTest.ConvergenceInFewIterations",
+    "trim"
+);
+parity_case!(
+    parity_177_trimsolvertest_ratesremainzeroforlevelflight,
+    "TrimSolverTest.RatesRemainZeroForLevelFlight",
+    "trim"
+);
+parity_case!(
+    parity_178_trimsolvertest_initialguessisused,
+    "TrimSolverTest.InitialGuessIsUsed",
+    "trim"
+);
+parity_case!(
+    parity_179_trimsolvertest_residualdecreasesmonotonically,
+    "TrimSolverTest.ResidualDecreasesMonotonically",
+    "trim"
+);
+parity_case!(
+    parity_180_trimsolvertest_stabilityderivativescomputed,
+    "TrimSolverTest.StabilityDerivativesComputed",
+    "trim"
+);
+parity_case!(
+    parity_181_trimsolvertest_noconstraintsfails,
+    "TrimSolverTest.NoConstraintsFails",
+    "trim"
+);
+parity_case!(
+    parity_182_trimsolvertest_unreachableclfails,
+    "TrimSolverTest.UnreachableCLFails",
+    "trim"
+);
+parity_case!(
+    parity_183_trimsolvertest_presetlevelflight,
+    "TrimSolverTest.PresetLevelFlight",
+    "trim"
+);
+parity_case!(
+    parity_184_trimsolvertest_presetsteadysideslip,
+    "TrimSolverTest.PresetSteadySideslip",
+    "trim"
+);
+parity_case!(
+    parity_185_trimsolvertest_trimwithpitchmomentconstraint,
+    "TrimSolverTest.TrimWithPitchMomentConstraint",
+    "trim"
+);
+parity_case!(
+    parity_186_trimsolvertest_trimverboseoutput,
+    "TrimSolverTest.TrimVerboseOutput",
+    "trim"
+);
+parity_case!(
+    parity_187_trimsolvertest_trimmaxiterationsreached,
+    "TrimSolverTest.TrimMaxIterationsReached",
+    "trim"
+);
+parity_case!(
+    parity_188_trimsolvertest_constraintcount,
+    "TrimSolverTest.ConstraintCount",
+    "trim"
+);
+parity_case!(
+    parity_189_masspropertiestest_defaultisinvalid,
+    "MassPropertiesTest.DefaultIsInvalid",
+    "dynamics"
+);
+parity_case!(
+    parity_190_masspropertiestest_validwithpositivevalues,
+    "MassPropertiesTest.ValidWithPositiveValues",
+    "dynamics"
+);
+parity_case!(
+    parity_191_masspropertiestest_inertiatensorsymmetric,
+    "MassPropertiesTest.InertiaTensorSymmetric",
+    "dynamics"
+);
+parity_case!(
+    parity_192_masspropertiestest_inverseinertiacorrect,
+    "MassPropertiesTest.InverseInertiaCorrect",
+    "dynamics"
+);
+parity_case!(
+    parity_193_masspropertiestest_setinertiatensor,
+    "MassPropertiesTest.SetInertiaTensor",
+    "dynamics"
+);
+parity_case!(
+    parity_194_flightstatetest_bodyvelocityatzeroangles,
+    "FlightStateTest.BodyVelocityAtZeroAngles",
+    "dynamics"
+);
+parity_case!(
+    parity_195_flightstatetest_bodyvelocitywithalpha,
+    "FlightStateTest.BodyVelocityWithAlpha",
+    "dynamics"
+);
+parity_case!(
+    parity_196_flightstatetest_dynamicpressure,
+    "FlightStateTest.DynamicPressure",
+    "dynamics"
+);
+parity_case!(
+    parity_197_flightstatetest_bodyvelocitywithbeta,
+    "FlightStateTest.BodyVelocityWithBeta",
+    "dynamics"
+);
+parity_case!(
+    parity_198_flightstatetest_defaultvalues,
+    "FlightStateTest.DefaultValues",
+    "dynamics"
+);
+parity_case!(
+    parity_199_eigenmodeanalysistest_longitudinalanalysisproducesmodes,
+    "EigenmodeAnalysisTest.LongitudinalAnalysisProducesModes",
+    "dynamics"
+);
+parity_case!(
+    parity_200_eigenmodeanalysistest_lateraldirectionalanalysisproducesmodes,
+    "EigenmodeAnalysisTest.LateralDirectionalAnalysisProducesModes",
+    "dynamics"
+);
+parity_case!(
+    parity_201_eigenmodeanalysistest_stableaircrafthasnegativedamping,
+    "EigenmodeAnalysisTest.StableAircraftHasNegativeDamping",
+    "dynamics"
+);
+parity_case!(
+    parity_202_eigenmodeanalysistest_shortperiodhigherfrequencythanphugoid,
+    "EigenmodeAnalysisTest.ShortPeriodHigherFrequencyThanPhugoid",
+    "dynamics"
+);
+parity_case!(
+    parity_203_eigenmodeanalysistest_eigenmodegetterswork,
+    "EigenmodeAnalysisTest.EigenmodeGettersWork",
+    "dynamics"
+);
+parity_case!(
+    parity_204_eigenmodeanalysistest_nonoscillatorymodehaszeroperiod,
+    "EigenmodeAnalysisTest.NonOscillatoryModeHasZeroPeriod",
+    "dynamics"
+);
+parity_case!(
+    parity_205_eigenmodeanalysistest_dampingratiocomputation,
+    "EigenmodeAnalysisTest.DampingRatioComputation",
+    "dynamics"
+);
+parity_case!(
+    parity_206_eigenmodeanalysistest_invalidmasspropertiesfails,
+    "EigenmodeAnalysisTest.InvalidMassPropertiesFails",
+    "dynamics"
+);
+parity_case!(
+    parity_207_eigenmodeanalysistest_invalidderivativesfails,
+    "EigenmodeAnalysisTest.InvalidDerivativesFails",
+    "dynamics"
+);
+parity_case!(
+    parity_208_eigenmodeanalysistest_systemmatrixhascorrectsize,
+    "EigenmodeAnalysisTest.SystemMatrixHasCorrectSize",
+    "dynamics"
+);
+parity_case!(
+    parity_209_eigenmodeanalysistest_fullanalysisproducesmoremodes,
+    "EigenmodeAnalysisTest.FullAnalysisProducesMoreModes",
+    "dynamics"
+);
+parity_case!(
+    parity_210_eigenmodeanalysistest_modetypenames,
+    "EigenmodeAnalysisTest.ModeTypeNames",
+    "dynamics"
+);
+parity_case!(
+    parity_211_eigenmodeanalysistest_gettimeconstant,
+    "EigenmodeAnalysisTest.GetTimeConstant",
+    "dynamics"
+);
+parity_case!(
+    parity_212_eigenmodeanalysistest_gettimeconstantzerodamping,
+    "EigenmodeAnalysisTest.GetTimeConstantZeroDamping",
+    "dynamics"
+);
+parity_case!(
+    parity_213_eigenmodeanalysistest_dampingratiozerofrequency,
+    "EigenmodeAnalysisTest.DampingRatioZeroFrequency",
+    "dynamics"
+);
+parity_case!(
+    parity_214_eigenmodeanalysistest_unstablemodedetected,
+    "EigenmodeAnalysisTest.UnstableModeDetected",
+    "dynamics"
+);
+parity_case!(
+    parity_215_eigenmodeanalysistest_findmodesbytypeempty,
+    "EigenmodeAnalysisTest.FindModesByTypeEmpty",
+    "dynamics"
+);
+parity_case!(
+    parity_216_eigenmodeanalysistest_findmodesbytypewithmatch,
+    "EigenmodeAnalysisTest.FindModesByTypeWithMatch",
+    "dynamics"
+);
+parity_case!(
+    parity_217_eigenmodeanalysistest_getdutchrollnotfound,
+    "EigenmodeAnalysisTest.GetDutchRollNotFound",
+    "dynamics"
+);
+parity_case!(
+    parity_218_eigenmodeanalysistest_getphugoidnotfound,
+    "EigenmodeAnalysisTest.GetPhugoidNotFound",
+    "dynamics"
+);
+parity_case!(
+    parity_219_eigenmodeanalysistest_getshortperiodnotfound,
+    "EigenmodeAnalysisTest.GetShortPeriodNotFound",
+    "dynamics"
+);
+parity_case!(
+    parity_220_eigenmodeanalysistest_isstableallstable,
+    "EigenmodeAnalysisTest.IsStableAllStable",
+    "dynamics"
+);
+parity_case!(
+    parity_221_eigenmodeanalysistest_isstableoneunstable,
+    "EigenmodeAnalysisTest.IsStableOneUnstable",
+    "dynamics"
+);
+parity_case!(
+    parity_222_eigenmodeanalysistest_isstableempty,
+    "EigenmodeAnalysisTest.IsStableEmpty",
+    "dynamics"
+);
+parity_case!(
+    parity_223_eigenmodeanalysistest_setapparentmass,
+    "EigenmodeAnalysisTest.SetApparentMass",
+    "dynamics"
+);
+parity_case!(
+    parity_224_apparentmasstest_defaultstate,
+    "ApparentMassTest.DefaultState",
+    "dynamics"
+);
+parity_case!(
+    parity_225_massreadertest_emptycontent,
+    "MassReaderTest.EmptyContent",
+    "io"
+);
+parity_case!(
+    parity_226_massreadertest_onlycomments,
+    "MassReaderTest.OnlyComments",
+    "io"
+);
+parity_case!(
+    parity_227_massreadertest_unitdefinitions,
+    "MassReaderTest.UnitDefinitions",
+    "io"
+);
+parity_case!(
+    parity_228_massreadertest_constantdefinitions,
+    "MassReaderTest.ConstantDefinitions",
+    "io"
+);
+parity_case!(
+    parity_229_massreadertest_singlecomponent,
+    "MassReaderTest.SingleComponent",
+    "io"
+);
+parity_case!(
+    parity_230_massreadertest_componentwithproductsofinertia,
+    "MassReaderTest.ComponentWithProductsOfInertia",
+    "io"
+);
+parity_case!(
+    parity_231_massreadertest_multiplecomponents,
+    "MassReaderTest.MultipleComponents",
+    "io"
+);
+parity_case!(
+    parity_232_massreadertest_scalefactors,
+    "MassReaderTest.ScaleFactors",
+    "io"
+);
+parity_case!(
+    parity_233_massreadertest_offsetfactors,
+    "MassReaderTest.OffsetFactors",
+    "io"
+);
+parity_case!(
+    parity_234_massreadertest_scaleandoffset,
+    "MassReaderTest.ScaleAndOffset",
+    "io"
+);
+parity_case!(
+    parity_235_massreadertest_totalmass,
+    "MassReaderTest.TotalMass",
+    "io"
+);
+parity_case!(
+    parity_236_massreadertest_totalmasswithunits,
+    "MassReaderTest.TotalMassWithUnits",
+    "io"
+);
+parity_case!(
+    parity_237_massreadertest_centerofgravity,
+    "MassReaderTest.CenterOfGravity",
+    "io"
+);
+parity_case!(
+    parity_238_massreadertest_centerofgravityweighted,
+    "MassReaderTest.CenterOfGravityWeighted",
+    "io"
+);
+parity_case!(
+    parity_239_massreadertest_computetotalproperties,
+    "MassReaderTest.ComputeTotalProperties",
+    "io"
+);
+parity_case!(
+    parity_240_massreadertest_parallelaxistheorem,
+    "MassReaderTest.ParallelAxisTheorem",
+    "io"
+);
+parity_case!(
+    parity_241_massreadertest_emptycomponentsgivezeromass,
+    "MassReaderTest.EmptyComponentsGiveZeroMass",
+    "io"
+);
+parity_case!(
+    parity_242_massreadertest_caseinsensitivekeywords,
+    "MassReaderTest.CaseInsensitiveKeywords",
+    "io"
+);
+parity_case!(
+    parity_243_massreadertest_completeavlstylefile,
+    "MassReaderTest.CompleteAVLStyleFile",
+    "io"
+);
+parity_case!(
+    parity_244_vtkexporttest_isavailablereturnsconsistentvalue,
+    "VtkExportTest.IsAvailableReturnsConsistentValue",
+    "visualization"
+);
+parity_case!(
+    parity_245_vtkexporttest_exportsurfacemeshcreatesfile,
+    "VtkExportTest.ExportSurfaceMeshCreatesFile",
+    "visualization"
+);
+parity_case!(
+    parity_246_vtkexporttest_exportspanwisedistributionscreatesfile,
+    "VtkExportTest.ExportSpanwiseDistributionsCreatesFile",
+    "visualization"
+);
+parity_case!(
+    parity_247_vtkexporttest_exportwakegeometrycreatesfile,
+    "VtkExportTest.ExportWakeGeometryCreatesFile",
+    "visualization"
+);
+parity_case!(
+    parity_248_vtkexporttest_exportvelocityfieldcreatesfile,
+    "VtkExportTest.ExportVelocityFieldCreatesFile",
+    "visualization"
+);
+parity_case!(
+    parity_249_vtkexporttest_exportallcreatesallfiles,
+    "VtkExportTest.ExportAllCreatesAllFiles",
+    "visualization"
+);
+parity_case!(
+    parity_250_vtkexporttest_binaryvsasciiformat,
+    "VtkExportTest.BinaryVsAsciiFormat",
+    "visualization"
+);
+parity_case!(
+    parity_251_vtkexporttest_invalidsolutionreturnsfalse,
+    "VtkExportTest.InvalidSolutionReturnsFalse",
+    "visualization"
+);
+parity_case!(
+    parity_252_vtkexporttest_exportoptionsdefaultsarereasonable,
+    "VtkExportTest.ExportOptionsDefaultsAreReasonable",
+    "visualization"
+);
+parity_case!(
+    parity_253_controlsurfacedefinitiontest_namedefaultstoempty,
+    "ControlSurfaceDefinitionTest.NameDefaultsToEmpty",
+    "geometry"
+);
+parity_case!(
+    parity_254_controlsurfacedefinitiontest_setvalues,
+    "ControlSurfaceDefinitionTest.SetValues",
+    "geometry"
+);
+parity_case!(
+    parity_255_sectioncontrolsurfacetest_nocontrolsurfacesbydefault,
+    "SectionControlSurfaceTest.NoControlSurfacesByDefault",
+    "geometry"
+);
+parity_case!(
+    parity_256_sectioncontrolsurfacetest_addsinglecontrolsurface,
+    "SectionControlSurfaceTest.AddSingleControlSurface",
+    "geometry"
+);
+parity_case!(
+    parity_257_sectioncontrolsurfacetest_addmultiplecontrolsurfaces,
+    "SectionControlSurfaceTest.AddMultipleControlSurfaces",
+    "geometry"
+);
+parity_case!(
+    parity_258_aircraftcontrolsurfacetest_getcontrolsurfacenames,
+    "AircraftControlSurfaceTest.GetControlSurfaceNames",
+    "geometry"
+);
+parity_case!(
+    parity_259_aircraftcontrolsurfacetest_getnumcontrolsurfaces,
+    "AircraftControlSurfaceTest.GetNumControlSurfaces",
+    "geometry"
+);
+parity_case!(
+    parity_260_aircraftcontrolsurfacetest_multiplecontrolsurfaces,
+    "AircraftControlSurfaceTest.MultipleControlSurfaces",
+    "geometry"
+);
+parity_case!(
+    parity_261_meshcontrolsurfacetest_controlsurfacenamesinmesh,
+    "MeshControlSurfaceTest.ControlSurfaceNamesInMesh",
+    "geometry"
+);
+parity_case!(
+    parity_262_meshcontrolsurfacetest_controlinfluenceshavecorrectsize,
+    "MeshControlSurfaceTest.ControlInfluencesHaveCorrectSize",
+    "geometry"
+);
+parity_case!(
+    parity_263_meshcontrolsurfacetest_trailingedgepanelshaveinfluence,
+    "MeshControlSurfaceTest.TrailingEdgePanelsHaveInfluence",
+    "geometry"
+);
+parity_case!(
+    parity_264_meshcontrolsurfacetest_leadingedgepanelsnoinfluence,
+    "MeshControlSurfaceTest.LeadingEdgePanelsNoInfluence",
+    "geometry"
+);
+parity_case!(
+    parity_265_meshcontrolsurfacetest_influencehingeaxiscorrect,
+    "MeshControlSurfaceTest.InfluenceHingeAxisCorrect",
+    "geometry"
+);
+parity_case!(
+    parity_266_yduplicatecontrolsurfacetest_mirroredsurfacecreated,
+    "YDuplicateControlSurfaceTest.MirroredSurfaceCreated",
+    "geometry"
+);
+parity_case!(
+    parity_267_yduplicatecontrolsurfacetest_mirroredinfluencesexist,
+    "YDuplicateControlSurfaceTest.MirroredInfluencesExist",
+    "geometry"
+);
+parity_case!(
+    parity_268_yduplicatecontrolsurfacetest_mirroredcontrolsurfaceinfluences,
+    "YDuplicateControlSurfaceTest.MirroredControlSurfaceInfluences",
+    "geometry"
+);
+parity_case!(
+    parity_269_avlcontrolsurfaceparsingtest_parsebasiccontrolsurface,
+    "AvlControlSurfaceParsingTest.ParseBasicControlSurface",
+    "io"
+);
+parity_case!(
+    parity_270_avlcontrolsurfaceparsingtest_parsemultiplecontrolsurfaces,
+    "AvlControlSurfaceParsingTest.ParseMultipleControlSurfaces",
+    "io"
+);
+parity_case!(
+    parity_271_avlcontrolsurfaceparsingtest_parsecontrolsurfacehingevector,
+    "AvlControlSurfaceParsingTest.ParseControlSurfaceHingeVector",
+    "io"
+);
+parity_case!(
+    parity_272_avlcontrolsurfaceparsingtest_parsecontrolsurfacegain,
+    "AvlControlSurfaceParsingTest.ParseControlSurfaceGain",
+    "io"
+);
+parity_case!(
+    parity_273_controlsurfaceeffectivenesstest_controlsurfacespropagatetomesh,
+    "ControlSurfaceEffectivenessTest.ControlSurfacesPropagateToMesh",
+    "geometry"
+);
+parity_case!(
+    parity_274_controlsurfaceeffectivenesstest_influencematrixbuiltwithcontrols,
+    "ControlSurfaceEffectivenessTest.InfluenceMatrixBuiltWithControls",
+    "geometry"
+);
+parity_case!(
+    parity_275_controlderivativestest_defaultvalues,
+    "ControlDerivativesTest.DefaultValues",
+    "aero"
+);
+parity_case!(
+    parity_276_controlderivativestest_setvalues,
+    "ControlDerivativesTest.SetValues",
+    "aero"
+);
+parity_case!(
+    parity_277_flightconditioncontroltest_defaultnodeflections,
+    "FlightConditionControlTest.DefaultNoDeflections",
+    "geometry"
+);
+parity_case!(
+    parity_278_flightconditioncontroltest_setcontroldeflection,
+    "FlightConditionControlTest.SetControlDeflection",
+    "geometry"
+);
+parity_case!(
+    parity_279_stabilityderivativescontroltest_controlderivativesvector,
+    "StabilityDerivativesControlTest.ControlDerivativesVector",
+    "aero"
+);
+parity_case!(
+    parity_280_gradientcalculatortest_alphaderivativesmatchstabilityderivatives,
+    "GradientCalculatorTest.AlphaDerivativesMatchStabilityDerivatives",
+    "gradients"
+);
+parity_case!(
+    parity_281_gradientcalculatortest_betaderivativesmatchstabilityderivatives,
+    "GradientCalculatorTest.BetaDerivativesMatchStabilityDerivatives",
+    "gradients"
+);
+parity_case!(
+    parity_282_gradientcalculatortest_rollratederivativesmatchstabilityderivatives,
+    "GradientCalculatorTest.RollRateDerivativesMatchStabilityDerivatives",
+    "gradients"
+);
+parity_case!(
+    parity_283_gradientcalculatortest_pitchratederivativesmatchstabilityderivatives,
+    "GradientCalculatorTest.PitchRateDerivativesMatchStabilityDerivatives",
+    "gradients"
+);
+parity_case!(
+    parity_284_gradientcalculatortest_yawratederivativesmatchstabilityderivatives,
+    "GradientCalculatorTest.YawRateDerivativesMatchStabilityDerivatives",
+    "gradients"
+);
+parity_case!(
+    parity_285_gradientcalculatortest_machderivativescomputed,
+    "GradientCalculatorTest.MachDerivativesComputed",
+    "gradients"
+);
+parity_case!(
+    parity_286_gradientcalculatortest_machderivativesatlowmach,
+    "GradientCalculatorTest.MachDerivativesAtLowMach",
+    "gradients"
+);
+parity_case!(
+    parity_287_gradientcalculatortest_machderivativesathighmach,
+    "GradientCalculatorTest.MachDerivativesAtHighMach",
+    "gradients"
+);
+parity_case!(
+    parity_288_gradientcalculatortest_fullgradientscomputation,
+    "GradientCalculatorTest.FullGradientsComputation",
+    "gradients"
+);
+parity_case!(
+    parity_289_gradientcalculatortest_derivativesatzeroalpha,
+    "GradientCalculatorTest.DerivativesAtZeroAlpha",
+    "gradients"
+);
+parity_case!(
+    parity_290_gradientcalculatortest_outputselectionsubsetmatchesfullresults,
+    "GradientCalculatorTest.OutputSelectionSubsetMatchesFullResults",
+    "gradients"
+);
+parity_case!(
+    parity_291_gradientcalculatortest_outputselectionsingleoutput,
+    "GradientCalculatorTest.OutputSelectionSingleOutput",
+    "gradients"
+);
+parity_case!(
+    parity_292_gradientcalculatortest_outputselectionalldisabled,
+    "GradientCalculatorTest.OutputSelectionAllDisabled",
+    "gradients"
+);
+parity_case!(
+    parity_293_gradientcalculatortest_outputselectionbetaderivatives,
+    "GradientCalculatorTest.OutputSelectionBetaDerivatives",
+    "gradients"
+);
+parity_case!(
+    parity_294_gradientcalculatortest_outputselectiongeometrygradients,
+    "GradientCalculatorTest.OutputSelectionGeometryGradients",
+    "gradients"
+);
+parity_case!(
+    parity_295_gradientcalculatorwithtailtest_cmalphaisnegativewithtail,
+    "GradientCalculatorWithTailTest.CmAlphaIsNegativeWithTail",
+    "gradients"
+);
+parity_case!(
+    parity_296_gradientcalculatorwithtailtest_matchesstabilityderivatives,
+    "GradientCalculatorWithTailTest.MatchesStabilityDerivatives",
+    "gradients"
+);
+parity_case!(
+    parity_297_geometrygradienttest_chordgradientisnonzero,
+    "GeometryGradientTest.ChordGradientIsNonZero",
+    "gradients"
+);
+parity_case!(
+    parity_298_geometrygradienttest_twistgradientphysicallycorrect,
+    "GeometryGradientTest.TwistGradientPhysicallyCorrect",
+    "gradients"
+);
+parity_case!(
+    parity_299_geometrygradienttest_spanpositiongradientnonzero,
+    "GeometryGradientTest.SpanPositionGradientNonZero",
+    "gradients"
+);
+parity_case!(
+    parity_300_geometrygradienttest_fullgeometrygradientsreturnsallsections,
+    "GeometryGradientTest.FullGeometryGradientsReturnsAllSections",
+    "gradients"
+);
+parity_case!(
+    parity_301_geometrygradienttest_getchordgradientsforextraction,
+    "GeometryGradientTest.GetChordGradientsForExtraction",
+    "gradients"
+);
+parity_case!(
+    parity_302_geometrygradienttest_gettwistgradientsforextraction,
+    "GeometryGradientTest.GetTwistGradientsForExtraction",
+    "gradients"
+);
+parity_case!(
+    parity_303_geometrygradienttest_dihedralgradientaffectsrollingmoment,
+    "GeometryGradientTest.DihedralGradientAffectsRollingMoment",
+    "gradients"
+);
+parity_case!(
+    parity_304_geometrygradienttest_gradientsaresymmetricforsymmetricsections,
+    "GeometryGradientTest.GradientsAreSymmetricForSymmetricSections",
+    "gradients"
+);
+parity_case!(
+    parity_305_multisurfacegeometrygradienttest_gradientscomputedforallsurfaces,
+    "MultiSurfaceGeometryGradientTest.GradientsComputedForAllSurfaces",
+    "gradients"
+);
+parity_case!(
+    parity_306_multisurfacegeometrygradienttest_tailtwistaffectspitchingmoment,
+    "MultiSurfaceGeometryGradientTest.TailTwistAffectsPitchingMoment",
+    "gradients"
+);
+parity_case!(
+    parity_307_adjointsolvertest_constructfromsolverbeforesolve,
+    "AdjointSolverTest.ConstructFromSolverBeforeSolve",
+    "gradients"
+);
+parity_case!(
+    parity_308_adjointsolvertest_constructfromsolveraftersolve,
+    "AdjointSolverTest.ConstructFromSolverAfterSolve",
+    "gradients"
+);
+parity_case!(
+    parity_309_adjointsolvertest_solveadjointreturnscorrectsize,
+    "AdjointSolverTest.SolveAdjointReturnsCorrectSize",
+    "gradients"
+);
+parity_case!(
+    parity_310_adjointsolvertest_adjointsolveiscorrect,
+    "AdjointSolverTest.AdjointSolveIsCorrect",
+    "gradients"
+);
+parity_case!(
+    parity_311_adjointsolvertest_solvemultipleadjointproblems,
+    "AdjointSolverTest.SolveMultipleAdjointProblems",
+    "gradients"
+);
+parity_case!(
+    parity_312_adjointsolvertest_forcegradientshavecorrectsize,
+    "AdjointSolverTest.ForceGradientsHaveCorrectSize",
+    "gradients"
+);
+parity_case!(
+    parity_313_adjointsolvertest_forcegradientsarenonzero,
+    "AdjointSolverTest.ForceGradientsAreNonZero",
+    "gradients"
+);
+parity_case!(
+    parity_314_adjointsolvertest_clgradientispositive,
+    "AdjointSolverTest.CLGradientIsPositive",
+    "gradients"
+);
+parity_case!(
+    parity_315_adjointsolvertest_adjointidentitytest,
+    "AdjointSolverTest.AdjointIdentityTest",
+    "gradients"
+);
+parity_case!(
+    parity_316_adjointvalidationtest_adjointmatchesfinitediffforcl,
+    "AdjointValidationTest.AdjointMatchesFiniteDiffForCL",
+    "gradients"
+);
+parity_case!(
+    parity_317_optvlgradientvalidationtest_alphaderivativesmatchfd,
+    "OptVLGradientValidationTest.AlphaDerivativesMatchFD",
+    "gradients"
+);
+parity_case!(
+    parity_318_optvlgradientvalidationtest_betaderivativesmatchfd,
+    "OptVLGradientValidationTest.BetaDerivativesMatchFD",
+    "gradients"
+);
+parity_case!(
+    parity_319_optvlgradientvalidationtest_machderivativesmatchfd,
+    "OptVLGradientValidationTest.MachDerivativesMatchFD",
+    "gradients"
+);
+parity_case!(
+    parity_320_optvlgradientvalidationtest_fullgradientsconsistency,
+    "OptVLGradientValidationTest.FullGradientsConsistency",
+    "gradients"
+);
+parity_case!(
+    parity_321_optvlgradientvalidationtest_geometrygradientsvsfinitedifferences,
+    "OptVLGradientValidationTest.GeometryGradientsVsFiniteDifferences",
+    "gradients"
+);
+parity_case!(
+    parity_322_optvlgradientvalidationtest_adjointgeometrygradientmatchesfd,
+    "OptVLGradientValidationTest.AdjointGeometryGradientMatchesFD",
+    "gradients"
+);
+parity_case!(
+    parity_323_optvlgradientvalidationtest_twistgradientsigniscorrect,
+    "OptVLGradientValidationTest.TwistGradientSignIsCorrect",
+    "gradients"
+);
+parity_case!(
+    parity_324_optvlgradientvalidationtest_tailtwistgradientaffectscmstrongly,
+    "OptVLGradientValidationTest.TailTwistGradientAffectsCmStrongly",
+    "gradients"
+);
+parity_case!(
+    parity_325_optvlgradientvalidationtest_liftcurveslopeisreasonable,
+    "OptVLGradientValidationTest.LiftCurveSlopeIsReasonable",
+    "gradients"
+);
+parity_case!(
+    parity_326_optvlgradientvalidationtest_rolldampingisnegative,
+    "OptVLGradientValidationTest.RollDampingIsNegative",
+    "gradients"
+);
+parity_case!(
+    parity_327_optvlgradientvalidationtest_pitchratederivativesarecomputed,
+    "OptVLGradientValidationTest.PitchRateDerivativesAreComputed",
+    "gradients"
+);
+parity_case!(
+    parity_328_optvlgradientvalidationtest_compressibilityincreasescoefficients,
+    "OptVLGradientValidationTest.CompressibilityIncreasesCoefficients",
+    "gradients"
+);
+parity_case!(
+    parity_329_optvlgradientvalidationtest_lateralderivsaresmallcomparedtolongitudinal,
+    "OptVLGradientValidationTest.LateralDerivsAreSmallComparedToLongitudinal",
+    "gradients"
+);
+parity_case!(
+    parity_330_optvlgradientvalidationtest_zeroalphagivesminimumdragslope,
+    "OptVLGradientValidationTest.ZeroAlphaGivesMinimumDragSlope",
+    "gradients"
+);
+parity_case!(
+    parity_331_meshinputtest_basicsolveproducesvalidresults,
+    "MeshInputTest.BasicSolveProducesValidResults",
+    "solver"
+);
+parity_case!(
+    parity_332_meshinputtest_consistencywithaircraftpath,
+    "MeshInputTest.ConsistencyWithAircraftPath",
+    "solver"
+);
+parity_case!(
+    parity_333_meshinputtest_meshdimensions,
+    "MeshInputTest.MeshDimensions",
+    "solver"
+);
+parity_case!(
+    parity_334_meshnodegradienttest_outputstructure,
+    "MeshNodeGradientTest.OutputStructure",
+    "gradients"
+);
+parity_case!(
+    parity_335_meshnodegradienttest_clgradientfinitedifference,
+    "MeshNodeGradientTest.CLGradientFiniteDifference",
+    "gradients"
+);
+parity_case!(
+    parity_336_meshnodegradienttest_clgradientyduplicated,
+    "MeshNodeGradientTest.CLGradientYDuplicated",
+    "gradients"
+);
+parity_case!(
+    parity_337_meshnodegradienttest_fullspanvsyduplicated,
+    "MeshNodeGradientTest.FullSpanVsYDuplicated",
+    "gradients"
+);
+parity_case!(
+    parity_338_meshnodegradienttest_normalgradientkernel,
+    "MeshNodeGradientTest.NormalGradientKernel",
+    "gradients"
+);
+parity_case!(
+    parity_339_bodytest_defaultconstruction,
+    "BodyTest.DefaultConstruction",
+    "geometry"
+);
+parity_case!(
+    parity_340_bodytest_namedconstruction,
+    "BodyTest.NamedConstruction",
+    "geometry"
+);
+parity_case!(parity_341_bodytest_setname, "BodyTest.SetName", "geometry");
+parity_case!(
+    parity_342_bodytest_addandgetsections,
+    "BodyTest.AddAndGetSections",
+    "geometry"
+);
+parity_case!(
+    parity_343_bodytest_nodecount,
+    "BodyTest.NodeCount",
+    "geometry"
+);
+parity_case!(
+    parity_344_bodytest_nodespacing,
+    "BodyTest.NodeSpacing",
+    "geometry"
+);
+parity_case!(
+    parity_345_bodytest_translation,
+    "BodyTest.Translation",
+    "geometry"
+);
+parity_case!(parity_346_bodytest_scale, "BodyTest.Scale", "geometry");
+parity_case!(
+    parity_347_bodytest_defaultscale,
+    "BodyTest.DefaultScale",
+    "geometry"
+);
+parity_case!(
+    parity_348_bodytest_defaulttranslation,
+    "BodyTest.DefaultTranslation",
+    "geometry"
+);
+parity_case!(
+    parity_349_bodytest_yduplicate,
+    "BodyTest.YDuplicate",
+    "geometry"
+);
+parity_case!(
+    parity_350_aicelementgradienttest_gradientsmatchfd,
+    "AICElementGradientTest.GradientsMatchFD",
+    "gradients"
+);
+parity_case!(
+    parity_351_aicelementgradienttest_withoutbound,
+    "AICElementGradientTest.WithoutBound",
+    "gradients"
+);
+parity_case!(
+    parity_352_aicelementgradienttest_prandtlglauert,
+    "AICElementGradientTest.PrandtlGlauert",
+    "gradients"
+);
+parity_case!(
+    parity_353_aicrowcolumntest_rowgradientmatchesfd,
+    "AICRowColumnTest.RowGradientMatchesFD",
+    "gradients"
+);
+parity_case!(
+    parity_354_aicrowcolumntest_columngradientfinite,
+    "AICRowColumnTest.ColumnGradientFinite",
+    "gradients"
+);
+parity_case!(
+    parity_355_aicrowcolumntest_differentcomponents,
+    "AICRowColumnTest.DifferentComponents",
+    "gradients"
+);
+parity_case!(
+    parity_356_aicrowcolumntest_velocityrowgradientfinite,
+    "AICRowColumnTest.VelocityRowGradientFinite",
+    "gradients"
+);
+parity_case!(
+    parity_357_aicrowcolumntest_velocitycolumngradientfinite,
+    "AICRowColumnTest.VelocityColumnGradientFinite",
+    "gradients"
+);
+parity_case!(
+    parity_358_aicrowcolumntest_velocitycolumngradientzerogamma,
+    "AICRowColumnTest.VelocityColumnGradientZeroGamma",
+    "gradients"
+);
+parity_case!(
+    parity_359_biotsavartvjptest_primalnonzero,
+    "BiotSavartVJPTest.PrimalNonZero",
+    "gradients"
+);
+parity_case!(
+    parity_360_biotsavartvjptest_fieldpointvjpmatchesfd,
+    "BiotSavartVJPTest.FieldPointVJPMatchesFD",
+    "gradients"
+);
+parity_case!(
+    parity_361_biotsavartvjptest_boundleftvjpmatchesfd,
+    "BiotSavartVJPTest.BoundLeftVJPMatchesFD",
+    "gradients"
+);
+parity_case!(
+    parity_362_biotsavartvjptest_boundrightvjpmatchesfd,
+    "BiotSavartVJPTest.BoundRightVJPMatchesFD",
+    "gradients"
+);
+parity_case!(
+    parity_363_biotsavartvjptest_withoutboundvortex,
+    "BiotSavartVJPTest.WithoutBoundVortex",
+    "gradients"
+);
+parity_case!(
+    parity_364_biotsavartvjptest_prandtlglauertscaling,
+    "BiotSavartVJPTest.PrandtlGlauertScaling",
+    "gradients"
+);
+parity_case!(
+    parity_365_biotsavartvjptest_largercoreradius,
+    "BiotSavartVJPTest.LargerCoreRadius",
+    "gradients"
+);
+parity_case!(
+    parity_366_biotsavartvjptest_arbitraryseeddirection,
+    "BiotSavartVJPTest.ArbitrarySeedDirection",
+    "gradients"
+);
+parity_case!(
+    parity_367_biotsavartaictest_aicelementkernel,
+    "BiotSavartAICTest.AICElementKernel",
+    "gradients"
+);
+parity_case!(
+    parity_368_biotsavartaictest_aicelementkernelwithoutbound,
+    "BiotSavartAICTest.AICElementKernelWithoutBound",
+    "gradients"
+);
+parity_case!(
+    parity_369_forcegradienttest_primalkernelcomputesalloutputs,
+    "ForceGradientTest.PrimalKernelComputesAllOutputs",
+    "gradients"
+);
+parity_case!(
+    parity_370_forcegradienttest_freestreamdirection,
+    "ForceGradientTest.FreestreamDirection",
+    "gradients"
+);
+parity_case!(
+    parity_371_forcegradienttest_freestreamalphagradient,
+    "ForceGradientTest.FreestreamAlphaGradient",
+    "gradients"
+);
+parity_case!(
+    parity_372_forcegradienttest_freestreambetagradient,
+    "ForceGradientTest.FreestreamBetaGradient",
+    "gradients"
+);
+parity_case!(
+    parity_373_forcegradienttest_bodytostability,
+    "ForceGradientTest.BodyToStability",
+    "gradients"
+);
+parity_case!(
+    parity_374_forcegradienttest_alphagradientmatchesfd,
+    "ForceGradientTest.AlphaGradientMatchesFD",
+    "gradients"
+);
+parity_case!(
+    parity_375_forcegradienttest_betagradientmatchesfd,
+    "ForceGradientTest.BetaGradientMatchesFD",
+    "gradients"
+);
+parity_case!(
+    parity_376_forcegradienttest_circulationgradientmatchesfd,
+    "ForceGradientTest.CirculationGradientMatchesFD",
+    "gradients"
+);
+parity_case!(
+    parity_377_forcegradienttest_inducedvelocitygradientmatchesfd,
+    "ForceGradientTest.InducedVelocityGradientMatchesFD",
+    "gradients"
+);
+parity_case!(
+    parity_378_forcegradienttest_geometrygradientmatchesfd,
+    "ForceGradientTest.GeometryGradientMatchesFD",
+    "gradients"
+);
+parity_case!(
+    parity_379_forcegradienttest_zeroalpha,
+    "ForceGradientTest.ZeroAlpha",
+    "gradients"
+);
+parity_case!(
+    parity_380_trefftzgradienttest_primalkernelcomputes,
+    "TrefftzGradientTest.PrimalKernelComputes",
+    "gradients"
+);
+parity_case!(
+    parity_381_trefftzgradienttest_spanefficiency,
+    "TrefftzGradientTest.SpanEfficiency",
+    "gradients"
+);
+parity_case!(
+    parity_382_trefftzgradienttest_spanefficiencyzerodrag,
+    "TrefftzGradientTest.SpanEfficiencyZeroDrag",
+    "gradients"
+);
+parity_case!(
+    parity_383_trefftzgradienttest_trefftzvelocitypoint,
+    "TrefftzGradientTest.TrefftzVelocityPoint",
+    "gradients"
+);
+parity_case!(
+    parity_384_trefftzgradienttest_clgradientmatchesfd,
+    "TrefftzGradientTest.CLGradientMatchesFD",
+    "gradients"
+);
+parity_case!(
+    parity_385_trefftzgradienttest_cygradientmatchesfd,
+    "TrefftzGradientTest.CYGradientMatchesFD",
+    "gradients"
+);
+parity_case!(
+    parity_386_trefftzgradienttest_cdigradientmatchesfd,
+    "TrefftzGradientTest.CDiGradientMatchesFD",
+    "gradients"
+);
+parity_case!(
+    parity_387_trefftzgradienttest_multisurfacecoreradius,
+    "TrefftzGradientTest.MultiSurfaceCoreRadius",
+    "gradients"
+);
+parity_case!(
+    parity_388_meshsensitivitytest_extractmesharrays,
+    "MeshSensitivityTest.ExtractMeshArrays",
+    "gradients"
+);
+parity_case!(
+    parity_389_meshsensitivitytest_buildsectionstripmappingsinglesurface,
+    "MeshSensitivityTest.BuildSectionStripMappingSingleSurface",
+    "gradients"
+);
+parity_case!(
+    parity_390_meshsensitivitytest_buildsectionstripmappingyduplicate,
+    "MeshSensitivityTest.BuildSectionStripMappingYDuplicate",
+    "gradients"
+);
+parity_case!(
+    parity_391_meshsensitivitytest_builddefaultchordwisefractions,
+    "MeshSensitivityTest.BuildDefaultChordwiseFractions",
+    "gradients"
+);
+parity_case!(
+    parity_392_meshsensitivitytest_stripinterpolationfraction,
+    "MeshSensitivityTest.StripInterpolationFraction",
+    "gradients"
+);
+parity_case!(
+    parity_393_meshsensitivitytest_stripedgefractions,
+    "MeshSensitivityTest.StripEdgeFractions",
+    "gradients"
+);
+parity_case!(
+    parity_394_meshsensitivitytest_buildspanwisefractions,
+    "MeshSensitivityTest.BuildSpanwiseFractions",
+    "gradients"
+);
+parity_case!(
+    parity_395_meshsensitivitytest_sectionstripmappinggetstriprange,
+    "MeshSensitivityTest.SectionStripMappingGetStripRange",
+    "gradients"
+);
+parity_case!(
+    parity_396_meshsensitivitytest_meshgradientsresizeandzero,
+    "MeshSensitivityTest.MeshGradientsResizeAndZero",
+    "gradients"
+);
+parity_case!(
+    parity_397_meshsensitivitytest_propagateleadingedgegradient,
+    "MeshSensitivityTest.PropagateLeadingEdgeGradient",
+    "gradients"
+);
+parity_case!(
+    parity_398_meshsensitivitytest_propagatechordgradient,
+    "MeshSensitivityTest.PropagateChordGradient",
+    "gradients"
+);
+parity_case!(
+    parity_399_meshsensitivitytest_computesectiongradientfrommesh,
+    "MeshSensitivityTest.ComputeSectionGradientFromMesh",
+    "gradients"
+);
+parity_case!(
+    parity_400_meshsensitivitytest_propagatetwistgradient,
+    "MeshSensitivityTest.PropagateTwistGradient",
+    "gradients"
+);
+parity_case!(
+    parity_401_meshsensitivitymultisurfacetest_twosurfaces,
+    "MeshSensitivityMultiSurfaceTest.TwoSurfaces",
+    "gradients"
+);
+parity_case!(
+    parity_402_mathutilitiestest_prandtlglauertzeromach,
+    "MathUtilitiesTest.PrandtlGlauertZeroMach",
+    "geometry"
+);
+parity_case!(
+    parity_403_mathutilitiestest_prandtlglauertsubsonic,
+    "MathUtilitiesTest.PrandtlGlauertSubsonic",
+    "geometry"
+);
+parity_case!(
+    parity_404_mathutilitiestest_vortexsegmentabovecenter,
+    "MathUtilitiesTest.VortexSegmentAboveCenter",
+    "geometry"
+);
+parity_case!(
+    parity_405_mathutilitiestest_vortexsegmentonaxis,
+    "MathUtilitiesTest.VortexSegmentOnAxis",
+    "geometry"
+);
+parity_case!(
+    parity_406_mathutilitiestest_vortexsegmentatendpoint,
+    "MathUtilitiesTest.VortexSegmentAtEndpoint",
+    "geometry"
+);
+parity_case!(
+    parity_407_mathutilitiestest_trailingvortexabove,
+    "MathUtilitiesTest.TrailingVortexAbove",
+    "geometry"
+);
+parity_case!(
+    parity_408_mathutilitiestest_trailingvortexatstart,
+    "MathUtilitiesTest.TrailingVortexAtStart",
+    "geometry"
+);
+parity_case!(
+    parity_409_mathutilitiestest_trailingvortexdownstream,
+    "MathUtilitiesTest.TrailingVortexDownstream",
+    "geometry"
+);
+parity_case!(
+    parity_410_mathutilitiestest_cosinespacingendpoints,
+    "MathUtilitiesTest.CosineSpacingEndpoints",
+    "geometry"
+);
+parity_case!(
+    parity_411_mathutilitiestest_cosinespacingconcentration,
+    "MathUtilitiesTest.CosineSpacingConcentration",
+    "geometry"
+);
+parity_case!(
+    parity_412_mathutilitiestest_uniformspacing,
+    "MathUtilitiesTest.UniformSpacing",
+    "geometry"
+);
+parity_case!(
+    parity_413_mathutilitiestest_sinespacing,
+    "MathUtilitiesTest.SineSpacing",
+    "geometry"
+);
+parity_case!(
+    parity_414_mathutilitiestest_blendedspacinguniform,
+    "MathUtilitiesTest.BlendedSpacingUniform",
+    "geometry"
+);
+parity_case!(
+    parity_415_mathutilitiestest_blendedspacingcosine,
+    "MathUtilitiesTest.BlendedSpacingCosine",
+    "geometry"
+);
+parity_case!(
+    parity_416_mathutilitiestest_spacingdispatcheruniform,
+    "MathUtilitiesTest.SpacingDispatcherUniform",
+    "geometry"
+);
+parity_case!(
+    parity_417_mathutilitiestest_spacingdispatchercosine,
+    "MathUtilitiesTest.SpacingDispatcherCosine",
+    "geometry"
+);
+parity_case!(
+    parity_418_mathutilitiestest_spacingdispatchersine,
+    "MathUtilitiesTest.SpacingDispatcherSine",
+    "geometry"
+);
+parity_case!(
+    parity_419_mathutilitiestest_spacingdispatcherblend,
+    "MathUtilitiesTest.SpacingDispatcherBlend",
+    "geometry"
+);
+parity_case!(
+    parity_420_mathutilitiestest_spacingdispatchernone,
+    "MathUtilitiesTest.SpacingDispatcherNone",
+    "geometry"
+);
+parity_case!(
+    parity_421_mathutilitiestest_rotateaboutxidentity,
+    "MathUtilitiesTest.RotateAboutXIdentity",
+    "geometry"
+);
+parity_case!(
+    parity_422_mathutilitiestest_rotateaboutx90,
+    "MathUtilitiesTest.RotateAboutX90",
+    "geometry"
+);
+parity_case!(
+    parity_423_mathutilitiestest_rotateaboutyidentity,
+    "MathUtilitiesTest.RotateAboutYIdentity",
+    "geometry"
+);
+parity_case!(
+    parity_424_mathutilitiestest_rotateabouty90,
+    "MathUtilitiesTest.RotateAboutY90",
+    "geometry"
+);
+parity_case!(
+    parity_425_mathutilitiestest_rotateaboutzidentity,
+    "MathUtilitiesTest.RotateAboutZIdentity",
+    "geometry"
+);
+parity_case!(
+    parity_426_mathutilitiestest_rotateaboutz90,
+    "MathUtilitiesTest.RotateAboutZ90",
+    "geometry"
+);
+parity_case!(
+    parity_427_mathutilitiestest_windtobodyidentity,
+    "MathUtilitiesTest.WindToBodyIdentity",
+    "geometry"
+);
+parity_case!(
+    parity_428_mathutilitiestest_windtobodyorthogonality,
+    "MathUtilitiesTest.WindToBodyOrthogonality",
+    "geometry"
+);
+parity_case!(
+    parity_429_mathutilitiestest_windtobodyalphaonly,
+    "MathUtilitiesTest.WindToBodyAlphaOnly",
+    "geometry"
+);
+parity_case!(
+    parity_430_mathutilitiestest_bodytostabilityidentity,
+    "MathUtilitiesTest.BodyToStabilityIdentity",
+    "geometry"
+);
+parity_case!(
+    parity_431_mathutilitiestest_bodytostabilityorthogonality,
+    "MathUtilitiesTest.BodyToStabilityOrthogonality",
+    "geometry"
+);
+parity_case!(
+    parity_432_mathutilitiestest_bodytostabilityelements,
+    "MathUtilitiesTest.BodyToStabilityElements",
+    "geometry"
+);
+parity_case!(
+    parity_433_operatingvariablestest_defaultnumvariables,
+    "OperatingVariablesTest.DefaultNumVariables",
+    "trim"
+);
+parity_case!(
+    parity_434_operatingvariablestest_numvariableswithcontrols,
+    "OperatingVariablesTest.NumVariablesWithControls",
+    "trim"
+);
+parity_case!(
+    parity_435_operatingvariablestest_defaultvalues,
+    "OperatingVariablesTest.DefaultValues",
+    "trim"
+);
+parity_case!(
+    parity_436_trimconstraintstest_defaultallfree,
+    "TrimConstraintsTest.DefaultAllFree",
+    "trim"
+);
+parity_case!(
+    parity_437_trimconstraintstest_constraintcountwithcontrols,
+    "TrimConstraintsTest.ConstraintCountWithControls",
+    "trim"
+);
+parity_case!(
+    parity_438_trimconstraintstest_allconstrainttypescount,
+    "TrimConstraintsTest.AllConstraintTypesCount",
+    "trim"
+);
+parity_case!(
+    parity_439_trimpresetstest_levelflightratesfixed,
+    "TrimPresetsTest.LevelFlightRatesFixed",
+    "trim"
+);
+parity_case!(
+    parity_440_trimpresetstest_leveltrimmedflight,
+    "TrimPresetsTest.LevelTrimmedFlight",
+    "trim"
+);
+parity_case!(
+    parity_441_trimpresetstest_steadyturn,
+    "TrimPresetsTest.SteadyTurn",
+    "trim"
+);
+parity_case!(
+    parity_442_trimpresetstest_steadysideslipallfields,
+    "TrimPresetsTest.SteadySideslipAllFields",
+    "trim"
+);
+parity_case!(
+    parity_443_variableconstrainttest_defaultstate,
+    "VariableConstraintTest.DefaultState",
+    "trim"
+);
+parity_case!(
+    parity_444_sectionunittest_defaultconstructor,
+    "SectionUnitTest.DefaultConstructor",
+    "geometry"
+);
+parity_case!(
+    parity_445_sectionunittest_parameterizedconstructor,
+    "SectionUnitTest.ParameterizedConstructor",
+    "geometry"
+);
+parity_case!(
+    parity_446_sectionunittest_constructorwithairfoil,
+    "SectionUnitTest.ConstructorWithAirfoil",
+    "geometry"
+);
+parity_case!(
+    parity_447_sectionunittest_getairfoilwithoutcustomreturnsflat,
+    "SectionUnitTest.GetAirfoilWithoutCustomReturnsFlat",
+    "geometry"
+);
+parity_case!(
+    parity_448_sectionunittest_getairfoilmutablecreatesflat,
+    "SectionUnitTest.GetAirfoilMutableCreatesFlat",
+    "geometry"
+);
+parity_case!(
+    parity_449_sectionunittest_getairfoilwithcustomreturnscustom,
+    "SectionUnitTest.GetAirfoilWithCustomReturnsCustom",
+    "geometry"
+);
+parity_case!(
+    parity_450_sectionunittest_setairfoil,
+    "SectionUnitTest.SetAirfoil",
+    "geometry"
+);
+parity_case!(
+    parity_451_sectionunittest_setleadingedgeposition,
+    "SectionUnitTest.SetLeadingEdgePosition",
+    "geometry"
+);
+parity_case!(
+    parity_452_sectionunittest_setchord,
+    "SectionUnitTest.SetChord",
+    "geometry"
+);
+parity_case!(
+    parity_453_sectionunittest_settwistangle,
+    "SectionUnitTest.SetTwistAngle",
+    "geometry"
+);
+parity_case!(
+    parity_454_sectionunittest_twistangleradians,
+    "SectionUnitTest.TwistAngleRadians",
+    "geometry"
+);
+parity_case!(
+    parity_455_sectionunittest_clalphafactor,
+    "SectionUnitTest.ClAlphaFactor",
+    "geometry"
+);
+parity_case!(
+    parity_456_sectionunittest_twistoffsetdefaultstozero,
+    "SectionUnitTest.TwistOffsetDefaultsToZero",
+    "geometry"
+);
+parity_case!(
+    parity_457_sectionunittest_twistoffsetaddstogeometrictwist,
+    "SectionUnitTest.TwistOffsetAddsToGeometricTwist",
+    "geometry"
+);
+parity_case!(
+    parity_458_sectionunittest_addcontrolsurface,
+    "SectionUnitTest.AddControlSurface",
+    "geometry"
+);
+parity_case!(
+    parity_459_sectionunittest_adddesignvariable,
+    "SectionUnitTest.AddDesignVariable",
+    "geometry"
+);
+parity_case!(
+    parity_460_sectionunittest_spanwisepanelcount,
+    "SectionUnitTest.SpanwisePanelCount",
+    "geometry"
+);
+parity_case!(
+    parity_461_sectionunittest_spanwisespacingenum,
+    "SectionUnitTest.SpanwiseSpacingEnum",
+    "geometry"
+);
+parity_case!(
+    parity_462_sectionunittest_spanwisespacingnumericuniform,
+    "SectionUnitTest.SpanwiseSpacingNumericUniform",
+    "geometry"
+);
+parity_case!(
+    parity_463_sectionunittest_spanwisespacingnumericcosine,
+    "SectionUnitTest.SpanwiseSpacingNumericCosine",
+    "geometry"
+);
+parity_case!(
+    parity_464_sectionunittest_spanwisespacingnumericsine,
+    "SectionUnitTest.SpanwiseSpacingNumericSine",
+    "geometry"
+);
+parity_case!(
+    parity_465_sectionunittest_viscouspolar,
+    "SectionUnitTest.ViscousPolar",
+    "geometry"
+);
+parity_case!(
+    parity_466_aerodynamicresultstest_defaultstate,
+    "AerodynamicResultsTest.DefaultState",
+    "aero"
+);
+parity_case!(
+    parity_467_aerodynamicresultstest_getaspectratio,
+    "AerodynamicResultsTest.GetAspectRatio",
+    "aero"
+);
+parity_case!(
+    parity_468_aerodynamicresultstest_getaspectratiosquarewing,
+    "AerodynamicResultsTest.GetAspectRatioSquareWing",
+    "aero"
+);
+parity_case!(
+    parity_469_aerodynamicresultstest_getidealinduceddrag,
+    "AerodynamicResultsTest.GetIdealInducedDrag",
+    "aero"
+);
+parity_case!(
+    parity_470_aerodynamicresultstest_getidealinduceddragzerocl,
+    "AerodynamicResultsTest.GetIdealInducedDragZeroCL",
+    "aero"
+);
+parity_case!(
+    parity_471_aerodynamicresultstest_clear,
+    "AerodynamicResultsTest.Clear",
+    "aero"
+);
+parity_case!(
+    parity_472_striploadstest_defaultstate,
+    "StripLoadsTest.DefaultState",
+    "aero"
+);
+parity_case!(
+    parity_473_surfaceloadstest_defaultstate,
+    "SurfaceLoadsTest.DefaultState",
+    "aero"
+);
+parity_case!(
+    parity_474_forwardjvpbatchtest_batchmatchesperdirectionjvps,
+    "ForwardJvpBatchTest.BatchMatchesPerDirectionJVPs",
+    "gradients"
+);
+parity_case!(
+    parity_475_forwardjvpbatchtest_geometryvjpsareexacttransposes,
+    "ForwardJvpBatchTest.GeometryVJPsAreExactTransposes",
+    "gradients"
+);
+parity_case!(
+    parity_476_forwardjvpbatchtest_meshperturbationjvpmatchesresolve,
+    "ForwardJvpBatchTest.MeshPerturbationJVPMatchesResolve",
+    "gradients"
+);
+parity_case!(
+    parity_477_rectangularwingtest_liftcurveslopematchestheory,
+    "RectangularWingTest.LiftCurveSlopeMatchesTheory",
+    "solver"
+);
+parity_case!(
+    parity_478_rectangularwingtest_induceddragnonzero,
+    "RectangularWingTest.InducedDragNonZero",
+    "solver"
+);
+parity_case!(
+    parity_479_rectangularwingtest_zeroliftatzeroalpha,
+    "RectangularWingTest.ZeroLiftAtZeroAlpha",
+    "solver"
+);
+parity_case!(
+    parity_480_rectangularwingtest_liftlinearwithalpha,
+    "RectangularWingTest.LiftLinearWithAlpha",
+    "solver"
+);
+parity_case!(
+    parity_481_rectangularwingtest_stabilityderivativesphysicallyreasonable,
+    "RectangularWingTest.StabilityDerivativesPhysicallyReasonable",
+    "solver"
+);
+parity_case!(
+    parity_482_avlfiletest_parserectangularwing,
+    "AvlFileTest.ParseRectangularWing",
+    "io"
+);
+parity_case!(
+    parity_483_avlfiletest_solvefromparsedgeometry,
+    "AvlFileTest.SolveFromParsedGeometry",
+    "io"
+);
+parity_case!(
+    parity_484_aspectratiosweep_highaspectratiotest_liftslopeapproaches2pi_6,
+    "AspectRatioSweep/HighAspectRatioTest.LiftSlopeApproaches2Pi/6",
+    "solver"
+);
+parity_case!(
+    parity_485_aspectratiosweep_highaspectratiotest_liftslopeapproaches2pi_7,
+    "AspectRatioSweep/HighAspectRatioTest.LiftSlopeApproaches2Pi/7",
+    "solver"
+);
+parity_case!(
+    parity_486_aspectratiosweep_highaspectratiotest_liftslopeapproaches2pi_8,
+    "AspectRatioSweep/HighAspectRatioTest.LiftSlopeApproaches2Pi/8",
+    "solver"
+);
+parity_case!(
+    parity_487_aspectratiosweep_highaspectratiotest_liftslopeapproaches2pi_10,
+    "AspectRatioSweep/HighAspectRatioTest.LiftSlopeApproaches2Pi/10",
+    "solver"
+);

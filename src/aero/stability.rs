@@ -1,0 +1,237 @@
+//! Stability derivative extraction from cached unit responses.
+
+use crate::core::{EPSILON, Scalar, Vec3};
+use crate::error::{PegasusError, Result};
+use crate::geometry::Aircraft;
+use crate::solver::{FlightCondition, SolutionState, VortexLattice, VortexLatticeSolver};
+
+use super::{
+    AerodynamicResults, BodyAxisDerivatives, Coefficients, ControlDerivatives, ForceCalculator,
+    StabilityDerivatives,
+};
+
+/// Computes angle and nondimensional rate derivatives.
+#[derive(Clone, Copy, Debug, Default)]
+pub struct StabilityDerivativeCalculator;
+
+impl StabilityDerivativeCalculator {
+    fn unit_forces(
+        aircraft: &Aircraft,
+        mesh: &VortexLattice,
+        circulation: crate::core::VecX,
+        condition: &FlightCondition,
+    ) -> AerodynamicResults {
+        let solution = SolutionState {
+            circulation,
+            is_valid: true,
+            ..SolutionState::default()
+        };
+        let mut calculator = ForceCalculator::default();
+        calculator.set_include_induced_velocity(false);
+        calculator.compute_for_aircraft(aircraft, mesh, &solution, condition)
+    }
+
+    pub fn compute(
+        &self,
+        aircraft: &Aircraft,
+        solver: &mut VortexLatticeSolver,
+        condition: &FlightCondition,
+    ) -> Result<StabilityDerivatives> {
+        if !solver.are_unit_responses_valid() {
+            solver.solve_unit_responses()?;
+        }
+        solver.solve(condition)?;
+        let solution = solver.solution();
+        let mesh = solver.mesh();
+        let unit = [
+            Self::unit_forces(
+                aircraft,
+                mesh,
+                solution.circulation_per_u.clone(),
+                condition,
+            ),
+            Self::unit_forces(
+                aircraft,
+                mesh,
+                solution.circulation_per_v.clone(),
+                condition,
+            ),
+            Self::unit_forces(
+                aircraft,
+                mesh,
+                solution.circulation_per_w.clone(),
+                condition,
+            ),
+            Self::unit_forces(
+                aircraft,
+                mesh,
+                solution.circulation_per_p.clone(),
+                condition,
+            ),
+            Self::unit_forces(
+                aircraft,
+                mesh,
+                solution.circulation_per_q.clone(),
+                condition,
+            ),
+            Self::unit_forces(
+                aircraft,
+                mesh,
+                solution.circulation_per_r.clone(),
+                condition,
+            ),
+        ];
+        if unit.iter().any(|result| !result.is_valid) {
+            return Err(PegasusError::InvalidSolution);
+        }
+        let (sin_alpha, cos_alpha) = condition.alpha.sin_cos();
+        let (sin_beta, cos_beta) = condition.beta.sin_cos();
+        let du_da = -sin_alpha * cos_beta;
+        let dw_da = cos_alpha * cos_beta;
+        let du_db = -cos_alpha * sin_beta;
+        let dv_db = cos_beta;
+        let dw_db = -sin_alpha * sin_beta;
+        let by_alpha = Coefficients::linear_combination(
+            unit[0].coefficients,
+            du_da,
+            unit[1].coefficients,
+            0.0,
+            unit[2].coefficients,
+            dw_da,
+        );
+        let by_beta = Coefficients::linear_combination(
+            unit[0].coefficients,
+            du_db,
+            unit[1].coefficients,
+            dv_db,
+            unit[2].coefficients,
+            dw_db,
+        );
+        let mut result = StabilityDerivatives {
+            is_valid: true,
+            reference_area: aircraft.reference_area(),
+            reference_chord: aircraft.reference_chord(),
+            reference_span: aircraft.reference_span(),
+            velocity: 1.0,
+            alpha: condition.alpha,
+            beta: condition.beta,
+            by_alpha,
+            by_beta,
+            by_roll_rate: unit[3].coefficients,
+            by_pitch_rate: unit[4].coefficients,
+            by_yaw_rate: unit[5].coefficients,
+            ..StabilityDerivatives::default()
+        };
+        if result.by_alpha.lift.abs() > EPSILON {
+            result.neutral_point_x = aircraft.moment_reference_point().x
+                - result.by_alpha.pitch / result.by_alpha.lift * result.reference_chord;
+            result.static_margin = (result.neutral_point_x - aircraft.moment_reference_point().x)
+                / result.reference_chord;
+        }
+        for name in solver.mesh().control_surface_names() {
+            let circulation = solver.control_circulation_derivative(condition, name)?;
+            let response = Self::unit_forces(aircraft, mesh, circulation, condition);
+            let deflection = condition
+                .control_deflections
+                .iter()
+                .filter(|(candidate, _)| candidate == name)
+                .map(|(_, value)| *value)
+                .sum();
+            result.control_derivatives.push(ControlDerivatives {
+                name: name.clone(),
+                deflection,
+                gain: 1.0,
+                coefficients: response.coefficients,
+                body_force: response.body_force,
+                hinge_moment: 0.0,
+            });
+        }
+        Ok(result)
+    }
+
+    pub fn compute_body_axis(
+        &self,
+        aircraft: &Aircraft,
+        solver: &mut VortexLatticeSolver,
+        condition: &FlightCondition,
+    ) -> Result<BodyAxisDerivatives> {
+        if !solver.are_unit_responses_valid() {
+            solver.solve_unit_responses()?;
+        }
+        solver.solve(condition)?;
+        let solution = solver.solution();
+        let mesh = solver.mesh();
+        let unit = [
+            Self::unit_forces(
+                aircraft,
+                mesh,
+                solution.circulation_per_u.clone(),
+                condition,
+            ),
+            Self::unit_forces(
+                aircraft,
+                mesh,
+                solution.circulation_per_v.clone(),
+                condition,
+            ),
+            Self::unit_forces(
+                aircraft,
+                mesh,
+                solution.circulation_per_w.clone(),
+                condition,
+            ),
+            Self::unit_forces(
+                aircraft,
+                mesh,
+                solution.circulation_per_p.clone(),
+                condition,
+            ),
+            Self::unit_forces(
+                aircraft,
+                mesh,
+                solution.circulation_per_q.clone(),
+                condition,
+            ),
+            Self::unit_forces(
+                aircraft,
+                mesh,
+                solution.circulation_per_r.clone(),
+                condition,
+            ),
+        ];
+        let (sin_alpha, cos_alpha) = condition.alpha.sin_cos();
+        let (sin_beta, cos_beta) = condition.beta.sin_cos();
+        let da = [-sin_alpha * cos_beta, 0.0, cos_alpha * cos_beta];
+        let db = [-cos_alpha * sin_beta, cos_beta, -sin_alpha * sin_beta];
+        Ok(BodyAxisDerivatives {
+            is_valid: true,
+            reference_area: aircraft.reference_area(),
+            reference_chord: aircraft.reference_chord(),
+            reference_span: aircraft.reference_span(),
+            velocity: 1.0,
+            alpha: condition.alpha,
+            beta: condition.beta,
+            by_alpha_force: combine_vec(&unit, da, false),
+            by_alpha_moment: combine_vec(&unit, da, true),
+            by_beta_force: combine_vec(&unit, db, false),
+            by_beta_moment: combine_vec(&unit, db, true),
+            by_roll_rate_force: unit[3].body_force,
+            by_roll_rate_moment: unit[3].body_moment,
+            by_pitch_rate_force: unit[4].body_force,
+            by_pitch_rate_moment: unit[4].body_moment,
+            by_yaw_rate_force: unit[5].body_force,
+            by_yaw_rate_moment: unit[5].body_moment,
+        })
+    }
+}
+
+fn combine_vec(unit: &[AerodynamicResults; 6], weights: [Scalar; 3], moment: bool) -> Vec3 {
+    let value = |index: usize| {
+        if moment {
+            unit[index].body_moment
+        } else {
+            unit[index].body_force
+        }
+    };
+    weights[0] * value(0) + weights[1] * value(1) + weights[2] * value(2)
+}

@@ -1,25 +1,22 @@
-# Plot analysis scaling results from VLM C++, VLM Philote, and OAS benchmarks.
+# Plot analysis scaling results from native Rust Pegasus and OpenAeroStruct.
 #
 # Usage:
-#   ./benchmark_analysis > benchmark_scaling_out/results_vlm.csv
-#   python benchmark_analysis_philote.py
+#   cargo run --release --example analysis_scaling \
+#       > benchmark_scaling_out/results_rust.csv
 #   python benchmark_analysis_oas.py
 #   python plot_analysis_scaling.py
 
 import numpy as np
 import matplotlib.pyplot as plt
 
-vlm = np.genfromtxt("benchmark_scaling_out/results_vlm.csv",
-                     delimiter=",", skip_header=1)
-philote = np.genfromtxt("benchmark_scaling_out/results_philote.csv",
-                         delimiter=",", skip_header=1)
+rust = np.genfromtxt("benchmark_scaling_out/results_rust.csv",
+                      delimiter=",", skip_header=1)
 oas = np.genfromtxt("benchmark_scaling_out/results_oas.csv",
                      delimiter=",", skip_header=1)
 
 # Figure 1: Wall time per analysis vs mesh size
 fig1, ax1 = plt.subplots(figsize=(7, 5))
-ax1.plot(vlm[:, 1], vlm[:, 2], "o-", color="tab:blue", label="VLM (C++)")
-ax1.plot(philote[:, 1], philote[:, 2], "^-", color="tab:green", label="VLM (Philote)")
+ax1.plot(rust[:, 1], rust[:, 2], "o-", color="tab:blue", label="Pegasus (Rust)")
 ax1.plot(oas[:, 1], oas[:, 2], "s-", color="tab:orange", label="OpenAeroStruct")
 ax1.set_xlabel("Total panels (full-span)")
 ax1.set_ylabel("Wall time per analysis [ms]")
@@ -31,8 +28,7 @@ fig1.savefig("benchmark_scaling_out/analysis_time.png", dpi=150)
 
 # Figure 2: Same data, log-log
 fig2, ax2 = plt.subplots(figsize=(7, 5))
-ax2.plot(vlm[:, 1], vlm[:, 2], "o-", color="tab:blue", label="VLM (C++)")
-ax2.plot(philote[:, 1], philote[:, 2], "^-", color="tab:green", label="VLM (Philote)")
+ax2.plot(rust[:, 1], rust[:, 2], "o-", color="tab:blue", label="Pegasus (Rust)")
 ax2.plot(oas[:, 1], oas[:, 2], "s-", color="tab:orange", label="OpenAeroStruct")
 ax2.set_xlabel("Total panels (full-span)")
 ax2.set_ylabel("Wall time per analysis [ms]")

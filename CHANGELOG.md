@@ -7,6 +7,41 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- A safe Rust 2024 library implementing geometry, structured meshing, the
+  primal VLM solver, near- and far-field loads, stability derivatives, trim,
+  mass properties, 4-state and 12-state eigenmodes, and analytical adjoints.
+- AVL geometry and AVL mass parsers with typed, source-aware errors.
+- Pure-Rust `.vtu` and `.vtp` export through the default `vtk` feature,
+  including ASCII/binary output and atomic file replacement.
+- Native Rust examples, a Criterion scaling benchmark, Rust API guides, and
+  Linux/macOS/Windows CI.
+- A committed v0.2.0 numerical oracle and a manifest covering all 488
+  non-Philote CTest cases.
+
+### Changed
+
+- The package is now `pegasus-vlm`, imported as `pegasus_vlm`, and requires
+  Rust 1.93.1.
+- The public API uses owned Rust data, checked slices and indices,
+  `PegasusError`, grouped `Coefficients`, and `AeroOutput`.
+- Dense primal and transposed AIC factorizations are cached and reused for
+  unit responses, repeated flight conditions, and batched adjoints.
+- Flight-condition, aircraft-section, and direct mesh-node gradients use
+  analytical influence/force kernels and adjoint contractions; the Mach
+  derivative no longer requires perturbed full solves.
+- The missing fixed-circulation alpha term in the adjoint force derivative now
+  includes freestream and body-to-stability-axis effects. The former disabled
+  CL validation is enabled and extended across all six primary coefficients.
+
+### Removed
+
+- The C++ API, C ABI expectations, CMake build, system Eigen/VTK/OpenMP
+  discovery, GoogleTest, and C++ examples.
+- Philote servers, `MeshDiscipline`, `VlmDiscipline`, and Philote-dependent
+  OpenMDAO workflows. These integrations are deferred to a later release.
+
 ## [0.2.0] - 2026-05-04
 
 ### Added
