@@ -44,6 +44,17 @@ tempfile = "3"
 name = "analysis_scaling"
 harness = false
 
+# Cargo ignores a library's profile settings when the crate is consumed as a
+# dependency, so this governs only this workspace's examples, benches, and
+# tests. It matters because the influence kernel is defined in a different
+# module from the assembly loop that calls it N^2 times: without fat LTO and a
+# single codegen unit it is not reliably inlined, and the loop loses the
+# instruction-level parallelism that hides its divide/sqrt latency.
+[profile.release]
+lto = "fat"
+codegen-units = 1
+debug = 1          # line tables only; symbolizes profiles, no runtime cost
+
 [lints.rust]
 unsafe_code = "forbid"
 

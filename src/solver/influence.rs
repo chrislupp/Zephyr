@@ -27,7 +27,12 @@ impl Default for SymmetryConfig {
 }
 
 /// Velocity induced by a unit horseshoe using the legacy Leishman `R⁴` core.
+///
+/// `#[inline]` rather than `#[inline(always)]`: this is the O(N²) inner kernel
+/// of influence assembly and must inline there, but it is also called from the
+/// gradient kernels where forcing it would only add code bloat.
 #[must_use]
+#[inline]
 pub fn horseshoe_vortex_velocity(
     field_point: &Vec3,
     bound_left: &Vec3,
@@ -225,60 +230,179 @@ impl<'a> InfluenceMatrixBuilder<'a> {
             )
     }
 
-    #[must_use]
-    pub fn velocity_influence_matrix(&self) -> MatX {
-        let n = self.mesh.vortex_count();
-        let mut matrix = MatX::zeros(3 * n, n);
-        for i in 0..n {
-            let target = &self.mesh.vortices()[i];
-            for j in 0..n {
-                let source = &self.mesh.vortices()[j];
-                let same_component = target.component_index == source.component_index;
-                let core = self.core_radius(j, same_component);
+    /// Column-oriented influence assembly, optionally fused with the
+    /// normalwash contraction.
+    ///
+    /// `MatX` is column-major, so iterating source panels (`j`) on the outside
+    /// and target panels (`i`) on the inside makes both outputs stream
+    /// sequentially: velocity at `j*3n + 3i + k`, normalwash at `j*n + i`. The
+    /// previous row-major traversal strode `24n` bytes per element and then
+    /// needed a second full pass over the velocity matrix (31.8 MB at N=1152)
+    /// to contract it against the panel normals.
+    ///
+    /// `WITH_AIC` is a const generic so the normalwash half compiles out
+    /// entirely for callers that only want the velocity matrix.
+    ///
+    /// Bit-exactness: every output element is produced by the same operations
+    /// on the same operands in the same order as the two-pass version. Only
+    /// the traversal order over mutually independent elements changes, plus
+    /// hoisting of values that depend solely on the source panel.
+    fn assemble<const WITH_AIC: bool>(&self) -> (MatX, Option<MatX>) {
+        let vortices = self.mesh.vortices();
+        let n = vortices.len();
+
+        /// Target-side data packed to 56 bytes from the 224-byte
+        /// `HorseshoeVortex`. The inner loop sweeps all N targets once per
+        /// column, so this keeps the swept working set within L1.
+        struct Target {
+            control_point: Vec3,
+            normal: Vec3,
+            component_index: usize,
+        }
+        let targets: Vec<Target> = vortices
+            .iter()
+            .map(|vortex| Target {
+                control_point: vortex.control_point,
+                normal: vortex.normal_at_control_point,
+                component_index: vortex.component_index,
+            })
+            .collect();
+
+        let mut velocity_data = vec![0.0; 3 * n * n];
+        let mut aic_data = if WITH_AIC {
+            vec![0.0; n * n]
+        } else {
+            Vec::new()
+        };
+
+        for (j, source) in vortices.iter().enumerate() {
+            let left = source.bound_vortex_left;
+            let right = source.bound_vortex_right;
+
+            // `core_radius` recomputed this width (and its `sqrt`) on every one
+            // of the N² elements; it depends only on the source panel. The
+            // 0.0001 literal is the original same-component constant, which is
+            // deliberately not `core_radius_chord_fraction`.
+            let panel_width = (right - left).norm();
+            let core_same = 0.0001 * panel_width;
+            let core_other = (self.core_radius_chord_fraction * source.local_chord)
+                .max(self.core_radius_width_fraction * panel_width);
+
+            // Image geometry likewise depends only on the source panel. Note
+            // the left/right swap in the y and z images and its deliberate
+            // absence in the yz image, both preserved from the originals.
+            let y_image = (self.symmetry.y_symmetry != SymmetryType::None).then(|| {
+                let offset = 2.0 * self.symmetry.y_symmetry_plane;
+                let image_left = Vec3::new(right.x, offset - right.y, right.z);
+                let image_right = Vec3::new(left.x, offset - left.y, left.z);
+                let midpoint = 0.5 * (image_left + image_right);
+                (
+                    image_left,
+                    image_right,
+                    midpoint,
+                    self.symmetry.y_symmetry.factor(),
+                )
+            });
+            let z_image = (self.symmetry.z_symmetry != SymmetryType::None).then(|| {
+                let offset = 2.0 * self.symmetry.z_symmetry_plane;
+                (
+                    Vec3::new(right.x, right.y, offset - right.z),
+                    Vec3::new(left.x, left.y, offset - left.z),
+                    self.symmetry.z_symmetry.factor(),
+                )
+            });
+            let yz_image = (self.symmetry.z_symmetry != SymmetryType::None
+                && self.symmetry.y_symmetry != SymmetryType::None)
+                .then(|| {
+                    let y_offset = 2.0 * self.symmetry.y_symmetry_plane;
+                    let z_offset = 2.0 * self.symmetry.z_symmetry_plane;
+                    (
+                        Vec3::new(left.x, y_offset - left.y, z_offset - left.z),
+                        Vec3::new(right.x, y_offset - right.y, z_offset - right.z),
+                        // `a * b * v` parses as `(a * b) * v`, so folding the
+                        // two scalar factors is exact.
+                        self.symmetry.y_symmetry.factor() * self.symmetry.z_symmetry.factor(),
+                    )
+                });
+
+            let velocity_column = &mut velocity_data[j * 3 * n..(j + 1) * 3 * n];
+            let aic_column: &mut [Scalar] = if WITH_AIC {
+                &mut aic_data[j * n..(j + 1) * n]
+            } else {
+                &mut []
+            };
+
+            for (i, target) in targets.iter().enumerate() {
+                let field_point = target.control_point;
+                let core = if target.component_index == source.component_index {
+                    core_same
+                } else {
+                    core_other
+                };
+
                 let mut velocity = horseshoe_vortex_velocity(
-                    &target.control_point,
-                    &source.bound_vortex_left,
-                    &source.bound_vortex_right,
+                    &field_point,
+                    &left,
+                    &right,
                     self.prandtl_glauert_factor,
                     core,
                     i != j,
                 );
-                if self.symmetry.y_symmetry != SymmetryType::None {
-                    velocity += self.y_image_velocity(&target.control_point, j, core);
+                if let Some((image_left, image_right, midpoint, factor)) = y_image {
+                    let include_bound = !(self.symmetry.y_symmetry == SymmetryType::Symmetric
+                        && (field_point - midpoint).norm_squared() < EPSILON);
+                    velocity += factor
+                        * horseshoe_vortex_velocity(
+                            &field_point,
+                            &image_left,
+                            &image_right,
+                            self.prandtl_glauert_factor,
+                            core,
+                            include_bound,
+                        );
                 }
-                if self.symmetry.z_symmetry != SymmetryType::None {
-                    velocity += self.z_image_velocity(&target.control_point, j, core);
-                    if self.symmetry.y_symmetry != SymmetryType::None {
-                        let y_offset = 2.0 * self.symmetry.y_symmetry_plane;
-                        let z_offset = 2.0 * self.symmetry.z_symmetry_plane;
-                        let left = Vec3::new(
-                            source.bound_vortex_left.x,
-                            y_offset - source.bound_vortex_left.y,
-                            z_offset - source.bound_vortex_left.z,
+                if let Some((image_left, image_right, factor)) = z_image {
+                    velocity += factor
+                        * horseshoe_vortex_velocity(
+                            &field_point,
+                            &image_left,
+                            &image_right,
+                            self.prandtl_glauert_factor,
+                            core,
+                            true,
                         );
-                        let right = Vec3::new(
-                            source.bound_vortex_right.x,
-                            y_offset - source.bound_vortex_right.y,
-                            z_offset - source.bound_vortex_right.z,
-                        );
-                        velocity += self.symmetry.y_symmetry.factor()
-                            * self.symmetry.z_symmetry.factor()
+                    if let Some((image_left, image_right, factor)) = yz_image {
+                        velocity += factor
                             * horseshoe_vortex_velocity(
-                                &target.control_point,
-                                &left,
-                                &right,
+                                &field_point,
+                                &image_left,
+                                &image_right,
                                 self.prandtl_glauert_factor,
                                 core,
                                 true,
                             );
                     }
                 }
-                matrix[(3 * i, j)] = velocity.x;
-                matrix[(3 * i + 1, j)] = velocity.y;
-                matrix[(3 * i + 2, j)] = velocity.z;
+
+                velocity_column[3 * i] = velocity.x;
+                velocity_column[3 * i + 1] = velocity.y;
+                velocity_column[3 * i + 2] = velocity.z;
+                if WITH_AIC {
+                    let normal = target.normal;
+                    aic_column[i] =
+                        velocity.x * normal.x + velocity.y * normal.y + velocity.z * normal.z;
+                }
             }
         }
-        matrix
+
+        let velocity = MatX::from_vec(3 * n, n, velocity_data);
+        let aic = WITH_AIC.then(|| MatX::from_vec(n, n, aic_data));
+        (velocity, aic)
+    }
+
+    #[must_use]
+    pub fn velocity_influence_matrix(&self) -> MatX {
+        self.assemble::<false>().0
     }
 
     #[must_use]
@@ -288,18 +412,11 @@ impl<'a> InfluenceMatrixBuilder<'a> {
 
     #[must_use]
     pub fn normalwash_and_velocity(&self) -> (MatX, MatX) {
-        let velocity = self.velocity_influence_matrix();
-        let n = self.mesh.vortex_count();
-        let mut aic = MatX::zeros(n, n);
-        for i in 0..n {
-            let normal = self.mesh.vortices()[i].normal_at_control_point;
-            for j in 0..n {
-                aic[(i, j)] = velocity[(3 * i, j)] * normal.x
-                    + velocity[(3 * i + 1, j)] * normal.y
-                    + velocity[(3 * i + 2, j)] * normal.z;
-            }
-        }
-        (aic, velocity)
+        let (velocity, aic) = self.assemble::<true>();
+        (
+            aic.expect("assemble::<true> always produces the normalwash matrix"),
+            velocity,
+        )
     }
 
     #[must_use]

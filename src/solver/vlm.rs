@@ -231,14 +231,16 @@ impl VortexLatticeSolver {
             rhs.set_column(component, &self.unit_freestream_rhs(component));
             rhs.set_column(component + 3, &self.unit_rotation_rhs(component));
         }
+        // No residual check here: `rebuild_aic` already rejects a non-finite
+        // AIC and `solve_matrix` already rejects a non-finite solution, which
+        // is what a singular system yields. Forming `A x - b` only to test it
+        // for finiteness cost a full N²×6 product and an N×6 allocation
+        // without testing the residual's magnitude, so it never established
+        // any accuracy property the other two checks did not already cover.
         self.unit_circulation = solve_matrix(
             self.aic_lu.as_ref().ok_or(PegasusError::SingularSystem)?,
             &rhs,
         )?;
-        let residual = &self.aic_matrix * &self.unit_circulation - rhs;
-        if !residual.iter().all(|value| value.is_finite()) {
-            return Err(PegasusError::SingularSystem);
-        }
         self.unit_responses_valid = true;
         Ok(())
     }

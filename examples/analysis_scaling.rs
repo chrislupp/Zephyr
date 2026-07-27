@@ -1,5 +1,13 @@
+//! Scaling sweep, mirroring the v0.2.0 C++ `benchmark_analysis` harness
+//! iteration for iteration: one untimed warm-up, then 50 timed repetitions of
+//! solver construction, `set_mesh`, `rebuild_aic`, `solve`, and the force
+//! calculation. Mesh construction stays outside the timed region, as it does
+//! in the C++ original.
+
+use std::hint::black_box;
 use std::time::Instant;
 
+use pegasus_vlm::aero::ForceCalculator;
 use pegasus_vlm::core::{DEGREES_TO_RADIANS, Vec3};
 use pegasus_vlm::geometry::{MeshInput, ReferenceQuantities, SurfaceMesh};
 use pegasus_vlm::solver::{FlightCondition, VortexLatticeSolver};
@@ -40,12 +48,30 @@ fn main() -> pegasus_vlm::Result<()> {
     println!("ny,panels,time_ms");
     for ny in [8, 12, 16, 24, 32, 48, 64, 96] {
         let input = mesh(ny);
-        let repetitions = 10;
+
+        // Untimed warm-up, matching the C++ harness (which likewise omits the
+        // force calculation here).
+        {
+            let mut solver = VortexLatticeSolver::new();
+            solver.set_mesh(&input)?;
+            solver.rebuild_aic()?;
+            solver.solve(&condition)?;
+        }
+
+        let repetitions = 50;
         let start = Instant::now();
         for _ in 0..repetitions {
             let mut solver = VortexLatticeSolver::new();
             solver.set_mesh(&input)?;
-            solver.solve(&condition)?;
+            solver.rebuild_aic()?;
+            let solution = solver.solve(&condition)?;
+            let results = ForceCalculator::new().compute_with_references(
+                &input.reference,
+                solver.mesh(),
+                &solution,
+                &condition,
+            );
+            black_box(&results);
         }
         let milliseconds = start.elapsed().as_secs_f64() * 1_000.0 / repetitions as f64;
         println!("{ny},{},{milliseconds:.6}", 6 * 2 * ny);

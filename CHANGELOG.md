@@ -29,6 +29,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - A single partial-pivot AIC factorization is cached and reused for primal,
   transposed-adjoint, unit-response, and repeated-flight-condition solves,
   avoiding duplicate cubic work while preserving single-threaded execution.
+- The `analysis_scaling` example now mirrors the v0.2.0 C++ `benchmark_analysis`
+  harness iteration for iteration: one untimed warm-up, 50 timed repetitions,
+  an explicit `rebuild_aic`, and the force calculation inside the timed region.
+  It previously ran 10 repetitions with no warm-up and omitted the forces,
+  which made it measure less work than the C++ harness it is compared against.
+- Influence assembly now iterates source panels on the outside and target
+  panels on the inside, matching the column-major storage order, and fuses the
+  normalwash contraction into the same pass. This replaces a strided traversal
+  plus a second full pass over the velocity matrix, and hoists the source panel
+  width, core radii, and symmetry-image geometry out of the inner loop. Output
+  is bit-for-bit unchanged.
+- Unit-response solves no longer form the `A x - b` residual. The product was
+  used only to test for non-finite values, which `rebuild_aic` and the solver
+  already reject, so it cost a full `N²×6` product and an `N×6` allocation
+  without establishing any additional property.
+- The release profile enables fat LTO and a single codegen unit. Cargo ignores
+  library profiles for downstream consumers, so this affects only this
+  workspace's examples, benchmarks, and tests.
 - Flight-condition, aircraft-section, and direct mesh-node gradients use
   analytical influence/force kernels and adjoint contractions; the Mach
   derivative no longer requires perturbed full solves.
