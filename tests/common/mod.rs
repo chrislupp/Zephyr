@@ -149,3 +149,19 @@ pub fn cl_alpha_factor_wing() -> Aircraft {
     aircraft.add_surface(wing);
     aircraft
 }
+
+/// Tapered, twisted wing carrying a section drag polar on every section.
+///
+/// The polar `cd = 0.01 + 0.02*cl^2` has well-separated breakpoints, so
+/// `interpolate_drag_polar` stays on its smooth quadratic branch and away from
+/// both the degenerate-abscissa early return and the `max(0.0)` kink.
+///
+/// No other fixture in the suite sets a viscous polar on a gradient case,
+/// which is why the missing viscous term in the gradient module was invisible.
+pub fn viscous_tapered_wing() -> Aircraft {
+    let mut aircraft = tapered_twisted_wing();
+    for section in aircraft.surfaces_mut()[0].sections_mut() {
+        section.set_viscous_polar([-1.0, 0.03, 0.0, 0.01, 1.0, 0.03]);
+    }
+    aircraft
+}

@@ -1,6 +1,8 @@
 //! Analytical derivatives of the Kutta–Joukowski force kernel.
 
-use crate::core::{Scalar, Vec3, VecX};
+use crate::aero::ForceCalculator;
+use crate::aero::forces::drag_polar_value_and_slope;
+use crate::core::{EPSILON, Scalar, Vec3, VecX};
 use crate::error::{PegasusError, Result};
 use crate::geometry::ReferenceQuantities;
 use crate::solver::{FlightCondition, SolutionState, VortexLattice, VortexLatticeSolver};
@@ -45,9 +47,28 @@ pub fn force_alpha_gradient(
     let (_, cos_beta) = condition.beta.sin_cos();
     let freestream = VortexLatticeSolver::freestream_direction(condition);
     let derivative = Vec3::new(-sin_alpha * cos_beta, 0.0, cos_alpha * cos_beta);
-    let (base_force, _) = base_force_and_moment(mesh, solution, reference, freestream);
-    let (force_derivative, moment_derivative) =
+    let (mut base_force, _) = base_force_and_moment(mesh, solution, reference, freestream);
+    let (mut force_derivative, mut moment_derivative) =
         force_and_moment(mesh, solution, reference, derivative);
+    // Section drag polars act along the stability drag axis, which both rotates
+    // with alpha and carries a polar whose argument moves with alpha.
+    let viscous = viscous_strips(mesh, solution, condition, reference);
+    if !viscous.is_empty() {
+        let (viscous_force, _) = viscous_force_and_moment(&viscous, condition.alpha, reference);
+        base_force += viscous_force;
+        let (viscous_force_derivative, viscous_moment_derivative) =
+            viscous_force_and_moment_derivative(
+                mesh,
+                solution,
+                &viscous,
+                condition.alpha,
+                reference,
+                derivative,
+                true,
+            );
+        force_derivative += viscous_force_derivative;
+        moment_derivative += viscous_moment_derivative;
+    }
     [
         force_derivative.z * cos_alpha
             - force_derivative.x * sin_alpha
@@ -73,7 +94,23 @@ pub fn force_beta_gradient(
     let (sin_alpha, cos_alpha) = condition.alpha.sin_cos();
     let (sin_beta, cos_beta) = condition.beta.sin_cos();
     let derivative = Vec3::new(-cos_alpha * sin_beta, cos_beta, -sin_alpha * sin_beta);
-    let (force, moment) = force_and_moment(mesh, solution, reference, derivative);
+    let (mut force, mut moment) = force_and_moment(mesh, solution, reference, derivative);
+    // Sideslip moves the strip lift coefficients, and so the polars, but the
+    // stability axes themselves do not turn with beta.
+    let viscous = viscous_strips(mesh, solution, condition, reference);
+    if !viscous.is_empty() {
+        let (viscous_force, viscous_moment) = viscous_force_and_moment_derivative(
+            mesh,
+            solution,
+            &viscous,
+            condition.alpha,
+            reference,
+            derivative,
+            false,
+        );
+        force += viscous_force;
+        moment += viscous_moment;
+    }
     [
         force.z * cos_alpha - force.x * sin_alpha,
         force.x * cos_alpha + force.z * sin_alpha,
@@ -82,6 +119,194 @@ pub fn force_beta_gradient(
         moment.y,
         -moment.z,
     ]
+}
+
+/// Primal viscous state of one strip, cached for the derivative kernels.
+struct ViscousStrip {
+    first_vortex_index: usize,
+    num_vortices: usize,
+    area: Scalar,
+    /// Moment arm of the strip's viscous force, `quarter_chord - reference`.
+    arm: Vec3,
+    /// `cd_v` after the primal's `max(0.0)` clamp.
+    viscous_drag: Scalar,
+    /// `dCd/dCl` at the strip's lift coefficient, zero where the clamp is
+    /// active, since the primal is flat there.
+    slope: Scalar,
+    /// Strip drag coefficient *excluding* the viscous term.
+    inviscid_drag: Scalar,
+}
+
+/// Per-strip viscous state, or an empty vector when no strip carries a polar.
+///
+/// Runs the primal force calculation rather than re-deriving the strip lift
+/// coefficient, so the polar cannot be evaluated at a different point here than
+/// it is in `strip_loads`.
+fn viscous_strips(
+    mesh: &VortexLattice,
+    solution: &SolutionState,
+    condition: &FlightCondition,
+    reference: &ReferenceQuantities,
+) -> Vec<ViscousStrip> {
+    if !solution.is_valid || !mesh.strips().iter().any(|strip| strip.has_viscous_data) {
+        return Vec::new();
+    }
+    let results =
+        ForceCalculator::new().compute_with_references(reference, mesh, solution, condition);
+    let mut viscous = Vec::new();
+    for surface in &results.surface_loads {
+        for loads in &surface.strip_loads {
+            let strip = &mesh.strips()[loads.strip_index];
+            if !strip.has_viscous_data || loads.area <= EPSILON {
+                continue;
+            }
+            let slope = if loads.viscous_drag > 0.0 {
+                drag_polar_value_and_slope(&strip.viscous_polar, loads.coefficients.lift).1
+            } else {
+                0.0
+            };
+            viscous.push(ViscousStrip {
+                first_vortex_index: strip.first_vortex_index,
+                num_vortices: strip.num_vortices,
+                area: loads.area,
+                arm: loads.quarter_chord_position - reference.moment_reference_point,
+                viscous_drag: loads.viscous_drag,
+                slope,
+                inviscid_drag: loads.coefficients.drag - loads.viscous_drag,
+            });
+        }
+    }
+    viscous
+}
+
+/// Viscous contribution to the aircraft body force and moment, normalized the
+/// same way as `force_and_moment`.
+fn viscous_force_and_moment(
+    strips: &[ViscousStrip],
+    alpha: Scalar,
+    reference: &ReferenceQuantities,
+) -> (Vec3, Vec3) {
+    let (sin_alpha, cos_alpha) = alpha.sin_cos();
+    let drag_axis = Vec3::new(cos_alpha, 0.0, sin_alpha);
+    let mut force = Vec3::zeros();
+    let mut moment = Vec3::zeros();
+    for strip in strips {
+        let contribution = strip.area * strip.viscous_drag * drag_axis;
+        force += contribution;
+        moment += strip.arm.cross(&contribution);
+    }
+    (
+        force / reference.area,
+        moment / (reference.area * reference.chord),
+    )
+}
+
+/// Fixed-circulation derivative of the viscous force and moment along a
+/// freestream direction change.
+///
+/// `alpha_rotation` additionally accounts for the stability axes turning with
+/// the parameter, which applies to alpha and not to sideslip: the drag axis the
+/// viscous force acts along rotates, and so does the lift axis the polar is
+/// evaluated against.
+fn viscous_force_and_moment_derivative(
+    mesh: &VortexLattice,
+    solution: &SolutionState,
+    strips: &[ViscousStrip],
+    alpha: Scalar,
+    reference: &ReferenceQuantities,
+    velocity_derivative: Vec3,
+    alpha_rotation: bool,
+) -> (Vec3, Vec3) {
+    let (sin_alpha, cos_alpha) = alpha.sin_cos();
+    let drag_axis = Vec3::new(cos_alpha, 0.0, sin_alpha);
+    let lift_axis = Vec3::new(-sin_alpha, 0.0, cos_alpha);
+    let mut force = Vec3::zeros();
+    let mut moment = Vec3::zeros();
+    for strip in strips {
+        // The strip force changes because the freestream direction does.
+        let mut strip_force_derivative = Vec3::zeros();
+        for offset in 0..strip.num_vortices {
+            let index = strip.first_vortex_index + offset;
+            let vortex = &mesh.vortices()[index];
+            let line = vortex.bound_vortex_right - vortex.bound_vortex_left;
+            strip_force_derivative +=
+                2.0 * solution.circulation[index] * velocity_derivative.cross(&line);
+        }
+        // `d(lift_axis)/d(alpha) = -drag_axis`, so its contraction with the
+        // strip force is exactly minus the strip's inviscid drag coefficient.
+        let axis_term = if alpha_rotation {
+            -strip.inviscid_drag
+        } else {
+            0.0
+        };
+        let lift_derivative = axis_term + lift_axis.dot(&strip_force_derivative) / strip.area;
+        let drag_derivative = strip.slope * lift_derivative;
+
+        let mut contribution = strip.area * drag_derivative * drag_axis;
+        if alpha_rotation {
+            // `d(drag_axis)/d(alpha) = lift_axis`.
+            contribution += strip.area * strip.viscous_drag * lift_axis;
+        }
+        force += contribution;
+        moment += strip.arm.cross(&contribution);
+    }
+    (
+        force / reference.area,
+        moment / (reference.area * reference.chord),
+    )
+}
+
+/// Per-strip sensitivity of one output to that strip's viscous drag
+/// coefficient, divided by the strip lift coefficient's own scaling.
+///
+/// `strip_loads` adds `cd_v * (cos a, 0, sin a)` to the strip's *body force*,
+/// so the term reaches the totals as `area_s * cd_v,s * u` and the moments as
+/// `arm_s x (area_s * cd_v,s * u)`. Contracting with the output cotangent,
+///
+/// ```text
+/// dJ/d(cd_v,s) = (area_s / S_ref) * (force_seed + moment_seed x arm_s / c_ref) . u
+/// ```
+///
+/// and since `cl_s` is itself `s_hat . F_s / area_s`, the areas cancel in the
+/// chain and never appear in the returned weight.
+///
+/// The entry is zero for strips with no polar and for strips where the
+/// quadratic went negative, since the primal clamps that branch to zero and
+/// its subderivative there is zero. Returns `None` when no strip is viscous,
+/// so the common inviscid path costs nothing.
+fn viscous_strip_weights(
+    mesh: &VortexLattice,
+    solution: &SolutionState,
+    condition: &FlightCondition,
+    reference: &ReferenceQuantities,
+    output: AeroOutput,
+) -> Option<Vec<Scalar>> {
+    if !mesh.strips().iter().any(|strip| strip.has_viscous_data) {
+        return None;
+    }
+    let (force_seed, moment_seed) = body_output_cotangent(output, condition.alpha);
+    let (sin_alpha, cos_alpha) = condition.alpha.sin_cos();
+    let drag_axis = Vec3::new(cos_alpha, 0.0, sin_alpha);
+
+    // Reuse the primal rather than re-deriving the strip lift coefficient, so
+    // the two cannot disagree about what the polar is evaluated at.
+    let results =
+        ForceCalculator::new().compute_with_references(reference, mesh, solution, condition);
+    let mut weights = vec![0.0; mesh.strip_count()];
+    for surface in &results.surface_loads {
+        for loads in &surface.strip_loads {
+            let strip = &mesh.strips()[loads.strip_index];
+            if !strip.has_viscous_data || loads.viscous_drag <= 0.0 {
+                continue;
+            }
+            let (_, slope) =
+                drag_polar_value_and_slope(&strip.viscous_polar, loads.coefficients.lift);
+            let arm = loads.quarter_chord_position - reference.moment_reference_point;
+            let combined = force_seed + moment_seed.cross(&arm) / reference.chord;
+            weights[loads.strip_index] = combined.dot(&drag_axis) * slope / reference.area;
+        }
+    }
+    Some(weights)
 }
 
 /// Total partial `∂J/∂Γ`, including induced-velocity dependence.
@@ -122,6 +347,49 @@ pub fn force_circulation_gradient(
         velocity_cotangent[3 * i] = cotangent.x;
         velocity_cotangent[3 * i + 1] = cotangent.y;
         velocity_cotangent[3 * i + 2] = cotangent.z;
+    }
+
+    // Section drag polars make the strip's viscous drag a function of that
+    // strip's lift coefficient, and hence of every circulation in the mesh
+    // through the induced velocity. Omitting this left drag, roll, pitch and
+    // yaw wrong by the polar slope whenever a `CDCL` block was present.
+    if let Some(weights) = viscous_strip_weights(mesh, solution, condition, reference, output) {
+        let lift_axis = Vec3::new(-condition.alpha.sin(), 0.0, condition.alpha.cos());
+        for (strip_index, strip) in mesh.strips().iter().enumerate() {
+            let weight = weights[strip_index];
+            if weight == 0.0 {
+                continue;
+            }
+            if strip.chord_center * strip.width <= EPSILON {
+                continue;
+            }
+            // `cl_s = lift_axis . F_s / area_s`, so each panel in the strip
+            // contributes both a direct Kutta-Joukowski term and, through its
+            // own induced velocity, a non-local one. The strip area already
+            // cancelled when the weight was formed and must not be applied
+            // again here.
+            let scale = weight;
+            for offset in 0..strip.num_vortices {
+                let i = strip.first_vortex_index + offset;
+                let vortex = &mesh.vortices()[i];
+                let velocity = freestream
+                    + if solution.induced_velocity.nrows() > i {
+                        Vec3::new(
+                            solution.induced_velocity[(i, 0)],
+                            solution.induced_velocity[(i, 1)],
+                            solution.induced_velocity[(i, 2)],
+                        )
+                    } else {
+                        Vec3::zeros()
+                    };
+                let line = vortex.bound_vortex_right - vortex.bound_vortex_left;
+                direct[i] += 2.0 * scale * lift_axis.dot(&velocity.cross(&line));
+                let cotangent = 2.0 * solution.circulation[i] * scale * line.cross(&lift_axis);
+                velocity_cotangent[3 * i] += cotangent.x;
+                velocity_cotangent[3 * i + 1] += cotangent.y;
+                velocity_cotangent[3 * i + 2] += cotangent.z;
+            }
+        }
     }
     direct + solver.velocity_matrix().transpose() * velocity_cotangent
 }

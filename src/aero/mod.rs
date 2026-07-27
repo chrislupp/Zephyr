@@ -1,6 +1,6 @@
 //! Aerodynamic loads and stability derivatives.
 
-mod forces;
+pub(crate) mod forces;
 mod stability;
 mod types;
 

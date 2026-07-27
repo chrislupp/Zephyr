@@ -312,28 +312,51 @@ fn body_to_stability(force: &Vec3, alpha: Scalar) -> (Scalar, Scalar) {
 }
 
 fn interpolate_drag_polar(polar: &[Scalar; 6], lift: Scalar) -> Scalar {
+    drag_polar_value_and_slope(polar, lift).0
+}
+
+/// A `CDCL` polar evaluated together with its slope `dCd/dCl`.
+///
+/// The polar is a Lagrange quadratic through the three `CDCL` points — not a
+/// spline, and deliberately unclamped, so it extrapolates parabolically
+/// outside the breakpoints, as AVL's does.
+///
+/// Value and slope are produced by one function so the gradient kernels cannot
+/// drift from the primal. When two breakpoints coincide the interpolation is
+/// undefined and the legacy reader falls back to the nearest point's drag,
+/// which is piecewise constant; the slope is reported as zero there, which is
+/// the subderivative of that fallback away from its jump.
+pub(crate) fn drag_polar_value_and_slope(polar: &[Scalar; 6], lift: Scalar) -> (Scalar, Scalar) {
     let points = [
         (polar[0], polar[1]),
         (polar[2], polar[3]),
         (polar[4], polar[5]),
     ];
     let mut drag = 0.0;
+    let mut slope = 0.0;
     for (index, (x, y)) in points.iter().enumerate() {
         let mut basis = 1.0;
+        // Derivative of the product of the two remaining linear factors,
+        // accumulated by the product rule alongside the product itself.
+        let mut basis_slope = 0.0;
         for (other_index, (other_x, _)) in points.iter().enumerate() {
             if index == other_index {
                 continue;
             }
             let denominator = x - other_x;
             if denominator.abs() <= EPSILON {
-                return points
+                let nearest = points
                     .iter()
                     .min_by(|left, right| (left.0 - lift).abs().total_cmp(&(right.0 - lift).abs()))
                     .map_or(0.0, |point| point.1);
+                return (nearest, 0.0);
             }
-            basis *= (lift - other_x) / denominator;
+            let factor = (lift - other_x) / denominator;
+            basis_slope = basis_slope * factor + basis / denominator;
+            basis *= factor;
         }
         drag += y * basis;
+        slope += y * basis_slope;
     }
-    drag
+    (drag, slope)
 }

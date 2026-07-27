@@ -43,6 +43,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- Flight-condition gradients now include the section drag polar. `strip_loads`
+  folds a polar-interpolated viscous term into the strip's body force, which
+  flows into the totals and, through `arm x force`, into the moments — but the
+  gradient module contained no reference to it at all, so loading any AVL file
+  with a `CDCL` block produced derivatives that were wrong by the polar slope on
+  drag, roll, pitch and yaw. Lift and side were unaffected, because the added
+  vector is parallel to the stability drag axis and cancels exactly; that
+  asymmetry is now asserted. The chain is non-local: a strip's viscous drag
+  depends on its lift coefficient and hence, through the induced velocity, on
+  every circulation in the mesh.
+- `interpolate_drag_polar` and its slope are produced by one function,
+  `drag_polar_value_and_slope`, so the gradient kernels cannot drift from the
+  primal. The `max(0.0)` clamp and the coincident-breakpoint fallback both
+  report a zero slope, matching the flat primal there.
 - Degenerate section geometry is rejected at solver entry instead of meshing
   into NaN. Zero or negative chord, coincident spanwise stations, sections that
   reverse spanwise direction, and non-finite coordinates all previously
@@ -142,6 +156,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   only when the chords and twists match at both ends of an interval and is off
   by tens of percent on any tapered, twisted wing. `interpolated_twist_jvp` and
   `panel_normal_jvp` are exported so the kernels can be verified directly.
+- `GeometryAdjointContext` rejects meshes carrying section drag polars rather
+  than returning an inviscid-only geometry gradient for them. The viscous term
+  needs strip-area and quarter-chord sensitivities that `LatticeDirections`
+  does not yet represent, and a silently incomplete derivative is worse than a
+  refusal. Flight-condition gradients are unaffected and do handle polars.
 - `compute_flight_condition_gradients` assembles each output's circulation
   gradient once and performs a single batched transpose solve. It previously
   built every gradient twice and ran two adjoint solves per output — 2K

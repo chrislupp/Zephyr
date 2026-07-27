@@ -707,3 +707,88 @@ fn beta_and_rate_gradients_match_resolves() {
         );
     }
 }
+
+/// Section drag polars must appear in the gradients, as they do in the primal.
+///
+/// `strip_loads` folds a polar-interpolated viscous term into the strip's body
+/// force, which then flows into the total force and, through `arm x force`,
+/// into the moments. Lift and side are untouched because the added vector is
+/// parallel to the stability drag axis and cancels exactly; drag, roll, pitch
+/// and yaw are not. That asymmetry is asserted here, so a viscous term applied
+/// to the wrong outputs fails just as loudly as a missing one.
+#[test]
+fn viscous_polars_appear_in_flight_condition_gradients() {
+    let aircraft = common::viscous_tapered_wing();
+    let base = rich_condition();
+    let mut calculator = GradientCalculator::new();
+    calculator.set_aircraft(&aircraft);
+    let gradients = calculator
+        .compute_flight_condition_gradients(&base)
+        .unwrap();
+
+    // The fixture must actually engage the viscous branch.
+    let inviscid = common::tapered_twisted_wing();
+    assert!(
+        (coefficient(&aircraft, &base, AeroOutput::Drag)
+            - coefficient(&inviscid, &base, AeroOutput::Drag))
+        .abs()
+            > 1.0e-3,
+        "fixture carries no viscous drag; the test would be vacuous"
+    );
+
+    let step = 1.0e-6;
+    for (field, name, group) in [
+        (0usize, "alpha", gradients.by_alpha),
+        (1, "beta", gradients.by_beta),
+    ] {
+        for &output in &ALL_OUTPUTS {
+            let mut plus = base.clone();
+            let mut minus = base.clone();
+            if field == 0 {
+                plus.alpha += step;
+                minus.alpha -= step;
+            } else {
+                plus.beta += step;
+                minus.beta -= step;
+            }
+            let analytical = group.get(output);
+            let finite = (coefficient(&aircraft, &plus, output)
+                - coefficient(&aircraft, &minus, output))
+                / (2.0 * step);
+            assert!(
+                (analytical - finite).abs() <= 3.0e-5_f64.max(3.0e-5 * analytical.abs()),
+                "{name} {output:?}: analytical {analytical:.12} vs finite {finite:.12}"
+            );
+        }
+    }
+}
+
+/// Geometry gradients refuse a viscous mesh rather than answering without the
+/// polar term.
+///
+/// The flight-condition path carries the viscous chain, but the geometry path
+/// would need strip-area and quarter-chord sensitivities that
+/// `LatticeDirections` does not represent. An inviscid-only answer for a
+/// viscous mesh is a silently wrong derivative, so it is refused.
+#[test]
+fn geometry_gradients_reject_a_viscous_mesh() {
+    let aircraft = common::viscous_tapered_wing();
+    let mut calculator = GradientCalculator::new();
+    calculator.set_aircraft(&aircraft);
+    let error = calculator
+        .compute_geometry_gradients(&rich_condition())
+        .unwrap_err();
+    assert!(
+        matches!(error, pegasus_vlm::PegasusError::InvalidGeometry(_)),
+        "expected a typed refusal, got {error:?}"
+    );
+
+    // The same wing without polars is still fully supported.
+    let mut inviscid = GradientCalculator::new();
+    inviscid.set_aircraft(&common::tapered_twisted_wing());
+    assert!(
+        inviscid
+            .compute_geometry_gradients(&rich_condition())
+            .is_ok()
+    );
+}

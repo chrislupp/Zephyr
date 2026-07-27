@@ -63,6 +63,27 @@ impl<'a> GeometryAdjointContext<'a> {
                 "geometry adjoints require explicit mirrored lattice geometry".into(),
             ));
         }
+        // Flight-condition gradients carry the viscous chain, but the geometry
+        // path cannot yet: a section polar makes the strip's viscous drag a
+        // function of its lift coefficient, and hence of the strip *area* and
+        // the moment arm of its quarter chord. `LatticeDirections` has a
+        // tangent for the strip chord but none for the strip width or the
+        // quarter-chord position, so the area and arm sensitivities are
+        // unavailable. Returning an inviscid-only geometry gradient for a
+        // viscous mesh would be a silently wrong derivative, so this is an
+        // error until those channels exist.
+        if solver
+            .mesh()
+            .strips()
+            .iter()
+            .any(|strip| strip.has_viscous_data)
+        {
+            return Err(PegasusError::InvalidGeometry(
+                "geometry adjoints do not yet support section drag polars; the strip \
+                 area and quarter-chord sensitivities they need are not represented"
+                    .into(),
+            ));
+        }
         let outputs: Vec<_> = [
             AeroOutput::Lift,
             AeroOutput::Drag,
