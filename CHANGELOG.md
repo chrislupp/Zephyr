@@ -19,6 +19,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   Linux/macOS/Windows CI.
 - A committed v0.2.0 numerical oracle and a manifest covering all 488
   non-Philote CTest cases.
+- A non-default `parallel` feature that multithreads influence assembly over
+  source panels via rayon. Each column writes a disjoint slice and reads
+  nothing another column writes, so results are bit-identical to the serial
+  build and independent of the thread count; below 128 panels it keeps to the
+  serial driver, where distribution costs more than it saves. Measured 1.5-1.8x
+  on an 8-performance-core M1 Pro. The default build remains single-threaded.
+  `faer/rayon` is deliberately not enabled, since gemm's cache blocking differs
+  between its sequential and parallel paths and would perturb the LU's last ULP.
 
 ### Changed
 
@@ -40,6 +48,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   plus a second full pass over the velocity matrix, and hoists the source panel
   width, core radii, and symmetry-image geometry out of the inner loop. Output
   is bit-for-bit unchanged.
+- Rejecting a singular system no longer costs a separate full pass over the
+  assembled normalwash matrix. Finiteness is accumulated while the matrix is
+  written and reported through `normalwash_and_velocity_checked`.
 - Unit-response solves no longer form the `A x - b` residual. The product was
   used only to test for non-finite values, which `rebuild_aic` and the solver
   already reject, so it cost a full `N²×6` product and an `N×6` allocation

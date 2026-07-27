@@ -92,6 +92,125 @@ pub fn horseshoe_vortex_velocity(
     )
 }
 
+/// Target-side data packed to 56 bytes from the 224-byte `HorseshoeVortex`.
+/// Assembly sweeps all N targets once per source column, so narrowing the
+/// stride keeps that swept working set within L1.
+struct Target {
+    control_point: Vec3,
+    normal: Vec3,
+    component_index: usize,
+}
+
+/// Output of one assembly pass.
+struct Assembly {
+    velocity: MatX,
+    /// Present only when assembled with `WITH_AIC`.
+    aic: Option<MatX>,
+    /// Whether every normalwash entry is finite. Trivially `true` when the
+    /// normalwash matrix was not requested.
+    aic_all_finite: bool,
+}
+
+/// Panel count below which the `parallel` feature keeps to the serial driver.
+///
+/// Assembly is `O(N²)` while the cost of distributing the columns is `O(N)`, so
+/// there is a size under which spawning does not pay for itself. Measured on an
+/// M1 Pro, 96 panels was ~5% slower parallel while 144 was already 1.3x faster;
+/// the threshold sits between them. Both sides of the branch run the same
+/// per-column closure, so this affects speed only, never results.
+#[cfg(feature = "parallel")]
+const PARALLEL_MIN_PANELS: usize = 128;
+
+/// Runs `fill` over every source column, serially.
+///
+/// The accumulation is deliberately written as a non-short-circuiting `&=`
+/// rather than `Iterator::all`. `fill` is called for its side effect of writing
+/// the column, so short-circuiting on the first non-finite entry would leave
+/// the remaining columns unwritten.
+fn drive_columns_serial<F>(
+    velocity: &mut [Scalar],
+    aic: &mut [Scalar],
+    n: usize,
+    with_aic: bool,
+    fill: F,
+) -> bool
+where
+    F: Fn(usize, &mut [Scalar], &mut [Scalar]) -> bool + Sync,
+{
+    let mut all_finite = true;
+    if with_aic {
+        for (j, (velocity_column, aic_column)) in velocity
+            .chunks_mut(3 * n)
+            .zip(aic.chunks_mut(n))
+            .enumerate()
+        {
+            all_finite &= fill(j, velocity_column, aic_column);
+        }
+    } else {
+        for (j, velocity_column) in velocity.chunks_mut(3 * n).enumerate() {
+            all_finite &= fill(j, velocity_column, &mut []);
+        }
+    }
+    all_finite
+}
+
+/// Runs `fill` over every source column, serially. The `parallel` feature
+/// swaps in the rayon variant below; both hand `fill` the same arguments, so
+/// the two builds evaluate identical code per column and differ only in the
+/// order independent columns are visited.
+#[cfg(not(feature = "parallel"))]
+fn drive_columns<F>(
+    velocity: &mut [Scalar],
+    aic: &mut [Scalar],
+    n: usize,
+    with_aic: bool,
+    fill: F,
+) -> bool
+where
+    F: Fn(usize, &mut [Scalar], &mut [Scalar]) -> bool + Sync,
+{
+    drive_columns_serial(velocity, aic, n, with_aic, fill)
+}
+
+/// Runs `fill` over every source column, one rayon task per column.
+///
+/// Each column writes a disjoint slice of both outputs and reads nothing that
+/// another column writes, so the result is bit-identical to the serial driver
+/// and independent of the thread count. The reduction is a boolean `and`, which
+/// is order-independent.
+#[cfg(feature = "parallel")]
+fn drive_columns<F>(
+    velocity: &mut [Scalar],
+    aic: &mut [Scalar],
+    n: usize,
+    with_aic: bool,
+    fill: F,
+) -> bool
+where
+    F: Fn(usize, &mut [Scalar], &mut [Scalar]) -> bool + Sync,
+{
+    use rayon::prelude::*;
+
+    if n < PARALLEL_MIN_PANELS {
+        return drive_columns_serial(velocity, aic, n, with_aic, fill);
+    }
+
+    if with_aic {
+        velocity
+            .par_chunks_mut(3 * n)
+            .zip(aic.par_chunks_mut(n))
+            .enumerate()
+            .map(|(j, (velocity_column, aic_column))| fill(j, velocity_column, aic_column))
+            .reduce(|| true, |all, finite| all && finite)
+    } else {
+        velocity
+            .par_chunks_mut(3 * n)
+            .enumerate()
+            .map(|(j, velocity_column)| fill(j, velocity_column, &mut []))
+            .reduce(|| true, |all, finite| all && finite)
+    }
+}
+
 /// Builds velocity and normalwash influence matrices for a fixed mesh.
 pub struct InfluenceMatrixBuilder<'a> {
     mesh: &'a VortexLattice,
@@ -247,18 +366,17 @@ impl<'a> InfluenceMatrixBuilder<'a> {
     /// on the same operands in the same order as the two-pass version. Only
     /// the traversal order over mutually independent elements changes, plus
     /// hoisting of values that depend solely on the source panel.
-    fn assemble<const WITH_AIC: bool>(&self) -> (MatX, Option<MatX>) {
+    fn assemble<const WITH_AIC: bool>(&self) -> Assembly {
         let vortices = self.mesh.vortices();
         let n = vortices.len();
-
-        /// Target-side data packed to 56 bytes from the 224-byte
-        /// `HorseshoeVortex`. The inner loop sweeps all N targets once per
-        /// column, so this keeps the swept working set within L1.
-        struct Target {
-            control_point: Vec3,
-            normal: Vec3,
-            component_index: usize,
+        if n == 0 {
+            return Assembly {
+                velocity: MatX::zeros(0, 0),
+                aic: WITH_AIC.then(|| MatX::zeros(0, 0)),
+                aic_all_finite: true,
+            };
         }
+
         let targets: Vec<Target> = vortices
             .iter()
             .map(|vortex| Target {
@@ -275,103 +393,96 @@ impl<'a> InfluenceMatrixBuilder<'a> {
             Vec::new()
         };
 
-        for (j, source) in vortices.iter().enumerate() {
-            let left = source.bound_vortex_left;
-            let right = source.bound_vortex_right;
+        // One source column. Returns whether every normalwash entry it wrote is
+        // finite, which `rebuild_aic` previously established with a separate
+        // full pass over the assembled matrix.
+        //
+        // Taking the column slices as arguments rather than indexing captured
+        // buffers is what lets the parallel driver hand each invocation a
+        // disjoint borrow.
+        let fill_column =
+            |j: usize, velocity_column: &mut [Scalar], aic_column: &mut [Scalar]| -> bool {
+                let source = &vortices[j];
+                let left = source.bound_vortex_left;
+                let right = source.bound_vortex_right;
 
-            // `core_radius` recomputed this width (and its `sqrt`) on every one
-            // of the N² elements; it depends only on the source panel. The
-            // 0.0001 literal is the original same-component constant, which is
-            // deliberately not `core_radius_chord_fraction`.
-            let panel_width = (right - left).norm();
-            let core_same = 0.0001 * panel_width;
-            let core_other = (self.core_radius_chord_fraction * source.local_chord)
-                .max(self.core_radius_width_fraction * panel_width);
+                // `core_radius` recomputed this width (and its `sqrt`) on every one
+                // of the N² elements; it depends only on the source panel. The
+                // 0.0001 literal is the original same-component constant, which is
+                // deliberately not `core_radius_chord_fraction`.
+                let panel_width = (right - left).norm();
+                let core_same = 0.0001 * panel_width;
+                let core_other = (self.core_radius_chord_fraction * source.local_chord)
+                    .max(self.core_radius_width_fraction * panel_width);
 
-            // Image geometry likewise depends only on the source panel. Note
-            // the left/right swap in the y and z images and its deliberate
-            // absence in the yz image, both preserved from the originals.
-            let y_image = (self.symmetry.y_symmetry != SymmetryType::None).then(|| {
-                let offset = 2.0 * self.symmetry.y_symmetry_plane;
-                let image_left = Vec3::new(right.x, offset - right.y, right.z);
-                let image_right = Vec3::new(left.x, offset - left.y, left.z);
-                let midpoint = 0.5 * (image_left + image_right);
-                (
-                    image_left,
-                    image_right,
-                    midpoint,
-                    self.symmetry.y_symmetry.factor(),
-                )
-            });
-            let z_image = (self.symmetry.z_symmetry != SymmetryType::None).then(|| {
-                let offset = 2.0 * self.symmetry.z_symmetry_plane;
-                (
-                    Vec3::new(right.x, right.y, offset - right.z),
-                    Vec3::new(left.x, left.y, offset - left.z),
-                    self.symmetry.z_symmetry.factor(),
-                )
-            });
-            let yz_image = (self.symmetry.z_symmetry != SymmetryType::None
-                && self.symmetry.y_symmetry != SymmetryType::None)
-                .then(|| {
-                    let y_offset = 2.0 * self.symmetry.y_symmetry_plane;
-                    let z_offset = 2.0 * self.symmetry.z_symmetry_plane;
+                // Image geometry likewise depends only on the source panel. Note
+                // the left/right swap in the y and z images and its deliberate
+                // absence in the yz image, both preserved from the originals.
+                let y_image = (self.symmetry.y_symmetry != SymmetryType::None).then(|| {
+                    let offset = 2.0 * self.symmetry.y_symmetry_plane;
+                    let image_left = Vec3::new(right.x, offset - right.y, right.z);
+                    let image_right = Vec3::new(left.x, offset - left.y, left.z);
+                    let midpoint = 0.5 * (image_left + image_right);
                     (
-                        Vec3::new(left.x, y_offset - left.y, z_offset - left.z),
-                        Vec3::new(right.x, y_offset - right.y, z_offset - right.z),
-                        // `a * b * v` parses as `(a * b) * v`, so folding the
-                        // two scalar factors is exact.
-                        self.symmetry.y_symmetry.factor() * self.symmetry.z_symmetry.factor(),
+                        image_left,
+                        image_right,
+                        midpoint,
+                        self.symmetry.y_symmetry.factor(),
                     )
                 });
+                let z_image = (self.symmetry.z_symmetry != SymmetryType::None).then(|| {
+                    let offset = 2.0 * self.symmetry.z_symmetry_plane;
+                    (
+                        Vec3::new(right.x, right.y, offset - right.z),
+                        Vec3::new(left.x, left.y, offset - left.z),
+                        self.symmetry.z_symmetry.factor(),
+                    )
+                });
+                let yz_image = (self.symmetry.z_symmetry != SymmetryType::None
+                    && self.symmetry.y_symmetry != SymmetryType::None)
+                    .then(|| {
+                        let y_offset = 2.0 * self.symmetry.y_symmetry_plane;
+                        let z_offset = 2.0 * self.symmetry.z_symmetry_plane;
+                        (
+                            Vec3::new(left.x, y_offset - left.y, z_offset - left.z),
+                            Vec3::new(right.x, y_offset - right.y, z_offset - right.z),
+                            // `a * b * v` parses as `(a * b) * v`, so folding the
+                            // two scalar factors is exact.
+                            self.symmetry.y_symmetry.factor() * self.symmetry.z_symmetry.factor(),
+                        )
+                    });
 
-            let velocity_column = &mut velocity_data[j * 3 * n..(j + 1) * 3 * n];
-            let aic_column: &mut [Scalar] = if WITH_AIC {
-                &mut aic_data[j * n..(j + 1) * n]
-            } else {
-                &mut []
-            };
+                let mut all_finite = true;
+                for (i, target) in targets.iter().enumerate() {
+                    let field_point = target.control_point;
+                    let core = if target.component_index == source.component_index {
+                        core_same
+                    } else {
+                        core_other
+                    };
 
-            for (i, target) in targets.iter().enumerate() {
-                let field_point = target.control_point;
-                let core = if target.component_index == source.component_index {
-                    core_same
-                } else {
-                    core_other
-                };
-
-                let mut velocity = horseshoe_vortex_velocity(
-                    &field_point,
-                    &left,
-                    &right,
-                    self.prandtl_glauert_factor,
-                    core,
-                    i != j,
-                );
-                if let Some((image_left, image_right, midpoint, factor)) = y_image {
-                    let include_bound = !(self.symmetry.y_symmetry == SymmetryType::Symmetric
-                        && (field_point - midpoint).norm_squared() < EPSILON);
-                    velocity += factor
-                        * horseshoe_vortex_velocity(
-                            &field_point,
-                            &image_left,
-                            &image_right,
-                            self.prandtl_glauert_factor,
-                            core,
-                            include_bound,
-                        );
-                }
-                if let Some((image_left, image_right, factor)) = z_image {
-                    velocity += factor
-                        * horseshoe_vortex_velocity(
-                            &field_point,
-                            &image_left,
-                            &image_right,
-                            self.prandtl_glauert_factor,
-                            core,
-                            true,
-                        );
-                    if let Some((image_left, image_right, factor)) = yz_image {
+                    let mut velocity = horseshoe_vortex_velocity(
+                        &field_point,
+                        &left,
+                        &right,
+                        self.prandtl_glauert_factor,
+                        core,
+                        i != j,
+                    );
+                    if let Some((image_left, image_right, midpoint, factor)) = y_image {
+                        let include_bound = !(self.symmetry.y_symmetry == SymmetryType::Symmetric
+                            && (field_point - midpoint).norm_squared() < EPSILON);
+                        velocity += factor
+                            * horseshoe_vortex_velocity(
+                                &field_point,
+                                &image_left,
+                                &image_right,
+                                self.prandtl_glauert_factor,
+                                core,
+                                include_bound,
+                            );
+                    }
+                    if let Some((image_left, image_right, factor)) = z_image {
                         velocity += factor
                             * horseshoe_vortex_velocity(
                                 &field_point,
@@ -381,28 +492,46 @@ impl<'a> InfluenceMatrixBuilder<'a> {
                                 core,
                                 true,
                             );
+                        if let Some((image_left, image_right, factor)) = yz_image {
+                            velocity += factor
+                                * horseshoe_vortex_velocity(
+                                    &field_point,
+                                    &image_left,
+                                    &image_right,
+                                    self.prandtl_glauert_factor,
+                                    core,
+                                    true,
+                                );
+                        }
+                    }
+
+                    velocity_column[3 * i] = velocity.x;
+                    velocity_column[3 * i + 1] = velocity.y;
+                    velocity_column[3 * i + 2] = velocity.z;
+                    if WITH_AIC {
+                        let normal = target.normal;
+                        let entry =
+                            velocity.x * normal.x + velocity.y * normal.y + velocity.z * normal.z;
+                        aic_column[i] = entry;
+                        all_finite &= entry.is_finite();
                     }
                 }
+                all_finite
+            };
 
-                velocity_column[3 * i] = velocity.x;
-                velocity_column[3 * i + 1] = velocity.y;
-                velocity_column[3 * i + 2] = velocity.z;
-                if WITH_AIC {
-                    let normal = target.normal;
-                    aic_column[i] =
-                        velocity.x * normal.x + velocity.y * normal.y + velocity.z * normal.z;
-                }
-            }
+        let aic_all_finite =
+            drive_columns(&mut velocity_data, &mut aic_data, n, WITH_AIC, fill_column);
+
+        Assembly {
+            velocity: MatX::from_vec(3 * n, n, velocity_data),
+            aic: WITH_AIC.then(|| MatX::from_vec(n, n, aic_data)),
+            aic_all_finite,
         }
-
-        let velocity = MatX::from_vec(3 * n, n, velocity_data);
-        let aic = WITH_AIC.then(|| MatX::from_vec(n, n, aic_data));
-        (velocity, aic)
     }
 
     #[must_use]
     pub fn velocity_influence_matrix(&self) -> MatX {
-        self.assemble::<false>().0
+        self.assemble::<false>().velocity
     }
 
     #[must_use]
@@ -412,10 +541,25 @@ impl<'a> InfluenceMatrixBuilder<'a> {
 
     #[must_use]
     pub fn normalwash_and_velocity(&self) -> (MatX, MatX) {
-        let (velocity, aic) = self.assemble::<true>();
+        let (aic, velocity, _) = self.normalwash_and_velocity_checked();
+        (aic, velocity)
+    }
+
+    /// As [`Self::normalwash_and_velocity`], plus whether every normalwash
+    /// entry is finite.
+    ///
+    /// The flag is accumulated while the matrix is written, so callers that
+    /// need it — [`super::VortexLatticeSolver::rebuild_aic`] does, to reject a
+    /// singular system — avoid a second full pass over the assembled matrix.
+    #[must_use]
+    pub fn normalwash_and_velocity_checked(&self) -> (MatX, MatX, bool) {
+        let assembly = self.assemble::<true>();
         (
-            aic.expect("assemble::<true> always produces the normalwash matrix"),
-            velocity,
+            assembly
+                .aic
+                .expect("assemble::<true> always produces the normalwash matrix"),
+            assembly.velocity,
+            assembly.aic_all_finite,
         )
     }
 

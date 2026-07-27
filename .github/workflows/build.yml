@@ -38,6 +38,24 @@ jobs:
           toolchain: 1.93.1
       - run: cargo test --all-features
 
+  parallel-feature:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: 1.93.1
+          components: clippy
+      - run: cargo clippy --all-targets --features parallel -- -D warnings
+      - run: cargo test --features parallel
+      # Influence assembly must produce identical results however the source
+      # columns are distributed across threads.
+      - name: Verify thread-count invariance
+        run: |
+          for threads in 1 2 4; do
+            RAYON_NUM_THREADS="$threads" cargo test --release --features parallel
+          done
+
   linux-release:
     runs-on: ubuntu-24.04
     steps:

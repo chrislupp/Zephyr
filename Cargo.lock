@@ -902,6 +902,7 @@ dependencies = [
  "faer",
  "nalgebra",
  "num-complex",
+ "rayon",
  "serde",
  "serde_json",
  "tempfile",

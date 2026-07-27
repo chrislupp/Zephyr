@@ -181,8 +181,13 @@ impl VortexLatticeSolver {
         let mut builder = InfluenceMatrixBuilder::new(&self.mesh);
         builder.set_mach_number(self.current_mach);
         builder.set_symmetry(self.symmetry);
-        (self.aic_matrix, self.velocity_influence_matrix) = builder.normalwash_and_velocity();
-        if !self.aic_matrix.iter().all(|value| value.is_finite()) {
+        // The finiteness flag is accumulated during assembly, so rejecting a
+        // singular system no longer costs a second full pass over the matrix
+        // (10.6 MB at 1152 panels).
+        let all_finite;
+        (self.aic_matrix, self.velocity_influence_matrix, all_finite) =
+            builder.normalwash_and_velocity_checked();
+        if !all_finite {
             return Err(PegasusError::SingularSystem);
         }
         self.aic_lu = Some(factorize(&self.aic_matrix));
