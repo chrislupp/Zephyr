@@ -23,7 +23,7 @@ pub(crate) struct LatticeDirections {
 }
 
 impl LatticeDirections {
-    fn zeros(mesh: &VortexLattice) -> Self {
+    pub(crate) fn zeros(mesh: &VortexLattice) -> Self {
         Self {
             bound_left: vec![Vec3::zeros(); mesh.vortex_count()],
             bound_right: vec![Vec3::zeros(); mesh.vortex_count()],
@@ -32,62 +32,6 @@ impl LatticeDirections {
             local_chord: vec![0.0; mesh.vortex_count()],
             strip_chord: vec![0.0; mesh.strip_count()],
         }
-    }
-
-    pub(crate) fn difference(
-        plus: &VortexLattice,
-        minus: &VortexLattice,
-        denominator: Scalar,
-    ) -> Result<Self> {
-        if plus.vortex_count() != minus.vortex_count()
-            || plus.strip_count() != minus.strip_count()
-            || denominator.abs() <= EPSILON
-        {
-            return Err(PegasusError::InvalidGeometry(
-                "geometry perturbation changed lattice topology".into(),
-            ));
-        }
-        let scale = denominator.recip();
-        Ok(Self {
-            bound_left: plus
-                .vortices()
-                .iter()
-                .zip(minus.vortices())
-                .map(|(plus, minus)| scale * (plus.bound_vortex_left - minus.bound_vortex_left))
-                .collect(),
-            bound_right: plus
-                .vortices()
-                .iter()
-                .zip(minus.vortices())
-                .map(|(plus, minus)| scale * (plus.bound_vortex_right - minus.bound_vortex_right))
-                .collect(),
-            control_point: plus
-                .vortices()
-                .iter()
-                .zip(minus.vortices())
-                .map(|(plus, minus)| scale * (plus.control_point - minus.control_point))
-                .collect(),
-            normal: plus
-                .vortices()
-                .iter()
-                .zip(minus.vortices())
-                .map(|(plus, minus)| {
-                    scale * (plus.normal_at_control_point - minus.normal_at_control_point)
-                })
-                .collect(),
-            local_chord: plus
-                .vortices()
-                .iter()
-                .zip(minus.vortices())
-                .map(|(plus, minus)| scale * (plus.local_chord - minus.local_chord))
-                .collect(),
-            strip_chord: plus
-                .strips()
-                .iter()
-                .zip(minus.strips())
-                .map(|(plus, minus)| scale * (plus.chord_center - minus.chord_center))
-                .collect(),
-        })
     }
 }
 
@@ -161,6 +105,11 @@ impl<'a> GeometryAdjointContext<'a> {
         })
     }
 
+    /// Lattice the context was built against.
+    pub(crate) fn mesh(&self) -> &VortexLattice {
+        self.solver.mesh()
+    }
+
     pub(crate) fn evaluate(
         &self,
         direction: &LatticeDirections,
@@ -187,7 +136,7 @@ impl<'a> GeometryAdjointContext<'a> {
             &direction.bound_left,
             &direction.bound_right,
             &direction.control_point,
-        );
+        )?;
         let trefftz_geometry = trefftz_geometry_jvp(
             mesh,
             self.solver.solution(),
@@ -197,7 +146,7 @@ impl<'a> GeometryAdjointContext<'a> {
             &direction.bound_left,
             &direction.bound_right,
             &direction.strip_chord,
-        );
+        )?;
         let mut result = Vec::with_capacity(self.outputs.len());
         for (column, output) in self.outputs.iter().copied().enumerate() {
             let explicit = if output == AeroOutput::InducedDrag {
@@ -471,7 +420,7 @@ fn node_direction(target_i: usize, target_j: usize, i: usize, j: usize, componen
     }
 }
 
-fn normalized_direction(vector: &Vec3, direction: &Vec3) -> Vec3 {
+pub(crate) fn normalized_direction(vector: &Vec3, direction: &Vec3) -> Vec3 {
     let norm = vector.norm();
     if norm <= EPSILON {
         Vec3::zeros()
@@ -490,6 +439,6 @@ fn normalized_dot(vector: &Vec3, direction: &Vec3) -> Scalar {
     }
 }
 
-fn reflected_direction(direction: Vec3) -> Vec3 {
+pub(crate) fn reflected_direction(direction: Vec3) -> Vec3 {
     Vec3::new(direction.x, -direction.y, direction.z)
 }

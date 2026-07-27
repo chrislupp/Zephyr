@@ -219,36 +219,23 @@ impl Aircraft {
     }
 
     /// Total generated horseshoe count.
+    ///
+    /// Agrees with the lattice the mesher actually builds, including
+    /// per-section spanwise overrides and the per-interval rounding.
     #[must_use]
     pub fn total_vortex_count(&self) -> usize {
         self.surfaces
             .iter()
-            .map(|surface| {
-                surface.chordwise_panel_count()
-                    * surface.spanwise_panel_count()
-                    * if surface.y_duplicate().is_some() {
-                        2
-                    } else {
-                        1
-                    }
-            })
+            .map(|surface| surface.chordwise_panel_count() * duplicated_strip_count(surface))
             .sum()
     }
 
     /// Total generated strip count.
+    ///
+    /// Agrees with the lattice the mesher actually builds.
     #[must_use]
     pub fn total_strip_count(&self) -> usize {
-        self.surfaces
-            .iter()
-            .map(|surface| {
-                surface.spanwise_panel_count()
-                    * if surface.y_duplicate().is_some() {
-                        2
-                    } else {
-                        1
-                    }
-            })
-            .sum()
+        self.surfaces.iter().map(duplicated_strip_count).sum()
     }
 
     /// Sum of surface planform areas.
@@ -265,4 +252,14 @@ impl Aircraft {
             .map(Surface::span)
             .fold(0.0, Scalar::max)
     }
+}
+
+/// Strips a surface contributes to the lattice, including its mirrored copy.
+fn duplicated_strip_count(surface: &Surface) -> usize {
+    surface.spanwise_strip_count()
+        * if surface.y_duplicate().is_some() {
+            2
+        } else {
+            1
+        }
 }

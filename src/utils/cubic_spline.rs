@@ -197,6 +197,14 @@ impl CubicSpline {
         self.evaluate_all(parameter).map(|all| all.2)
     }
 
+    /// Index `i` such that the parameter lies in `[parameters[i-1], parameters[i]]`.
+    ///
+    /// The result is always in `1..=last`, so callers may index `i - 1`
+    /// unconditionally. A NaN parameter satisfies neither ordered comparison
+    /// and makes `partition_point` return 0, which would underflow that
+    /// subtraction; clamping to 1 instead lets the NaN flow through the
+    /// polynomial and out as a NaN result, which is what the legacy binary
+    /// search did.
     fn find_interval(&self, parameter: Scalar) -> usize {
         if parameter <= self.parameters[0] {
             return 1;
@@ -205,7 +213,9 @@ impl CubicSpline {
         if parameter >= self.parameters[last] {
             return last;
         }
-        self.parameters.partition_point(|value| *value <= parameter)
+        self.parameters
+            .partition_point(|value| *value <= parameter)
+            .clamp(1, last)
     }
 }
 

@@ -17,8 +17,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   including ASCII/binary output and atomic file replacement.
 - Native Rust examples, a Criterion scaling benchmark, Rust API guides, and
   Linux/macOS/Windows CI.
-- A committed v0.2.0 numerical oracle and a manifest covering all 488
-  non-Philote CTest cases.
+- A committed v0.2.0 numerical oracle, and a frozen inventory of the 488
+  non-Philote CTest cases in `tests/fixtures/parity/ctest-manifest.json`. The
+  manifest records which cases existed and at what tolerance; it carries no
+  expected values and is not itself a behavioural oracle. Numerical parity is
+  asserted by `tests/oracle_parity.rs` against committed v0.2.0 fixtures.
 - Opt-in reflection reuse for lattices built from `y_duplicated` surfaces, via
   `set_mirror_reuse` on the solver and the influence builder. The induced
   velocity is equivariant under the mirror `M = diag(1, -1, 1)`, so half the
@@ -38,8 +41,138 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `faer/rayon` is deliberately not enabled, since gemm's cache blocking differs
   between its sequential and parallel paths and would perturb the LU's last ULP.
 
+### Fixed
+
+- Degenerate section geometry is rejected at solver entry instead of meshing
+  into NaN. Zero or negative chord, coincident spanwise stations, sections that
+  reverse spanwise direction, and non-finite coordinates all previously
+  generated a lattice "successfully": repeating a station — a standard AVL
+  spacing-break idiom — produced 2 non-finite control points out of 18, which
+  then poisoned every entry of the AIC. The station-separation test is relative
+  to the longest interval, so it means the same thing at any model scale.
+- `Aircraft::total_vortex_count` and `total_strip_count` now agree with the
+  lattice the mesher builds. They multiplied the surface-level panel count by
+  the duplicate factor, ignoring per-section overrides and the per-interval
+  rounding, so they reported 20 strips where the mesher produced 19, and 20
+  where a section-level override produced 7.
+- Influence assembly is now invariant under a uniform rescaling of the
+  geometry. The bound-leg guard compared a length⁴ quantity, and the trailing
+  legs a length, against an absolute `EPSILON`, so below roughly millimetre
+  scale the bound contribution was silently dropped from every panel: `‖AIC‖`
+  moved 3.3% at 1e-3 scale and 4.2% at 1e-4, with no error reported. The tests
+  are the dimensionless ratios that were intended, and agree with the previous
+  thresholds at unit scale.
+- `solve` now rejects non-finite body rates and a NaN dynamic pressure. Only
+  `alpha`, `beta`, `mach` and the control deflections were validated, so a NaN
+  roll rate returned an all-NaN circulation flagged as a valid solution; NaN
+  also defeated the `dynamic_pressure < 0.0` test, since every ordered
+  comparison against NaN is false.
+- `solve` now rejects Mach numbers at or above 1 instead of clamping the
+  Prandtl-Glauert factor to 1 and returning the incompressible answer, which
+  produced finite, plausible-looking results for a regime the method cannot
+  represent while `mach_number()` still reported the supersonic value.
+- `InfluenceMatrixBuilder::induced_velocity` now includes the doubly-reflected
+  yz image. Assembly adds it whenever both symmetry planes are active, so the
+  sampled velocity field disagreed with the influence matrix by roughly 3%,
+  including a sign flip in the y component.
+- A failed `rebuild_aic` no longer publishes non-finite matrices. The fields
+  were written before the finiteness check, so `aic()`, `velocity_matrix()`,
+  `linearized_aic()` and `solution_aic()` handed out NaN-laden matrices paired
+  with a stale factorization.
+- `SurfaceMeshInfo::original_surface_index` is now always a `surface_info`
+  slot. The aircraft generator stored an `Aircraft::surfaces()` index and the
+  direct-mesh generator left it at the `Default` of 0, so for
+  `[wing(duplicated), tail]` the tail's value pointed at the wing's mirror.
+- Reflection reuse now verifies that its mirror blocks tile the column space
+  contiguously and in order. That held only because both generators happen to
+  append each duplicate immediately after its original, and the check was a
+  `debug_assert` that vanished in release, where a violation would have written
+  columns into the wrong block.
+- The AVL reader no longer panics on out-of-range panel counts. `value as usize`
+  saturates, so a paneling field of `1e30` became `usize::MAX` and overflowed
+  the mesher's panel arithmetic; counts are now range-checked at parse time and
+  rejected with a typed error.
+- `CubicSpline::evaluate` no longer panics on a NaN parameter. NaN satisfies
+  neither interval comparison, so the interval search returned 0 and the
+  caller's `i - 1` underflowed. NaN now propagates through as a NaN result, as
+  the legacy binary search did. Reachable from `Airfoil::camber`.
+- The mass reader no longer discards a line because of its comment. Comments
+  are stripped before the line is classified, so an `=` inside a comment such
+  as `! main gear (x = 1.2 m)` no longer captures the line as a unit
+  assignment and silently drops the component's mass, centre of gravity and
+  inertia.
+- Mass `*` scale and `+` offset lines no longer read numbers out of their own
+  comments, and leave the previous value untouched when fewer than three
+  numeric fields are present.
+- Mass component fields stop at the first token that does not parse, matching
+  the legacy stream extraction, instead of skipping it and promoting later
+  numbers into earlier slots.
+- A `CONTROL` line without the optional trailing `SgnDup` field is accepted
+  with a default sign of 1.0. Requiring it rejected the entire aircraft over an
+  omission the legacy reader tolerated.
+- A failed `AFILE` load is now a parse error carrying the line number instead
+  of being silently swallowed, which left the section on its default flat plate
+  and let the solve report success against the wrong camber. The filename is
+  comment-stripped.
+
+### Removed
+
+- `GradientCalculator::set_finite_difference_step`, a deprecated no-op, along
+  with the internal finite-difference machinery it documented. No finite
+  difference remains anywhere in `src/`.
+- `VortexLattice::{vortex_core_radius_chord_fraction,
+  set_vortex_core_radius_chord_fraction, vortex_core_radius_width_fraction,
+  set_vortex_core_radius_width_fraction}`. These were a second, independent
+  pair of core-radius fractions with different defaults (0.75/0.25 against the
+  builder's 0.0001/0.0001) that were never passed to assembly, so setting them
+  left the AIC bit-identical while appearing to tune the regularization. The
+  live knobs are `InfluenceMatrixBuilder::{set_core_radius_chord_fraction,
+  set_core_radius_width_fraction}`, which apply between panels on different
+  components.
+
 ### Changed
 
+- Section-geometry gradients are now fully analytical. `compute_geometry_gradients`
+  previously cloned the aircraft, perturbed each section by a hardcoded step,
+  regenerated two lattices and central-differenced them; it now builds the
+  lattice tangent in closed form through the new `section_geometry` module and
+  feeds the same adjoint context. The interpolated-twist derivative is the exact
+  chord-weighted form `(K dS - S dK) / (S² + K²)`, **not** the small-angle
+  linearization used by the v0.2.0 C++ `PropagateTwistGradient`, which is exact
+  only when the chords and twists match at both ends of an interval and is off
+  by tens of percent on any tapered, twisted wing. `interpolated_twist_jvp` and
+  `panel_normal_jvp` are exported so the kernels can be verified directly.
+- `compute_flight_condition_gradients` assembles each output's circulation
+  gradient once and performs a single batched transpose solve. It previously
+  built every gradient twice and ran two adjoint solves per output — 2K
+  assemblies and 2K solves for K outputs.
+- `force_geometry_jvp` and `trefftz_geometry_jvp` return `Result` and reject
+  direction slices that do not match the lattice. They previously truncated to
+  the shortest slice or zero-filled the missing entries, returning a partial
+  derivative indistinguishable from a correct one; `strip_chord_direction` was
+  never length-checked at all.
+- `control_circulation_derivative` reuses the cached factorization when the
+  effective normals match the solved ones, instead of taking a fresh O(N³)
+  decomposition of a matrix that was already factorized, and contracts the
+  normal-derivative matrix into the circulation directly rather than
+  materializing a dense N×N to use once.
+- Spanwise discretization is computed once by `Surface` and shared with the
+  mesher, replacing a second copy of the arc accumulation and per-interval
+  rounding. `Surface::spanwise_strip_count` exposes the result.
+- `PegasusError::Parse` carries a structured `ParseLocation { path, line }`
+  instead of a pre-formatted string, so callers can recover the line number and
+  file programmatically. `PegasusError` is now `#[non_exhaustive]`.
+- `tests/parity_cases.rs` no longer generates one test per frozen CTest case.
+  The 488 generated tests all dispatched to one of eight category-level smoke
+  checks, so every case within a category ran byte-identical assertions
+  regardless of the C++ behaviour it was named after — 488 reported passes
+  backed by eight assertions, which also inflated the line-coverage gate. The
+  file now asserts the manifest's integrity and records the porting gap
+  explicitly; real behavioural coverage lives in the dedicated suites.
+- Meshes large enough to reach the multithreaded assembly are now covered by
+  `tests/mirror_reuse.rs`. Both rayon drivers gate at 128 panels and no test
+  mesh had previously exceeded that, so the parallel code was compiled but
+  never executed and CI's `RAYON_NUM_THREADS` sweep exercised nothing.
 - The package is now `pegasus-vlm`, imported as `pegasus_vlm`, and requires
   Rust 1.93.1.
 - The public API uses owned Rust data, checked slices and indices,

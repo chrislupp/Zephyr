@@ -1,6 +1,7 @@
 //! Analytical derivatives of the Kutta–Joukowski force kernel.
 
 use crate::core::{Scalar, Vec3, VecX};
+use crate::error::{PegasusError, Result};
 use crate::geometry::ReferenceQuantities;
 use crate::solver::{FlightCondition, SolutionState, VortexLattice, VortexLatticeSolver};
 
@@ -195,10 +196,11 @@ pub fn force_induced_velocity_gradient(
 /// Forward geometry derivative of all six primary coefficients while holding
 /// circulation and induced velocity fixed.
 ///
-/// Endpoint and control-point perturbation slices must contain one vector per
-/// vortex. The control-point perturbation is also the moment-arm perturbation;
-/// callers moving the reference point should subtract that perturbation first.
-#[must_use]
+/// Endpoint and control-point direction slices must contain exactly one vector
+/// per vortex; a mismatch is an error rather than a silent truncation, which
+/// would return a partial derivative indistinguishable from a correct one. The
+/// control-point direction is also the moment-arm direction; callers moving the
+/// reference point should subtract that direction first.
 pub fn force_geometry_jvp(
     mesh: &VortexLattice,
     solution: &SolutionState,
@@ -207,13 +209,17 @@ pub fn force_geometry_jvp(
     bound_left_direction: &[Vec3],
     bound_right_direction: &[Vec3],
     control_point_direction: &[Vec3],
-) -> [Scalar; 6] {
-    let count = mesh
-        .vortex_count()
-        .min(bound_left_direction.len())
-        .min(bound_right_direction.len())
-        .min(control_point_direction.len())
-        .min(solution.circulation.len());
+) -> Result<[Scalar; 6]> {
+    let count = mesh.vortex_count();
+    if bound_left_direction.len() != count
+        || bound_right_direction.len() != count
+        || control_point_direction.len() != count
+        || solution.circulation.len() != count
+    {
+        return Err(PegasusError::InvalidGeometry(
+            "geometry direction slices must have one entry per vortex".into(),
+        ));
+    }
     let freestream = VortexLatticeSolver::freestream_direction(condition);
     let mut force_derivative = Vec3::zeros();
     let mut moment_derivative = Vec3::zeros();
@@ -242,14 +248,14 @@ pub fn force_geometry_jvp(
     force_derivative /= reference.area;
     moment_derivative /= reference.area * reference.chord;
     let (sin, cos) = condition.alpha.sin_cos();
-    [
+    Ok([
         force_derivative.z * cos - force_derivative.x * sin,
         force_derivative.x * cos + force_derivative.z * sin,
         force_derivative.y,
         -moment_derivative.x,
         moment_derivative.y,
         -moment_derivative.z,
-    ]
+    ])
 }
 
 fn force_and_moment(

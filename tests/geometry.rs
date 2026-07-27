@@ -281,3 +281,138 @@ fn cubic_spline_honors_specified_endpoint_slopes() {
     assert_abs_diff_eq!(spline.evaluate_derivative(1.0).unwrap(), 1.0);
     assert!(CubicSpline::build(&[0.0, 0.0], &[0.0, 1.0]).is_err());
 }
+
+/// A NaN evaluation parameter must propagate as NaN, not panic.
+///
+/// `find_interval` returns an index the caller decrements, and NaN satisfies
+/// neither of its ordered comparisons, so `partition_point` returned 0 and the
+/// subtraction underflowed. The legacy binary search converged to the last
+/// interval and returned NaN, which is the behaviour restored here.
+#[test]
+fn spline_evaluation_at_nan_returns_nan_without_panicking() {
+    let spline = CubicSpline::build(&[0.0, 0.5, 1.0], &[0.0, 1.0, 0.0]).unwrap();
+    assert!(spline.evaluate(f64::NAN).unwrap().is_nan());
+    assert!(spline.evaluate_derivative(f64::NAN).unwrap().is_nan());
+    assert!(
+        spline
+            .evaluate_second_derivative(f64::NAN)
+            .unwrap()
+            .is_nan()
+    );
+
+    // Reachable from the airfoil API, which takes a plain chord fraction.
+    let airfoil = Airfoil::naca4_str("2412", 41).unwrap();
+    assert!(airfoil.camber(f64::NAN).is_nan());
+    assert!(airfoil.camber_slope(f64::NAN).is_nan());
+
+    // Finite parameters are unaffected.
+    assert_abs_diff_eq!(spline.evaluate(0.5).unwrap(), 1.0, epsilon = 1.0e-12);
+}
+
+/// Geometry that cannot produce a usable lattice must be rejected, not meshed
+/// into NaN.
+///
+/// Each of these previously generated "successfully". Coincident stations gave
+/// 2 non-finite control points out of 18, which then poisoned every entry of
+/// the AIC.
+#[test]
+fn degenerate_section_geometry_is_rejected() {
+    fn wing(stations: &[f64], chords: &[f64]) -> Aircraft {
+        let mut surface = Surface::new("wing");
+        for (y, chord) in stations.iter().zip(chords) {
+            surface.add_section(Section::new(Vec3::new(0.0, *y, 0.0), *chord, 0.0));
+        }
+        surface.set_chordwise_panel_count(2);
+        surface.set_spanwise_panel_count(9);
+        let mut aircraft = Aircraft::new("degenerate");
+        aircraft.add_surface(surface);
+        aircraft
+    }
+
+    let mut solver = pegasus_vlm::solver::VortexLatticeSolver::new();
+
+    // Repeating a spanwise station is a standard AVL spacing-break idiom.
+    assert!(
+        solver
+            .set_aircraft(&wing(&[0.0, 2.0, 2.0, 5.0], &[1.0; 4]))
+            .is_err()
+    );
+    // Zero and negative chord.
+    assert!(
+        solver
+            .set_aircraft(&wing(&[0.0, 5.0], &[0.0, 0.0]))
+            .is_err()
+    );
+    assert!(
+        solver
+            .set_aircraft(&wing(&[0.0, 5.0], &[1.0, -1.0]))
+            .is_err()
+    );
+    // Sections that double back overlap physically.
+    assert!(
+        solver
+            .set_aircraft(&wing(&[0.0, 5.0, 2.0], &[1.0; 3]))
+            .is_err()
+    );
+    // Non-finite coordinates.
+    assert!(
+        solver
+            .set_aircraft(&wing(&[0.0, f64::NAN], &[1.0; 2]))
+            .is_err()
+    );
+
+    // A well-formed wing still meshes, and every panel is finite.
+    solver
+        .set_aircraft(&wing(&[0.0, 2.0, 5.0], &[1.0; 3]))
+        .unwrap();
+    assert!(
+        solver
+            .mesh()
+            .vortices()
+            .iter()
+            .all(|vortex| vortex.control_point.iter().all(|v| v.is_finite()))
+    );
+}
+
+/// The counting helpers must agree with the lattice the mesher builds.
+///
+/// They multiplied the surface-level panel count by the duplicate factor,
+/// ignoring per-section overrides and the per-interval rounding, so they
+/// reported 20 strips where the mesher produced 19 and 20 where it produced 7.
+#[test]
+fn aircraft_counts_match_the_generated_lattice() {
+    fn check(aircraft: &Aircraft) {
+        let mut lattice = pegasus_vlm::solver::VortexLattice::default();
+        lattice.generate_from_aircraft(aircraft).unwrap();
+        assert_eq!(aircraft.total_strip_count(), lattice.strip_count());
+        assert_eq!(aircraft.total_vortex_count(), lattice.vortex_count());
+    }
+
+    // Uneven intervals: 20 panels split over spans of 1 and 2 truncates to
+    // 6 + 13 = 19, not 20.
+    let mut uneven = Surface::new("uneven");
+    for y in [0.0, 1.0, 3.0] {
+        uneven.add_section(Section::new(Vec3::new(0.0, y, 0.0), 1.0, 0.0));
+    }
+    uneven.set_spanwise_panel_count(20);
+    uneven.set_chordwise_panel_count(4);
+    let mut aircraft = Aircraft::new("uneven");
+    aircraft.add_surface(uneven);
+    check(&aircraft);
+
+    // A per-section override wins over the surface default outright.
+    let mut overridden = Surface::new("overridden");
+    let mut root = Section::new(Vec3::new(0.0, 0.0, 0.0), 1.0, 0.0);
+    root.set_spanwise_panel_count(7);
+    overridden.add_section(root);
+    overridden.add_section(Section::new(Vec3::new(0.0, 4.0, 0.0), 1.0, 0.0));
+    overridden.set_spanwise_panel_count(20);
+    overridden.set_chordwise_panel_count(3);
+    let mut aircraft = Aircraft::new("overridden");
+    aircraft.add_surface(overridden);
+    check(&aircraft);
+
+    // And with mirroring on top.
+    aircraft.surfaces_mut()[0].set_y_duplicate(0.0);
+    check(&aircraft);
+}

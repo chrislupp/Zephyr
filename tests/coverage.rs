@@ -126,8 +126,25 @@ fn analytical_row_column_and_force_paths_are_finite() {
         &directions,
         &directions,
         &directions,
-    );
+    )
+    .unwrap();
     assert!(geometry.iter().all(|value| value.is_finite()));
+
+    // A slice that does not match the lattice is an error, not a silently
+    // truncated partial derivative.
+    let short = vec![Vec3::zeros(); count - 1];
+    assert!(
+        force_geometry_jvp(
+            solver.mesh(),
+            solver.solution(),
+            &condition,
+            solver.reference_quantities(),
+            &short,
+            &directions,
+            &directions,
+        )
+        .is_err()
+    );
 
     let invalid = pegasus_vlm::solver::SolutionState::default();
     assert!(

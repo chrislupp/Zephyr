@@ -317,6 +317,105 @@ impl Surface {
     }
 }
 
+/// Spanwise discretization of one surface, in arc-length space.
+///
+/// Shared by the mesher and by anything that needs to agree with the lattice
+/// the mesher will build. Computing panel counts in a second place is how the
+/// counting helpers came to report 20 strips where the mesher produced 19.
+#[derive(Clone, Debug)]
+pub(crate) struct SpanwiseLayout {
+    /// Cumulative y-z arc length at each section, length `sections.len()`.
+    pub arc: Vec<Scalar>,
+    /// Panel count per section interval, length `sections.len() - 1`.
+    pub per_interval: Vec<usize>,
+    /// Arc-space panel edges, length `ny + 1`.
+    pub panel_edges: Vec<Scalar>,
+    /// Arc-space control stations, length `ny`.
+    pub controls: Vec<Scalar>,
+}
+
+impl SpanwiseLayout {
+    /// Total spanwise strips, before any `y_duplicate` mirroring.
+    pub fn strip_count(&self) -> usize {
+        self.per_interval.iter().sum()
+    }
+}
+
+impl Surface {
+    /// Spanwise layout this surface will be discretized into.
+    ///
+    /// Returns `None` when the geometry is degenerate enough that no layout
+    /// exists (fewer than two sections, or zero span). Callers that must
+    /// report *why* should validate separately; the mesher does.
+    pub(crate) fn spanwise_layout(&self) -> Option<SpanwiseLayout> {
+        let sections = self.sections();
+        if sections.len() < 2 {
+            return None;
+        }
+        let mut arc = vec![0.0; sections.len()];
+        for index in 1..sections.len() {
+            let delta = sections[index].leading_edge() - sections[index - 1].leading_edge();
+            arc[index] = arc[index - 1] + delta.yz().norm();
+        }
+        let total = arc[arc.len() - 1];
+        if !total.is_finite() || total <= EPSILON {
+            return None;
+        }
+
+        let mut per_interval = vec![0; sections.len() - 1];
+        for index in 0..sections.len() - 1 {
+            let mut count = sections[index].spanwise_panel_count();
+            if count == 0 {
+                count = self.spanwise_panel_count();
+                if count == 0 {
+                    count = 10;
+                }
+                // Integer truncation: the per-interval share of the surface
+                // default, floored, and never below one panel.
+                let fraction = (arc[index + 1] - arc[index]) / total;
+                count = ((count as Scalar * fraction) as usize).max(1);
+            }
+            per_interval[index] = count;
+        }
+
+        let ny: usize = per_interval.iter().sum();
+        let mut panel_edges = Vec::with_capacity(ny + 1);
+        let mut controls = Vec::with_capacity(ny);
+        panel_edges.push(0.0);
+        for index in 0..sections.len() - 1 {
+            let count = per_interval[index];
+            let distribution = match sections[index].spanwise_spacing() {
+                SpacingType::None => self.spanwise_spacing(),
+                other => other,
+            };
+            let fractions = crate::utils::spacing(2 * count + 1, distribution);
+            let start = arc[index];
+            let length = arc[index + 1] - start;
+            for panel in 0..count {
+                controls.push(start + length * fractions[2 * panel + 1]);
+                panel_edges.push(start + length * fractions[2 * panel + 2]);
+            }
+        }
+
+        Some(SpanwiseLayout {
+            arc,
+            per_interval,
+            panel_edges,
+            controls,
+        })
+    }
+
+    /// Spanwise strips this surface generates, before `y_duplicate` mirroring.
+    ///
+    /// Zero when the geometry is degenerate. Accounts for per-section
+    /// overrides and the per-interval rounding, so it matches the mesher.
+    #[must_use]
+    pub fn spanwise_strip_count(&self) -> usize {
+        self.spanwise_layout()
+            .map_or(0, |layout| layout.strip_count())
+    }
+}
+
 fn numeric_spacing(value: Scalar) -> SpacingType {
     if value.abs() < 0.01 {
         SpacingType::Uniform

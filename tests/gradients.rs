@@ -400,3 +400,310 @@ fn invalid_solution_is_rejected_by_adjoint() {
     let state = SolutionState::default();
     assert!(!state.is_valid);
 }
+
+/// Perturbs one section design variable on a clone.
+fn perturbed(
+    aircraft: &pegasus_vlm::geometry::Aircraft,
+    surface_index: usize,
+    section_index: usize,
+    variable: GeometryVariable,
+    delta: f64,
+) -> pegasus_vlm::geometry::Aircraft {
+    let mut clone = aircraft.clone();
+    let section = &mut clone.surfaces_mut()[surface_index].sections_mut()[section_index];
+    match variable {
+        GeometryVariable::Chord => section.set_chord(section.chord() + delta),
+        GeometryVariable::Twist => section.set_twist_degrees(section.twist_degrees() + delta),
+        GeometryVariable::LeadingEdgeX
+        | GeometryVariable::LeadingEdgeY
+        | GeometryVariable::LeadingEdgeZ => {
+            let mut point = *section.leading_edge();
+            let component = match variable {
+                GeometryVariable::LeadingEdgeX => 0,
+                GeometryVariable::LeadingEdgeY => 1,
+                _ => 2,
+            };
+            point[component] += delta;
+            section.set_leading_edge(point);
+        }
+    }
+    clone
+}
+
+const GEOMETRY_VARIABLES: [GeometryVariable; 5] = [
+    GeometryVariable::Chord,
+    GeometryVariable::Twist,
+    GeometryVariable::LeadingEdgeX,
+    GeometryVariable::LeadingEdgeY,
+    GeometryVariable::LeadingEdgeZ,
+];
+
+const ALL_OUTPUTS: [AeroOutput; 7] = [
+    AeroOutput::Lift,
+    AeroOutput::Drag,
+    AeroOutput::Side,
+    AeroOutput::Roll,
+    AeroOutput::Pitch,
+    AeroOutput::Yaw,
+    AeroOutput::InducedDrag,
+];
+
+/// Condition with every rate non-zero, so roll and yaw are genuinely excited.
+fn rich_condition() -> FlightCondition {
+    FlightCondition {
+        alpha: 4.0 * DEGREES_TO_RADIANS,
+        beta: 1.5 * DEGREES_TO_RADIANS,
+        roll_rate: 0.03,
+        pitch_rate: -0.02,
+        yaw_rate: 0.01,
+        ..FlightCondition::default()
+    }
+}
+
+fn check_section_gradients(
+    aircraft: &pegasus_vlm::geometry::Aircraft,
+    outputs: &[AeroOutput],
+    label: &str,
+) {
+    let condition = rich_condition();
+    let mut calculator = GradientCalculator::new();
+    calculator.set_aircraft(aircraft);
+    let gradients = calculator.compute_geometry_gradients(&condition).unwrap();
+    let section_count = aircraft.surfaces()[0].sections().len();
+    assert_eq!(gradients.sections.len(), section_count);
+
+    for section_index in 0..section_count {
+        for variable in GEOMETRY_VARIABLES {
+            let step = if variable == GeometryVariable::Twist {
+                1.0e-4
+            } else {
+                1.0e-6
+            };
+            let plus = perturbed(aircraft, 0, section_index, variable, step);
+            let minus = perturbed(aircraft, 0, section_index, variable, -step);
+            for &output in outputs {
+                let analytical = gradients.sections[section_index].get(variable).get(output);
+                let finite = (coefficient(&plus, &condition, output)
+                    - coefficient(&minus, &condition, output))
+                    / (2.0 * step);
+                let tolerance = 2.0e-5_f64.max(2.0e-5 * analytical.abs());
+                assert!(
+                    (analytical - finite).abs() <= tolerance,
+                    "{label}: section {section_index} {variable:?} {output:?}: \
+                     analytical {analytical:.12} vs finite {finite:.12}"
+                );
+            }
+        }
+    }
+}
+
+/// The analytical section-geometry chain, verified against full re-solves.
+///
+/// This is the test that validates replacing the finite-difference producer.
+/// The fixture is tapered *and* twisted with a non-zero surface angle offset
+/// and a non-unit scale, so a dropped `scale.x`, a dropped `angle_offset`, or
+/// the old small-angle twist linearization all fail here.
+#[test]
+fn section_gradients_match_resolves_on_a_tapered_twisted_wing() {
+    check_section_gradients(&common::tapered_twisted_wing(), &ALL_OUTPUTS, "tapered");
+}
+
+/// Mirrored geometry, restricted to the outputs that expose sign errors.
+///
+/// Lift and induced drag are symmetric and would pass even with the mirror
+/// reflection wrong; roll and yaw would not.
+#[test]
+fn section_gradients_match_resolves_on_a_mirrored_wing() {
+    check_section_gradients(
+        &common::tapered_twisted_wing_mirrored(),
+        &[
+            AeroOutput::Lift,
+            AeroOutput::Roll,
+            AeroOutput::Yaw,
+            AeroOutput::InducedDrag,
+        ],
+        "mirrored",
+    );
+}
+
+/// The only fixture that makes `claf` design-dependent, so the only one that
+/// exercises `d(x_vortex[0])`.
+#[test]
+fn section_gradients_handle_a_design_dependent_cl_alpha_factor() {
+    check_section_gradients(
+        &common::cl_alpha_factor_wing(),
+        &[AeroOutput::Lift, AeroOutput::Pitch, AeroOutput::InducedDrag],
+        "cl-alpha factor",
+    );
+}
+
+/// The exact chord-weighted twist derivative, against central differences of
+/// the primal `atan2`.
+#[test]
+fn interpolated_twist_jvp_matches_centered_differences() {
+    use pegasus_vlm::gradients::interpolated_twist_jvp;
+
+    let (fc, cl, cr) = (0.37, 1.6, 0.5);
+    let (tl, tr) = (6.0f64.to_radians(), (-5.0f64).to_radians());
+    let primal = |cl: f64, cr: f64, tl: f64, tr: f64| {
+        ((1.0 - fc) * cl * tl.sin() + fc * cr * tr.sin())
+            .atan2((1.0 - fc) * cl * tl.cos() + fc * cr * tr.cos())
+    };
+    let step = 1.0e-7;
+
+    // One seed at a time, in the argument order of the kernel.
+    let cases: [(f64, f64, f64, f64); 4] = [
+        (1.0, 0.0, 0.0, 0.0),
+        (0.0, 1.0, 0.0, 0.0),
+        (0.0, 0.0, 1.0, 0.0),
+        (0.0, 0.0, 0.0, 1.0),
+    ];
+    for (d_cl, d_cr, d_tl, d_tr) in cases {
+        let analytical = interpolated_twist_jvp(fc, cl, cr, tl, tr, d_cl, d_cr, d_tl, d_tr);
+        let finite = (primal(
+            cl + step * d_cl,
+            cr + step * d_cr,
+            tl + step * d_tl,
+            tr + step * d_tr,
+        ) - primal(
+            cl - step * d_cl,
+            cr - step * d_cr,
+            tl - step * d_tl,
+            tr - step * d_tr,
+        )) / (2.0 * step);
+        assert_abs_diff_eq!(analytical, finite, epsilon = 1.0e-8);
+    }
+}
+
+/// Guards against reintroducing the v0.2.0 small-angle twist linearization.
+///
+/// The C++ `PropagateTwistGradient` distributed the twist sensitivity as
+/// `(1-fc)` and `fc`. That is exact only when the chords *and* twists match at
+/// both ends of the interval; on a tapered, twisted interval it is off by tens
+/// of percent, which no tolerance would absorb.
+#[test]
+fn interpolated_twist_jvp_is_not_the_small_angle_linearization() {
+    use pegasus_vlm::gradients::interpolated_twist_jvp;
+
+    let fc = 0.5;
+    let (cl, cr) = (1.6, 0.5);
+    let (tl, tr) = (6.0f64.to_radians(), (-5.0f64).to_radians());
+    let exact = interpolated_twist_jvp(fc, cl, cr, tl, tr, 0.0, 0.0, 1.0, 0.0);
+    let linearized = 1.0 - fc;
+    assert!(
+        (exact - linearized).abs() > 0.2,
+        "exact {exact} is too close to the linearized {linearized} to discriminate"
+    );
+    assert_abs_diff_eq!(exact, 0.7638, epsilon = 1.0e-3);
+}
+
+/// With equal twists the interpolated angle *is* that twist, so the two
+/// endpoint sensitivities must sum to exactly one whatever the chords are.
+#[test]
+fn interpolated_twist_jvp_sums_to_one_for_uniform_twist() {
+    use pegasus_vlm::gradients::interpolated_twist_jvp;
+
+    for fc in [0.0, 0.25, 0.5, 0.75, 1.0] {
+        for (cl, cr) in [(1.0, 1.0), (1.6, 0.5), (0.3, 2.2)] {
+            for twist in [0.0, 4.0f64.to_radians(), (-7.0f64).to_radians()] {
+                let left = interpolated_twist_jvp(fc, cl, cr, twist, twist, 0.0, 0.0, 1.0, 0.0);
+                let right = interpolated_twist_jvp(fc, cl, cr, twist, twist, 0.0, 0.0, 0.0, 1.0);
+                assert_abs_diff_eq!(left + right, 1.0, epsilon = 1.0e-14);
+                if (cl - cr).abs() > 1.0e-12 && fc > 0.0 && fc < 1.0 {
+                    // Chord weighting, not linear weighting.
+                    assert!((left - (1.0 - fc)).abs() > 1.0e-6);
+                }
+            }
+        }
+    }
+}
+
+/// The mesher must not move panel vertices when twist changes.
+///
+/// The whole twist path rests on this: `d(bound_vortex)/d(twist)` and
+/// `d(control_point)/d(twist)` are taken as exactly zero. If anyone ever makes
+/// the mesher rotate panels about the quarter chord, this fires instead of the
+/// gradients silently going wrong.
+#[test]
+fn twist_perturbation_leaves_panel_vertices_exactly_unchanged() {
+    use pegasus_vlm::solver::VortexLattice;
+
+    let aircraft = common::tapered_twisted_wing();
+    let mut twisted = aircraft.clone();
+    let section = &mut twisted.surfaces_mut()[0].sections_mut()[1];
+    section.set_twist_degrees(section.twist_degrees() + 2.0);
+
+    let mut base = VortexLattice::default();
+    base.generate_from_aircraft(&aircraft).unwrap();
+    let mut moved = VortexLattice::default();
+    moved.generate_from_aircraft(&twisted).unwrap();
+
+    assert_eq!(base.vortex_count(), moved.vortex_count());
+    let mut normals_changed = 0;
+    for (before, after) in base.vortices().iter().zip(moved.vortices()) {
+        assert_eq!(before.bound_vortex_left, after.bound_vortex_left);
+        assert_eq!(before.bound_vortex_right, after.bound_vortex_right);
+        assert_eq!(before.bound_vortex_center, after.bound_vortex_center);
+        assert_eq!(before.control_point, after.control_point);
+        assert_eq!(before.local_chord, after.local_chord);
+        if before.normal_at_control_point != after.normal_at_control_point {
+            normals_changed += 1;
+        }
+    }
+    for (before, after) in base.strips().iter().zip(moved.strips()) {
+        assert_eq!(before.chord_center, after.chord_center);
+    }
+    assert!(normals_changed > 0, "twist must still rotate the normals");
+}
+
+/// Sideslip and all three rate derivatives, verified against full re-solves.
+///
+/// These were previously checked only against the frozen oracle, whose only
+/// beta entry is `CY_beta = 0.0` on a planar rectangular wing — zero by
+/// symmetry no matter what the kernel does. The fixture here is asymmetric
+/// (tapered, twisted, dihedralled) so every term is genuinely non-zero.
+#[test]
+fn beta_and_rate_gradients_match_resolves() {
+    let aircraft = common::tapered_twisted_wing();
+    let base = rich_condition();
+    let mut calculator = GradientCalculator::new();
+    calculator.set_aircraft(&aircraft);
+    let gradients = calculator
+        .compute_flight_condition_gradients(&base)
+        .unwrap();
+
+    let step = 1.0e-6;
+    let perturb = |field: usize, delta: f64| {
+        let mut condition = base.clone();
+        match field {
+            0 => condition.beta += delta,
+            1 => condition.roll_rate += delta,
+            2 => condition.pitch_rate += delta,
+            _ => condition.yaw_rate += delta,
+        }
+        condition
+    };
+
+    for (field, name, group) in [
+        (0usize, "beta", gradients.by_beta),
+        (1, "roll rate", gradients.by_roll_rate),
+        (2, "pitch rate", gradients.by_pitch_rate),
+        (3, "yaw rate", gradients.by_yaw_rate),
+    ] {
+        for &output in &ALL_OUTPUTS {
+            let analytical = group.get(output);
+            let finite = (coefficient(&aircraft, &perturb(field, step), output)
+                - coefficient(&aircraft, &perturb(field, -step), output))
+                / (2.0 * step);
+            assert!(
+                (analytical - finite).abs() <= 3.0e-5_f64.max(3.0e-5 * analytical.abs()),
+                "{name} {output:?}: analytical {analytical:.12} vs finite {finite:.12}"
+            );
+        }
+        // A structurally-zero group would make the comparison vacuous.
+        assert!(
+            ALL_OUTPUTS.iter().any(|&o| group.get(o).abs() > 1.0e-6),
+            "{name} gradients are all zero; the check would be vacuous"
+        );
+    }
+}

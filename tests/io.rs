@@ -197,3 +197,120 @@ fn empty_mass_file_is_valid_empty_data() {
     assert_eq!(data.center_of_gravity(), Vec3::zeros());
     assert!(!data.total_properties().is_valid());
 }
+
+/// A trailing comment must never change how a line is classified.
+///
+/// The reader used to split on `=` before stripping comments, so any `=`
+/// inside a comment captured the line as a unit assignment and discarded the
+/// mass component entirely — silently, with no error.
+#[test]
+fn mass_component_survives_an_equals_sign_inside_a_comment() {
+    let with_equals = MassReader::read_str("10 1 2 3 4 5 6 ! main gear (x = 1.2 m)\n").unwrap();
+    let without = MassReader::read_str("10 1 2 3 4 5 6 ! main gear\n").unwrap();
+    assert_eq!(with_equals.components.len(), 1);
+    assert_eq!(without.components.len(), 1);
+    assert_abs_diff_eq!(with_equals.total_mass(), 10.0, epsilon = 1.0e-12);
+    assert_eq!(with_equals.components[0].position, Vec3::new(1.0, 2.0, 3.0));
+}
+
+/// An unrecognized `key = value` line falls through to component parsing
+/// rather than consuming the line.
+#[test]
+fn mass_unknown_key_assignment_does_not_swallow_the_line() {
+    let data = MassReader::read_str("Nunit = 3.0\n10 1 2 3 4 5 6\n").unwrap();
+    assert_eq!(data.components.len(), 1);
+    let known = MassReader::read_str("Lunit = 0.0254\n10 1 2 3 4 5 6\n").unwrap();
+    assert_abs_diff_eq!(known.length_unit, 0.0254, epsilon = 1.0e-15);
+    assert_eq!(known.components.len(), 1);
+}
+
+/// Scale and offset lines must not read numbers out of their own comments,
+/// and must leave the previous value untouched when short.
+#[test]
+fn mass_scale_and_offset_ignore_comment_text() {
+    let scaled = MassReader::read_str("* 1.0 1.0 ! 7.0\n10 1 2 3 4 5 6\n").unwrap();
+    // Only two numeric fields are present, so the scale stays at unity and z
+    // is unchanged rather than picking up the 7.0 from the comment.
+    assert_eq!(scaled.components[0].position, Vec3::new(1.0, 2.0, 3.0));
+
+    let full = MassReader::read_str("* 1.0 1.0 2.0 ! note\n10 1 2 3 4 5 6\n").unwrap();
+    assert_eq!(full.components[0].position, Vec3::new(1.0, 2.0, 6.0));
+
+    let offset = MassReader::read_str("+ 0.0 0.0 1.0 ! shift\n10 1 2 3 4 5 6\n").unwrap();
+    assert_eq!(offset.components[0].position, Vec3::new(1.0, 2.0, 4.0));
+}
+
+/// Numeric runs stop at the first token that does not parse, matching the
+/// legacy stream extraction, instead of skipping it and pulling later numbers
+/// into earlier slots.
+#[test]
+fn mass_component_stops_at_the_first_non_numeric_field() {
+    let data = MassReader::read_str("10 1 2 3 kg 4 5 6\n").unwrap();
+    assert!(
+        data.components.is_empty(),
+        "a line with only four leading numbers is not a complete component"
+    );
+}
+
+/// A malformed panel count must be a typed parse error, never a panic.
+///
+/// `value as usize` saturates, so `1e30` became `usize::MAX` and overflowed
+/// the mesher's panel arithmetic.
+#[test]
+fn avl_rejects_out_of_range_panel_counts() {
+    let header = "rect\n0.0\n0 0 0\n1.0 1.0 1.0\n0.0 0.0 0.0\n";
+    for paneling in ["1e30 1.0 4 1.0", "4 1.0 1e30 1.0", "-3 1.0 4 1.0"] {
+        let source = format!("{header}SURFACE\nWing\n{paneling}\nSECTION\n0 0 0 1 0\n");
+        let error = AvlReader::new().read_str(&source).unwrap_err();
+        assert!(
+            matches!(error, pegasus_vlm::error::PegasusError::Parse { .. }),
+            "expected a parse error for paneling {paneling:?}, got {error:?}"
+        );
+    }
+
+    let section = format!(
+        "{header}SURFACE\nWing\n4 1.0 4 1.0\nSECTION\n0 -1 0 1 0 1e30 1.0\nSECTION\n0 1 0 1 0\n"
+    );
+    assert!(AvlReader::new().read_str(&section).is_err());
+}
+
+/// AVL leaves `SgnDup` off the CONTROL line routinely; requiring it discarded
+/// the whole aircraft.
+#[test]
+fn avl_accepts_a_control_line_without_the_sign_field() {
+    let source = "rect\n0.0\n0 0 0\n1.0 1.0 1.0\n0.0 0.0 0.0\n\
+                  SURFACE\nWing\n4 1.0 4 1.0\n\
+                  SECTION\n0 0 0 1 0\nCONTROL\nelevator 1.0 0.6 0. 1. 0.\n";
+    let aircraft = AvlReader::new().read_str(source).unwrap();
+    let controls = aircraft.surfaces()[0].sections()[0].control_surfaces();
+    assert_eq!(controls.len(), 1);
+    assert_eq!(controls[0].name, "elevator");
+    assert_abs_diff_eq!(controls[0].sign, 1.0, epsilon = 1.0e-15);
+
+    // An explicit sign still wins.
+    let signed = source.replace("0. 1. 0.\n", "0. 1. 0. -1.0\n");
+    let aircraft = AvlReader::new().read_str(&signed).unwrap();
+    assert_abs_diff_eq!(
+        aircraft.surfaces()[0].sections()[0].control_surfaces()[0].sign,
+        -1.0,
+        epsilon = 1.0e-15
+    );
+
+    // Five fields is still malformed.
+    let short = source.replace("elevator 1.0 0.6 0. 1. 0.", "elevator 1.0 0.6 0. 1.");
+    assert!(AvlReader::new().read_str(&short).is_err());
+}
+
+/// A missing airfoil file must not degrade silently to a flat plate: the solve
+/// would run on the wrong camber and report success.
+#[test]
+fn avl_reports_an_unloadable_airfoil_file() {
+    let source = "rect\n0.0\n0 0 0\n1.0 1.0 1.0\n0.0 0.0 0.0\n\
+                  SURFACE\nWing\n4 1.0 4 1.0\n\
+                  SECTION\n0 0 0 1 0\nAFILE\nnot_a_real_airfoil.dat\n";
+    let error = AvlReader::new().read_str(source).unwrap_err();
+    assert!(
+        matches!(error, pegasus_vlm::error::PegasusError::Parse { .. }),
+        "expected a parse error, got {error:?}"
+    );
+}

@@ -139,6 +139,14 @@ pub struct SurfaceMeshInfo {
     pub wetted_area: Scalar,
     pub average_chord: Scalar,
     pub is_y_duplicated: bool,
+    /// Slot in `VortexLattice::surface_info` of the surface this one mirrors.
+    ///
+    /// Always a `surface_info` index, never an index into
+    /// `Aircraft::surfaces()`. A surface that is not a mirrored copy names its
+    /// own slot. The two generators previously disagreed about which index
+    /// space this was, so for `[wing(duplicated), tail]` the tail's value
+    /// pointed at the wing's mirror; any consumer using it as a `surface_info`
+    /// index silently got the wrong surface.
     pub original_surface_index: usize,
 }
 

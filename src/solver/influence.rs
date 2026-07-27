@@ -58,11 +58,25 @@ pub fn horseshoe_vortex_velocity(
     let core_sq = core_radius * core_radius;
     let core_4 = core_sq * core_sq;
 
+    // Degeneracy tests are dimensionless ratios, not comparisons against an
+    // absolute length.
+    //
+    // `cross_sq` is a length⁴ quantity and `a_mag * b_mag` a length², so
+    // testing either against a fixed `EPSILON` makes the kernel depend on the
+    // unit the model is expressed in: at millimetre scale `|a×b|²` falls below
+    // 1e-12 for ordinary panels and the bound leg is silently dropped, which
+    // moved every AIC entry by several percent with no error reported.
+    //
+    // `cross_sq > EPSILON * a_sq * b_sq` is `sin²θ > EPSILON`, the collinearity
+    // test that was intended. It is invariant under a uniform rescaling of the
+    // geometry and agrees with the previous threshold at unit scale, where
+    // `a_sq * b_sq ≈ 1`. `core_radius` is itself derived from panel size, so
+    // the `core_4` terms already scale correctly and need no change.
     let (mut u, mut v, mut w) = (0.0, 0.0, 0.0);
-    if include_bound && a_mag * b_mag > EPSILON {
+    if include_bound && a_sq > 0.0 && b_sq > 0.0 {
         let cross = a.cross(&b);
         let cross_sq = cross.norm_squared();
-        if cross_sq > EPSILON {
+        if cross_sq > EPSILON * a_sq * b_sq {
             let dot = a.dot(&b);
             let length_sq = a_sq + b_sq - 2.0 * dot;
             let factor = ((b_sq - dot) / (b_sq * b_sq + core_4).sqrt().sqrt()
@@ -89,15 +103,20 @@ pub fn horseshoe_vortex_velocity(
     // every finite non-zero value, but unary negation maps `+0.0` to `-0.0`,
     // which would leave the reflected and directly evaluated forms differing in
     // the sign of zero.
+    // A trailing leg only has to avoid `0 / 0`. `a.x / a_mag` is a direction
+    // cosine bounded by 1 for any non-zero `a`, and the denominator is bounded
+    // below by `core_sq`, so a merely small `a_mag` is well behaved and only an
+    // exactly coincident endpoint is degenerate. Testing `a_sq > 0.0` rather
+    // than a fixed length keeps the legs scale-invariant too.
     let (mut leg_a_v, mut leg_a_w) = (0.0, 0.0);
-    if a_mag > EPSILON {
+    if a_sq > 0.0 {
         let axis_sq = a.y * a.y + a.z * a.z;
         let factor = -(1.0 - a.x / a_mag) / (axis_sq * axis_sq + core_4).sqrt();
         leg_a_v = a.z * factor;
         leg_a_w = 0.0 - a.y * factor;
     }
     let (mut leg_b_v, mut leg_b_w) = (0.0, 0.0);
-    if b_mag > EPSILON {
+    if b_sq > 0.0 {
         let axis_sq = b.y * b.y + b.z * b.z;
         let factor = (1.0 - b.x / b_mag) / (axis_sq * axis_sq + core_4).sqrt();
         leg_b_v = b.z * factor;
@@ -567,6 +586,24 @@ impl<'a> InfluenceMatrixBuilder<'a> {
             return None;
         }
 
+        // The blocks must tile `0..n` contiguously and in ascending order.
+        // `drive_mirrored_columns` walks them with `split_at_mut`, so a gap or
+        // an out-of-order block would either panic there or, worse, write a
+        // column into the wrong block. That held only because both generators
+        // append each duplicate immediately after its original; checking it
+        // here makes the guarantee total instead of incidental, and costs
+        // `O(blocks)` against an `O(N²)` assembly.
+        let mut consumed = 0usize;
+        for block in &blocks {
+            if block.first != consumed {
+                return None;
+            }
+            consumed += 2 * block.count;
+        }
+        if consumed != vortices.len() {
+            return None;
+        }
+
         // Verify the reflection relation holds exactly for every pair.
         for (a, &b) in partner.iter().enumerate() {
             if !is_original[a] {
@@ -664,6 +701,39 @@ impl<'a> InfluenceMatrixBuilder<'a> {
             offset - vortex.bound_vortex_left.z,
         );
         self.symmetry.z_symmetry.factor()
+            * horseshoe_vortex_velocity(
+                field_point,
+                &left,
+                &right,
+                self.prandtl_glauert_factor,
+                core,
+                true,
+            )
+    }
+
+    /// Velocity from the image reflected in *both* symmetry planes.
+    ///
+    /// Present only when y and z symmetry are both active. Unlike the single
+    /// reflections, the bound endpoints are *not* swapped: reflecting twice
+    /// restores the original orientation, so swapping would reverse it. The
+    /// two scalar factors are folded before scaling the vector, matching the
+    /// assembly path exactly.
+    fn yz_image_velocity(&self, field_point: &Vec3, vortex_index: usize, core: Scalar) -> Vec3 {
+        let vortex = &self.mesh.vortices()[vortex_index];
+        let y_offset = 2.0 * self.symmetry.y_symmetry_plane;
+        let z_offset = 2.0 * self.symmetry.z_symmetry_plane;
+        let left = Vec3::new(
+            vortex.bound_vortex_left.x,
+            y_offset - vortex.bound_vortex_left.y,
+            z_offset - vortex.bound_vortex_left.z,
+        );
+        let right = Vec3::new(
+            vortex.bound_vortex_right.x,
+            y_offset - vortex.bound_vortex_right.y,
+            z_offset - vortex.bound_vortex_right.z,
+        );
+        self.symmetry.y_symmetry.factor()
+            * self.symmetry.z_symmetry.factor()
             * horseshoe_vortex_velocity(
                 field_point,
                 &left,
@@ -924,6 +994,13 @@ impl<'a> InfluenceMatrixBuilder<'a> {
             }
             if self.symmetry.z_symmetry != SymmetryType::None {
                 velocity += self.z_image_velocity(field_point, j, core);
+                // Assembly adds the doubly-reflected image inside its z branch;
+                // omitting it here made field-point velocities disagree with
+                // the influence matrix by several percent, including a sign
+                // flip in y, whenever both planes were active.
+                if self.symmetry.y_symmetry != SymmetryType::None {
+                    velocity += self.yz_image_velocity(field_point, j, core);
+                }
             }
             total += circulation[j] * velocity;
         }

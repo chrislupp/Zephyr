@@ -1,6 +1,7 @@
 mod common;
 
 use approx::assert_abs_diff_eq;
+use pegasus_vlm::PegasusError;
 use pegasus_vlm::core::{DEGREES_TO_RADIANS, SpacingType, SymmetryType, Vec3, VecX};
 use pegasus_vlm::geometry::{Aircraft, Section, Surface};
 use pegasus_vlm::solver::{
@@ -248,18 +249,76 @@ fn mach_change_rebuilds_the_cached_aic() {
     assert!((&incompressible - solver.aic()).norm() > 1.0e-5);
 }
 
+/// Transonic and supersonic conditions are rejected rather than answered.
+///
+/// The builder clamps the Prandtl-Glauert factor to 1 at and above Mach 1, so
+/// `solve` used to return the *incompressible* solution for `mach = 1.5` — a
+/// finite, plausible-looking answer to a question the method cannot address,
+/// with `mach_number()` still reporting 1.5.
 #[test]
-fn supersonic_mach_uses_the_documented_clamp() {
+fn supersonic_mach_is_rejected() {
     let aircraft = rectangular_wing(2, 4);
     let mut solver = VortexLatticeSolver::new();
     solver.set_aircraft(&aircraft).unwrap();
-    solver
+    for mach in [1.0, 1.5, 3.0] {
+        let error = solver
+            .solve(&FlightCondition {
+                mach,
+                ..FlightCondition::default()
+            })
+            .unwrap_err();
+        assert!(
+            matches!(error, PegasusError::InvalidFlightCondition(_)),
+            "expected Mach {mach} to be rejected, got {error:?}"
+        );
+    }
+    // Just below Mach 1 is still a valid compressible solve.
+    let solution = solver
         .solve(&FlightCondition {
-            mach: 1.5,
+            mach: 0.95,
             ..FlightCondition::default()
         })
         .unwrap();
-    assert!(solver.aic().iter().all(|value| value.is_finite()));
+    assert!(solution.is_valid);
+}
+
+/// Non-finite body rates must be rejected, not solved.
+///
+/// Only `alpha`, `beta`, `mach` and the control deflections were checked, so a
+/// NaN roll rate produced an all-NaN circulation reported as valid. NaN also
+/// defeats `dynamic_pressure < 0.0`, since every ordered comparison against NaN
+/// is false.
+#[test]
+fn non_finite_rates_and_dynamic_pressure_are_rejected() {
+    let aircraft = rectangular_wing(2, 4);
+    let mut solver = VortexLatticeSolver::new();
+    solver.set_aircraft(&aircraft).unwrap();
+
+    let bad = [
+        FlightCondition {
+            roll_rate: f64::NAN,
+            ..FlightCondition::default()
+        },
+        FlightCondition {
+            pitch_rate: f64::INFINITY,
+            ..FlightCondition::default()
+        },
+        FlightCondition {
+            yaw_rate: f64::NAN,
+            ..FlightCondition::default()
+        },
+        FlightCondition {
+            dynamic_pressure: f64::NAN,
+            ..FlightCondition::default()
+        },
+    ];
+    for condition in bad {
+        let error = solver.solve(&condition).unwrap_err();
+        assert!(
+            matches!(error, PegasusError::InvalidFlightCondition(_)),
+            "expected rejection, got {error:?}"
+        );
+    }
 }
 
 #[test]
@@ -286,11 +345,67 @@ fn mesh_mutation_invalidates_dependent_caches() {
     solver.solve(&FlightCondition::default()).unwrap();
     assert!(solver.is_aic_valid());
     solver.mutate_mesh(|mesh| {
-        mesh.set_vortex_core_radius_chord_fraction(0.02);
+        // Any mesh mutation must drop the cached factorization. Regenerating
+        // is enough and, unlike the core-radius knobs this test used to poke,
+        // genuinely rebuilds the system.
+        mesh.generate_from_aircraft(&rectangular_wing(2, 4))
+            .unwrap();
     });
     assert!(!solver.is_aic_valid());
     assert!(!solver.are_unit_responses_valid());
     assert!(!solver.solution().is_valid);
+}
+
+/// The core-radius fractions that actually reach the kernel are the builder's.
+///
+/// `VortexLattice` used to carry a second, independent pair of fractions with
+/// different defaults (0.75/0.25 against the builder's 0.0001/0.0001) that were
+/// never passed to assembly, so setting them left the AIC bit-identical while
+/// appearing to tune the regularization. They have been removed; this pins the
+/// remaining knobs to being live.
+///
+/// The fractions only apply between panels on *different* components — a
+/// same-component pair uses the small fixed `1e-4 * panel_width` core — so the
+/// fixture needs two surfaces with distinct component indices. A single-surface
+/// aircraft would leave the branch unreachable and the test vacuous.
+#[test]
+fn builder_core_radius_fractions_change_the_assembled_matrix() {
+    let mut wing = Surface::new("wing");
+    wing.add_section(Section::new(Vec3::new(0.0, 0.0, 0.0), 1.0, 0.0));
+    wing.add_section(Section::new(Vec3::new(0.0, 2.0, 0.0), 1.0, 0.0));
+    wing.set_chordwise_panel_count(2);
+    wing.set_spanwise_panel_count(3);
+    wing.set_component_index(1);
+
+    let mut tail = Surface::new("tail");
+    tail.add_section(Section::new(Vec3::new(3.0, 0.0, 0.3), 0.6, 0.0));
+    tail.add_section(Section::new(Vec3::new(3.0, 1.0, 0.3), 0.6, 0.0));
+    tail.set_chordwise_panel_count(2);
+    tail.set_spanwise_panel_count(2);
+    tail.set_component_index(2);
+
+    let mut aircraft = Aircraft::new("two components");
+    aircraft.add_surface(wing);
+    aircraft.add_surface(tail);
+
+    let mut solver = VortexLatticeSolver::new();
+    solver.set_aircraft(&aircraft).unwrap();
+
+    let assemble = |chord_fraction: f64, width_fraction: f64| -> Vec<u64> {
+        let mut builder = InfluenceMatrixBuilder::new(solver.mesh());
+        builder.set_core_radius_chord_fraction(chord_fraction);
+        builder.set_core_radius_width_fraction(width_fraction);
+        builder
+            .normalwash_matrix()
+            .iter()
+            .map(|value| value.to_bits())
+            .collect()
+    };
+
+    let baseline = assemble(0.0001, 0.0001);
+    assert_ne!(baseline, assemble(0.3, 0.0001));
+    assert_ne!(baseline, assemble(0.0001, 0.3));
+    assert_eq!(baseline, assemble(0.0001, 0.0001));
 }
 
 #[test]
@@ -325,4 +440,103 @@ fn empty_solver_rejects_solve_and_aic_build() {
     let mut solver = VortexLatticeSolver::new();
     assert!(solver.rebuild_aic().is_err());
     assert!(solver.solve(&FlightCondition::default()).is_err());
+}
+
+/// The influence kernel must not depend on the unit the model is expressed in.
+///
+/// The bound-leg and trailing-leg guards used to compare a length⁴ and a
+/// length quantity against an absolute `EPSILON`, so below roughly millimetre
+/// scale the bound contribution was silently dropped from every panel. That
+/// moved `‖AIC‖` by 3.3% at 1e-3 and 4.2% at 1e-4 with no error returned.
+///
+/// The AIC carries units of inverse length, so `scale · ‖AIC‖` is the
+/// dimensionless invariant: it must be identical for a geometrically similar
+/// wing at any scale.
+#[test]
+fn influence_assembly_is_invariant_under_uniform_scaling() {
+    fn wing_at_scale(scale: f64) -> Aircraft {
+        let mut surface = Surface::new("wing");
+        surface.add_section(Section::new(Vec3::new(0.0, 0.0, 0.0), scale, 0.0));
+        surface.add_section(Section::new(Vec3::new(0.0, 4.0 * scale, 0.0), scale, 0.0));
+        surface.set_spanwise_panel_count(4);
+        surface.set_chordwise_panel_count(2);
+        let mut aircraft = Aircraft::new("scaled");
+        aircraft.add_surface(surface);
+        aircraft
+    }
+
+    fn invariant(scale: f64) -> f64 {
+        let mut solver = VortexLatticeSolver::new();
+        solver.set_aircraft(&wing_at_scale(scale)).unwrap();
+        solver.rebuild_aic().unwrap();
+        scale * solver.aic().iter().map(|v| v * v).sum::<f64>().sqrt()
+    }
+
+    let reference = invariant(1.0);
+    assert!(reference.is_finite() && reference > 0.0);
+    for scale in [1.0e3, 1.0e-1, 1.0e-2, 1.0e-3, 1.0e-4, 1.0e-5] {
+        assert_abs_diff_eq!(invariant(scale), reference, epsilon = 1.0e-9);
+    }
+}
+
+/// `induced_velocity` must agree with the assembled influence matrix.
+///
+/// Assembly adds four images when both symmetry planes are active — y, z, and
+/// the doubly-reflected yz — but the field-point helper omitted the last one.
+/// With both planes on, the two disagreed by roughly 3% including a sign flip
+/// in the y component, so a caller sampling the velocity field got different
+/// physics from the one solving the system.
+///
+/// The core radii are pinned so the comparison is exact: assembly uses the
+/// small same-component core, while `induced_velocity` always takes the
+/// cross-component branch. Setting the chord fraction to zero and the width
+/// fraction to the same 1e-4 makes both reduce to `1e-4 * panel_width`.
+#[test]
+fn induced_velocity_matches_the_influence_matrix_under_double_symmetry() {
+    let aircraft = rectangular_wing(2, 3);
+    let mut lattice = VortexLattice::default();
+    lattice.generate_from_aircraft(&aircraft).unwrap();
+
+    for symmetry in [
+        SymmetryConfig {
+            y_symmetry: SymmetryType::Symmetric,
+            y_symmetry_plane: 0.0,
+            z_symmetry: SymmetryType::Symmetric,
+            z_symmetry_plane: 0.4,
+        },
+        SymmetryConfig {
+            y_symmetry: SymmetryType::Symmetric,
+            y_symmetry_plane: 0.0,
+            z_symmetry: SymmetryType::Antisymmetric,
+            z_symmetry_plane: 0.4,
+        },
+        SymmetryConfig {
+            y_symmetry: SymmetryType::Antisymmetric,
+            y_symmetry_plane: 0.0,
+            z_symmetry: SymmetryType::Symmetric,
+            z_symmetry_plane: 0.4,
+        },
+    ] {
+        let mut builder = InfluenceMatrixBuilder::new(&lattice);
+        builder.set_symmetry(symmetry);
+        builder.set_core_radius_chord_fraction(0.0);
+        builder.set_core_radius_width_fraction(0.0001);
+        let velocity = builder.velocity_influence_matrix();
+
+        let n = lattice.vortex_count();
+        for source in 0..n {
+            // Skip the diagonal: assembly drops the self-influence bound leg.
+            let target = (source + 1) % n;
+            let mut circulation = VecX::zeros(n);
+            circulation[source] = 1.0;
+            let sampled =
+                builder.induced_velocity(&lattice.vortices()[target].control_point, &circulation);
+            let assembled = Vec3::new(
+                velocity[(3 * target, source)],
+                velocity[(3 * target + 1, source)],
+                velocity[(3 * target + 2, source)],
+            );
+            assert_abs_diff_eq!(sampled, assembled, epsilon = 1.0e-12);
+        }
+    }
 }

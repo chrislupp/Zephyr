@@ -33,13 +33,7 @@ impl AvlReader {
         let path = path.as_ref();
         let content = fs::read_to_string(path).map_err(|error| PegasusError::io(path, error))?;
         self.read_with_base(&content, path.parent().unwrap_or(Path::new(".")))
-            .map_err(|error| match error {
-                PegasusError::Parse { location, message } => PegasusError::Parse {
-                    location: format!(" in {}{location}", path.display()),
-                    message,
-                },
-                other => other,
-            })
+            .map_err(|error| error.with_source_path(path))
     }
 
     /// Parse AVL text without a base directory.
@@ -120,11 +114,19 @@ impl AvlReader {
         let paneling = parse_numbers(panel_line);
         let mut surface = Surface::new(name);
         if paneling.len() >= 2 {
-            surface.set_chordwise_panel_count(paneling[0].max(0.0) as usize);
+            surface.set_chordwise_panel_count(count_from_file(
+                paneling[0],
+                start_line,
+                "chordwise panel",
+            )?);
             surface.set_numeric_chordwise_spacing(paneling[1]);
         }
         if paneling.len() >= 4 {
-            surface.set_spanwise_panel_count(paneling[2].max(0.0) as usize);
+            surface.set_spanwise_panel_count(count_from_file(
+                paneling[2],
+                start_line,
+                "spanwise panel",
+            )?);
             surface.set_numeric_spanwise_spacing(paneling[3]);
         }
         let mut section: Option<Section> = None;
@@ -160,7 +162,11 @@ impl AvlReader {
                 "COMP" => {
                     let values = next_numbers(cursor, line_number, "COMPONENT")?;
                     if let Some(value) = values.first() {
-                        surface.set_component_index(value.max(0.0) as usize);
+                        surface.set_component_index(count_from_file(
+                            *value,
+                            line_number,
+                            "component index",
+                        )?);
                     }
                 }
                 "NOWA" => surface.set_has_wake(false),
@@ -191,7 +197,11 @@ impl AvlReader {
                         values[4],
                     );
                     if values.len() >= 7 {
-                        current.set_spanwise_panel_count(values[5].max(0.0) as usize);
+                        current.set_spanwise_panel_count(count_from_file(
+                            values[5],
+                            line_number,
+                            "section spanwise panel",
+                        )?);
                         current.set_numeric_spanwise_spacing(values[6]);
                     }
                     section = Some(current);
@@ -203,14 +213,26 @@ impl AvlReader {
                     }
                 }
                 "AFIL" | "AIRF" => {
+                    // The filename runs to the end of the line, so a trailing
+                    // comment would otherwise become part of the path and the
+                    // section would silently keep its default flat plate.
                     let (_, relative) = cursor.next_required_after("AFILE", line_number)?;
-                    let path = resolve_path(base, relative);
-                    if let Ok(airfoil) = Airfoil::from_coordinate_file(&path) {
-                        if let Some(current) = section.as_mut() {
-                            current.set_airfoil(airfoil);
+                    let path = resolve_path(base, strip_comment(relative));
+                    match Airfoil::from_coordinate_file(&path) {
+                        Ok(airfoil) => {
+                            if let Some(current) = section.as_mut() {
+                                current.set_airfoil(airfoil);
+                            }
                         }
-                    } else if self.verbose {
-                        eprintln!("Warning: could not load airfoil {}", path.display());
+                        Err(cause) => {
+                            // Silently degrading to a flat plate changes the
+                            // camber the solve runs on while still reporting
+                            // success, so this has to surface.
+                            return Err(PegasusError::parse(
+                                line_number,
+                                format!("could not load AFILE {}: {cause}", path.display()),
+                            ));
+                        }
                     }
                 }
                 "CLAF" => {
@@ -252,7 +274,7 @@ impl AvlReader {
         let paneling = parse_numbers(panel_line);
         let mut body = Body::new(name);
         if paneling.len() >= 2 {
-            body.set_node_count(paneling[0].max(0.0) as usize);
+            body.set_node_count(count_from_file(paneling[0], start_line, "body node")?);
             body.set_node_spacing(paneling[1]);
         }
         while let Some((line_number, line)) = cursor.peek() {
@@ -318,7 +340,7 @@ impl<'a> Cursor<'a> {
 
     fn next_required(&mut self, context: &str) -> Result<(usize, &'a str)> {
         self.next().ok_or_else(|| PegasusError::Parse {
-            location: String::new(),
+            location: crate::error::ParseLocation::default(),
             message: format!("unexpected end of AVL data while reading {context}"),
         })
     }
@@ -344,6 +366,30 @@ fn parse_numbers(line: &str) -> Vec<Scalar> {
         .collect()
 }
 
+/// Largest panel or node count accepted from a file.
+///
+/// Well above any practical lattice, but low enough that the product of two
+/// counts cannot overflow the index arithmetic in the mesher or exhaust memory
+/// through a single allocation.
+const MAX_COUNT_FROM_FILE: Scalar = 100_000.0;
+
+/// Converts a file-supplied count to `usize`, rejecting values the mesher
+/// cannot represent.
+///
+/// `value as usize` saturates in release and is undefined for NaN, so an
+/// out-of-range count such as `1e30` would silently become `usize::MAX` and
+/// later overflow the panel arithmetic. A library must not abort on file
+/// input, so this rejects rather than clamps.
+fn count_from_file(value: Scalar, line: usize, context: &str) -> Result<usize> {
+    if !value.is_finite() || !(0.0..=MAX_COUNT_FROM_FILE).contains(&value) {
+        return Err(PegasusError::parse(
+            line,
+            format!("{context} count must be between 0 and {MAX_COUNT_FROM_FILE:.0}"),
+        ));
+    }
+    Ok(value as usize)
+}
+
 fn symmetry_type(value: Scalar) -> SymmetryType {
     if value > 0.0 {
         SymmetryType::Symmetric
@@ -363,6 +409,11 @@ fn next_vec3(cursor: &mut Cursor<'_>, line: usize, context: &str) -> Result<Opti
     Ok((values.len() >= 3).then(|| Vec3::new(values[0], values[1], values[2])))
 }
 
+/// Drops an AVL trailing comment and surrounding whitespace.
+fn strip_comment(line: &str) -> &str {
+    line.split(['!', '#']).next().unwrap_or(line).trim()
+}
+
 fn resolve_path(base: &Path, relative: &str) -> PathBuf {
     let relative = Path::new(relative.trim());
     if relative.is_absolute() {
@@ -372,12 +423,18 @@ fn resolve_path(base: &Path, relative: &str) -> PathBuf {
     }
 }
 
+/// Parses a `CONTROL` declaration.
+///
+/// The trailing `SgnDup` field is optional: AVL streams the seven fields and
+/// leaves the last at its default when a file supplies only six, which
+/// hand-written `.avl` files commonly do. Requiring it would reject the whole
+/// aircraft over an omission the legacy reader accepted.
 fn parse_control(definition: &str, line: usize) -> Result<ControlSurfaceDefinition> {
     let fields: Vec<_> = definition.split_whitespace().collect();
-    if fields.len() < 7 {
+    if fields.len() < 6 {
         return Err(PegasusError::parse(
             line,
-            "CONTROL needs name gain hinge_x hx hy hz sign",
+            "CONTROL needs name gain hinge_x hx hy hz [sign]",
         ));
     }
     let number = |index: usize| {
@@ -385,11 +442,15 @@ fn parse_control(definition: &str, line: usize) -> Result<ControlSurfaceDefiniti
             .parse::<Scalar>()
             .map_err(|_| PegasusError::parse(line, "invalid numeric CONTROL field"))
     };
+    let sign = match fields.get(6) {
+        Some(_) => number(6)?,
+        None => 1.0,
+    };
     Ok(ControlSurfaceDefinition {
         name: fields[0].to_owned(),
         gain: number(1)?,
         hinge_x_fraction: number(2)?,
         hinge_vector: Vec3::new(number(3)?, number(4)?, number(5)?),
-        sign: number(6)?,
+        sign,
     })
 }

@@ -8,6 +8,7 @@ mod dual;
 mod forces;
 mod geometry_adjoint;
 mod mach;
+mod section_geometry;
 mod selection;
 mod trefftz;
 
@@ -29,6 +30,7 @@ pub use forces::{
     force_circulation_gradient, force_geometry_jvp, force_induced_velocity_gradient,
     selected_force_circulation_gradients,
 };
+pub use section_geometry::{interpolated_twist_jvp, panel_normal_jvp};
 pub use selection::{AeroOutput, OutputSelection};
 pub use trefftz::{
     TrefftzCirculationGradients, trefftz_circulation_gradients, trefftz_geometry_jvp,

@@ -1,18 +1,17 @@
 //! High-level aerodynamic, geometry, and structured-node gradients.
 
 use crate::aero::Coefficients;
-use crate::core::{EPSILON, Scalar, Vec3, VecX};
+use crate::core::{MatX, Scalar, Vec3, VecX};
 use crate::error::{PegasusError, Result};
 use crate::geometry::{Aircraft, MeshInput};
 use crate::solver::{FlightCondition, VortexLatticeSolver};
 
-use super::geometry_adjoint::{
-    GeometryAdjointContext, LatticeDirections, direct_mesh_node_direction,
-};
+use super::geometry_adjoint::{GeometryAdjointContext, direct_mesh_node_direction};
 use super::mach::velocity_influence_mach_derivative;
+use super::section_geometry::section_direction;
 use super::{
-    AdjointSolver, AeroOutput, OutputSelection, TotalDerivative, force_circulation_gradient,
-    force_induced_velocity_gradient, trefftz_circulation_gradients,
+    AdjointSolver, AeroOutput, OutputSelection, force_alpha_gradient, force_beta_gradient,
+    force_circulation_gradient, force_induced_velocity_gradient, trefftz_circulation_gradients,
 };
 
 /// Derivatives of all aerodynamic outputs with respect to one input.
@@ -321,14 +320,22 @@ impl GradientCalculator {
                 induced_velocity_mach[3 * row + 2],
             ))
         });
-        for output in OUTPUTS {
-            if !self.output_selection.contains(output) {
-                continue;
-            }
-            let total = TotalDerivative::compute(&solver, condition, output)?;
-            result.by_alpha.set(output, total.by_alpha);
-            result.by_beta.set(output, total.by_beta);
-            let circulation_gradient = if output == AeroOutput::InducedDrag {
+        // Every selected output needs the same adjoint vector for alpha, beta
+        // and Mach, so the circulation gradients are assembled once and solved
+        // in a single batched transpose solve. Calling `TotalDerivative` here
+        // and then rebuilding the gradient for the rate terms did both twice —
+        // 2K gradient assemblies and 2K solves for K outputs.
+        let selected: Vec<AeroOutput> = OUTPUTS
+            .into_iter()
+            .filter(|output| self.output_selection.contains(*output))
+            .collect();
+        if selected.is_empty() {
+            return Ok(result);
+        }
+        let unknowns = solver.mesh().vortex_count();
+        let mut circulation_gradients = MatX::zeros(unknowns, selected.len());
+        for (column, &output) in selected.iter().enumerate() {
+            let gradient = if output == AeroOutput::InducedDrag {
                 trefftz_circulation_gradients(
                     solver.mesh(),
                     solver.solution(),
@@ -340,6 +347,67 @@ impl GradientCalculator {
             } else {
                 force_circulation_gradient(&solver, condition, output)
             };
+            circulation_gradients.set_column(column, &gradient);
+        }
+        let lambdas = AdjointSolver::new(&solver)?.solve_batched(&circulation_gradients)?;
+
+        // Freestream sensitivities of the residual, shared by every output.
+        let (sin_alpha, cos_alpha) = condition.alpha.sin_cos();
+        let (sin_beta, cos_beta) = condition.beta.sin_cos();
+        let velocity_alpha = Vec3::new(-sin_alpha * cos_beta, 0.0, cos_alpha * cos_beta);
+        let velocity_beta = Vec3::new(-cos_alpha * sin_beta, cos_beta, -sin_alpha * sin_beta);
+        let mut rhs_alpha = VecX::zeros(unknowns);
+        let mut rhs_beta = VecX::zeros(unknowns);
+        for (index, (vortex, normal)) in solver
+            .mesh()
+            .vortices()
+            .iter()
+            .zip(solver.linearized_normals())
+            .enumerate()
+        {
+            if vortex.affected_by_freestream {
+                rhs_alpha[index] = -normal.dot(&velocity_alpha);
+                rhs_beta[index] = -normal.dot(&velocity_beta);
+            }
+        }
+        // Both return all six components at once, so they are built once
+        // rather than once per output.
+        let explicit_alpha = force_alpha_gradient(
+            solver.mesh(),
+            solver.solution(),
+            condition,
+            solver.reference_quantities(),
+        );
+        let explicit_beta = force_beta_gradient(
+            solver.mesh(),
+            solver.solution(),
+            condition,
+            solver.reference_quantities(),
+        );
+
+        for (column, &output) in selected.iter().enumerate() {
+            let circulation_gradient = circulation_gradients.column(column).into_owned();
+            let lambda = lambdas.column(column).into_owned();
+            let output_index = match output {
+                AeroOutput::Lift => 0,
+                AeroOutput::Drag => 1,
+                AeroOutput::Side => 2,
+                AeroOutput::Roll => 3,
+                AeroOutput::Pitch => 4,
+                AeroOutput::Yaw => 5,
+                AeroOutput::InducedDrag => 0,
+            };
+            let (alpha_term, beta_term) = if output == AeroOutput::InducedDrag {
+                (0.0, 0.0)
+            } else {
+                (explicit_alpha[output_index], explicit_beta[output_index])
+            };
+            result
+                .by_alpha
+                .set(output, alpha_term + lambda.dot(&rhs_alpha));
+            result
+                .by_beta
+                .set(output, beta_term + lambda.dot(&rhs_beta));
             result.by_roll_rate.set(
                 output,
                 circulation_gradient.dot(&solver.solution().circulation_per_p),
@@ -373,7 +441,6 @@ impl GradientCalculator {
                 })
                 .sum()
             };
-            let lambda = AdjointSolver::new(&solver)?.solve(&circulation_gradient)?;
             result
                 .by_mach
                 .set(output, explicit_mach + lambda.dot(&residual_mach));
@@ -484,32 +551,13 @@ impl GradientCalculator {
         section_index: usize,
         variable: GeometryVariable,
     ) -> Result<AeroGradients> {
-        let section = aircraft
-            .surfaces()
-            .get(surface_index)
-            .and_then(|surface| surface.section(section_index))
-            .ok_or_else(|| PegasusError::InvalidGeometry("section index is out of range".into()))?;
-        let base_value = match variable {
-            GeometryVariable::Chord => section.chord(),
-            GeometryVariable::Twist => section.twist_degrees(),
-            GeometryVariable::LeadingEdgeX => section.leading_edge().x,
-            GeometryVariable::LeadingEdgeY => section.leading_edge().y,
-            GeometryVariable::LeadingEdgeZ => section.leading_edge().z,
-        };
-        let step = match variable {
-            GeometryVariable::Twist => 1.0e-4,
-            _ => 1.0e-6 * base_value.abs().max(1.0),
-        };
-        let mut plus = aircraft.clone();
-        let mut minus = aircraft.clone();
-        perturb_section(&mut plus, surface_index, section_index, variable, step)?;
-        perturb_section(&mut minus, surface_index, section_index, variable, -step)?;
-        let mut plus_solver = VortexLatticeSolver::new();
-        plus_solver.set_aircraft(&plus)?;
-        let mut minus_solver = VortexLatticeSolver::new();
-        minus_solver.set_aircraft(&minus)?;
-        let direction =
-            LatticeDirections::difference(plus_solver.mesh(), minus_solver.mesh(), 2.0 * step)?;
+        let direction = section_direction(
+            aircraft,
+            context.mesh(),
+            surface_index,
+            section_index,
+            variable,
+        )?;
         let mut gradient = AeroGradients::default();
         for (output, value) in context.evaluate(&direction)? {
             gradient.set(output, value);
@@ -560,49 +608,4 @@ impl GradientCalculator {
         }
         Ok(result)
     }
-
-    /// Compatibility no-op. Analytical kernels do not consume a finite
-    /// difference step.
-    #[deprecated(note = "analytical derivatives do not use a configurable finite-difference step")]
-    pub fn set_finite_difference_step(&mut self, _step: Scalar) {}
-}
-
-fn perturb_section(
-    aircraft: &mut Aircraft,
-    surface_index: usize,
-    section_index: usize,
-    variable: GeometryVariable,
-    delta: Scalar,
-) -> Result<()> {
-    let section = aircraft
-        .surfaces_mut()
-        .get_mut(surface_index)
-        .and_then(|surface| surface.section_mut(section_index))
-        .ok_or_else(|| PegasusError::InvalidGeometry("section index is out of range".into()))?;
-    match variable {
-        GeometryVariable::Chord => {
-            let chord = section.chord() + delta;
-            if chord <= EPSILON {
-                return Err(PegasusError::InvalidGeometry(
-                    "chord perturbation is nonpositive".into(),
-                ));
-            }
-            section.set_chord(chord);
-        }
-        GeometryVariable::Twist => section.set_twist_degrees(section.twist_degrees() + delta),
-        GeometryVariable::LeadingEdgeX
-        | GeometryVariable::LeadingEdgeY
-        | GeometryVariable::LeadingEdgeZ => {
-            let mut point = *section.leading_edge();
-            let component = match variable {
-                GeometryVariable::LeadingEdgeX => 0,
-                GeometryVariable::LeadingEdgeY => 1,
-                GeometryVariable::LeadingEdgeZ => 2,
-                GeometryVariable::Chord | GeometryVariable::Twist => unreachable!(),
-            };
-            point[component] += delta;
-            section.set_leading_edge(point);
-        }
-    }
-    Ok(())
 }

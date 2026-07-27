@@ -12,4 +12,5 @@ pub use airfoil::Airfoil;
 pub use body::{Body, BodySection};
 pub use mesh::{MeshInput, ReferenceQuantities, SurfaceMesh};
 pub use section::{ControlSurfaceDefinition, DesignVariableDefinition, Section};
+pub(crate) use surface::SpanwiseLayout;
 pub use surface::Surface;

@@ -242,6 +242,45 @@ fn reflection_reuse_declines_meshes_it_cannot_represent_exactly() {
     assert_bit_identical("not duplicated", &plain_wing(4, 6), none, 0.0);
 }
 
+/// Exercises the meshes large enough to reach the multithreaded assembly.
+///
+/// `drive_columns` hands off to rayon at `n >= PARALLEL_MIN_PANELS` (128 total
+/// panels) and `drive_mirrored_columns` at `count >= PARALLEL_MIN_PANELS` (128
+/// per half, so 256 total). Every other mesh in the suite is far below both
+/// thresholds, so without this test `cargo test --all-features` compiles the
+/// parallel code but never runs a single line of it, and CI's
+/// `RAYON_NUM_THREADS` matrix sweeps a path no test reaches.
+///
+/// `duplicated_wing(8, 16)` is 128 panels per half and 256 total, which clears
+/// both gates. Under `--features parallel` this is the parallel mirrored
+/// assembly checked against the parallel plain assembly; under the default
+/// build it is the same check on the serial drivers.
+#[test]
+fn large_meshes_reach_the_parallel_assembly_drivers() {
+    let none = SymmetryConfig::default();
+
+    // 128 per half / 256 total: clears both the plain and the mirrored gate.
+    let both_gates = duplicated_wing(8, 16);
+    assert!(applies(&both_gates, none, 0.0));
+    assert_bit_identical("256 panels, both gates", &both_gates, none, 0.0);
+    assert_bit_identical("256 panels, compressible", &both_gates, none, 0.25);
+
+    // Oblique normals at scale, so the normalwash contraction is a genuine
+    // three-term sum on the parallel path rather than a degenerate one.
+    let oblique = oblique_duplicated(8, 16);
+    assert!(applies(&oblique, none, 0.0));
+    assert_bit_identical("256 panels, oblique", &oblique, none, 0.0);
+
+    // Above the plain gate but below the mirrored one, so the two drivers
+    // disagree about whether to distribute and must still agree bit-for-bit.
+    let plain_gate_only = duplicated_wing(8, 9);
+    assert_bit_identical("144 panels, plain gate only", &plain_gate_only, none, 0.0);
+
+    // A non-duplicated mesh over the plain gate: reuse declines, so this is
+    // `drive_columns` alone at n = 160.
+    assert_bit_identical("160 panels, no duplicate", &plain_wing(8, 20), none, 0.0);
+}
+
 #[test]
 fn reflection_reuse_leaves_the_default_path_alone() {
     // The flag defaults to off, and a solver that never touches it must behave

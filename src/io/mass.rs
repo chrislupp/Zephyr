@@ -150,15 +150,34 @@ impl MassReader {
     }
 }
 
+/// Parses one mass-file line.
+///
+/// Comments are stripped before any dispatch decision, matching the legacy
+/// reader's `RemoveComment`-then-classify order. Getting that order wrong is
+/// not cosmetic: an `=` inside a trailing comment (`! main gear (x = 1.2 m)`)
+/// would otherwise capture the line as a unit assignment and discard a real
+/// mass component, and a number inside a comment would be read as a scale
+/// factor.
+///
+/// Each branch also mirrors the legacy extraction semantics: a unit line with
+/// an unrecognized key falls through to component parsing rather than
+/// consuming the line, `*`/`+` require three consecutive numeric fields and
+/// leave the previous value untouched otherwise, and numeric runs stop at the
+/// first token that does not parse instead of skipping it.
 fn parse_mass_line(line: &str, data: &mut MassFileData, scale: &mut Vec3, offset: &mut Vec3) {
-    let trimmed = line.trim();
-    if trimmed.is_empty() || trimmed.starts_with('!') || trimmed.starts_with('#') {
+    let trimmed = remove_comment(line);
+    if trimmed.is_empty() {
         return;
     }
     if let Some((key, value)) = trimmed.split_once('=') {
         let key = key.trim().to_ascii_lowercase();
-        let value = remove_comment(value).split_whitespace().next();
-        if let Some(value) = value.and_then(|value| value.parse().ok()) {
+        let parsed = value
+            .split_whitespace()
+            .next()
+            .and_then(|value| value.parse().ok());
+        if let Some(value) = parsed {
+            // Only a recognized key consumes the line. An unknown key falls
+            // through, as `ParseUnitLine` returning false did.
             match key.as_str() {
                 "lunit" => data.length_unit = value,
                 "munit" => data.mass_unit = value,
@@ -167,8 +186,10 @@ fn parse_mass_line(line: &str, data: &mut MassFileData, scale: &mut Vec3, offset
                 "rho" => data.density = value,
                 _ => {}
             }
+            if matches!(key.as_str(), "lunit" | "munit" | "tunit" | "g" | "rho") {
+                return;
+            }
         }
-        return;
     }
     if let Some(values) = trimmed.strip_prefix('*') {
         if let Some(parsed) = parse_vec3(values) {
@@ -182,10 +203,13 @@ fn parse_mass_line(line: &str, data: &mut MassFileData, scale: &mut Vec3, offset
         }
         return;
     }
-    let data_part = remove_comment(line);
-    let values: Vec<Scalar> = data_part
+    // Keyword lines begin with a letter and are not components.
+    if trimmed.starts_with(|c: char| c.is_alphabetic()) {
+        return;
+    }
+    let values: Vec<Scalar> = trimmed
         .split_whitespace()
-        .filter_map(|value| value.parse().ok())
+        .map_while(|value| value.parse().ok())
         .collect();
     if values.len() < 7 {
         return;
@@ -216,9 +240,13 @@ fn extract_comment(line: &str) -> &str {
         .map_or("", |index| line[index + 1..].trim())
 }
 
+/// Reads three consecutive numeric fields.
+///
+/// Stops at the first token that does not parse rather than skipping it, so a
+/// trailing word cannot promote a later number into one of the three slots.
 fn parse_vec3(text: &str) -> Option<Vec3> {
     let mut values = text
         .split_whitespace()
-        .filter_map(|value| value.parse().ok());
+        .map_while(|value| value.parse::<Scalar>().ok());
     Some(Vec3::new(values.next()?, values.next()?, values.next()?))
 }

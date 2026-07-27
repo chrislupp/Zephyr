@@ -15,8 +15,6 @@ pub struct VortexLattice {
     surface_info: Vec<SurfaceMeshInfo>,
     control_influences: Vec<Vec<ControlSurfaceInfluence>>,
     control_surface_names: Vec<String>,
-    vortex_core_radius_chord_fraction: Scalar,
-    vortex_core_radius_width_fraction: Scalar,
     spanwise_axis_fraction: Scalar,
     mesh_input: Option<MeshInput>,
 }
@@ -29,8 +27,6 @@ impl Default for VortexLattice {
             surface_info: Vec::new(),
             control_influences: Vec::new(),
             control_surface_names: Vec::new(),
-            vortex_core_radius_chord_fraction: 0.75,
-            vortex_core_radius_width_fraction: 0.25,
             spanwise_axis_fraction: 0.25,
             mesh_input: None,
         }
@@ -55,8 +51,8 @@ impl VortexLattice {
     pub fn generate_from_aircraft(&mut self, aircraft: &Aircraft) -> Result<()> {
         self.clear();
         self.control_surface_names = aircraft.control_surface_names();
-        for (surface_index, surface) in aircraft.surfaces().iter().enumerate() {
-            self.generate_surface(surface, surface_index)?;
+        for surface in aircraft.surfaces() {
+            self.generate_surface(surface)?;
             if let Some(plane) = surface.y_duplicate() {
                 self.duplicate_surface(self.surface_info.len() - 1, plane);
             }
@@ -65,7 +61,7 @@ impl VortexLattice {
         Ok(())
     }
 
-    fn generate_surface(&mut self, surface: &Surface, surface_index: usize) -> Result<()> {
+    fn generate_surface(&mut self, surface: &Surface) -> Result<()> {
         let sections = surface.sections();
         if sections.len() < 2 {
             return Err(PegasusError::InvalidGeometry(format!(
@@ -73,6 +69,7 @@ impl VortexLattice {
                 surface.name()
             )));
         }
+        validate_sections(surface)?;
         let first_vortex = self.vortices.len();
         let first_strip = self.strips.len();
         let surface_slot = self.surface_info.len();
@@ -84,48 +81,18 @@ impl VortexLattice {
             )));
         }
 
-        let mut arc = vec![0.0; sections.len()];
-        for index in 1..sections.len() {
-            let delta = sections[index].leading_edge() - sections[index - 1].leading_edge();
-            arc[index] = arc[index - 1] + delta.yz().norm();
-        }
-        if arc.last().copied().unwrap_or_default() <= EPSILON {
-            return Err(PegasusError::InvalidGeometry(format!(
-                "surface '{}' has zero span",
-                surface.name()
-            )));
-        }
-        let mut per_interval = vec![0; sections.len() - 1];
-        for index in 0..sections.len() - 1 {
-            let mut count = sections[index].spanwise_panel_count();
-            if count == 0 {
-                count = surface.spanwise_panel_count();
-                if count == 0 {
-                    count = 10;
-                }
-                let fraction = (arc[index + 1] - arc[index]) / arc[arc.len() - 1];
-                count = ((count as Scalar * fraction) as usize).max(1);
-            }
-            per_interval[index] = count;
-        }
-        let ny: usize = per_interval.iter().sum();
-        let mut panel_edges = Vec::with_capacity(ny + 1);
-        let mut controls = Vec::with_capacity(ny);
-        panel_edges.push(0.0);
-        for index in 0..sections.len() - 1 {
-            let count = per_interval[index];
-            let distribution = match sections[index].spanwise_spacing() {
-                SpacingType::None => surface.spanwise_spacing(),
-                other => other,
-            };
-            let fractions = spacing(2 * count + 1, distribution);
-            let start = arc[index];
-            let length = arc[index + 1] - start;
-            for panel in 0..count {
-                controls.push(start + length * fractions[2 * panel + 1]);
-                panel_edges.push(start + length * fractions[2 * panel + 2]);
-            }
-        }
+        // The layout is computed once, by `Surface`, and shared with everything
+        // that must agree with the lattice this produces. Recomputing the arc
+        // accumulation and the per-interval rounding in a second place is how
+        // the aircraft counting helpers drifted out of step with the mesher.
+        let layout = surface.spanwise_layout().ok_or_else(|| {
+            PegasusError::InvalidGeometry(format!("surface '{}' has zero span", surface.name()))
+        })?;
+        let arc = &layout.arc;
+        let per_interval = &layout.per_interval;
+        let panel_edges = &layout.panel_edges;
+        let controls = &layout.controls;
+        let ny = layout.strip_count();
 
         let scale = surface.scale();
         let translation = surface.translation();
@@ -334,7 +301,8 @@ impl VortexLattice {
                 0.0
             },
             is_y_duplicated: false,
-            original_surface_index: surface_index,
+            // Not a mirror, so it names its own slot.
+            original_surface_index: self.surface_info.len(),
         });
         Ok(())
     }
@@ -462,6 +430,10 @@ impl VortexLattice {
             } else {
                 0.0
             },
+            // Not a mirror, so it names its own slot. Falling back to the
+            // `Default` of 0 would have pointed every direct-mesh surface at
+            // the first one.
+            original_surface_index: surface_slot,
             ..SurfaceMeshInfo::default()
         });
         Ok(())
@@ -634,34 +606,96 @@ impl VortexLattice {
         self.surface_info.len()
     }
 
-    #[must_use]
-    pub fn vortex_core_radius_chord_fraction(&self) -> Scalar {
-        self.vortex_core_radius_chord_fraction
-    }
-
-    pub fn set_vortex_core_radius_chord_fraction(&mut self, fraction: Scalar) {
-        self.vortex_core_radius_chord_fraction = fraction;
-    }
-
-    #[must_use]
-    pub fn vortex_core_radius_width_fraction(&self) -> Scalar {
-        self.vortex_core_radius_width_fraction
-    }
-
-    pub fn set_vortex_core_radius_width_fraction(&mut self, fraction: Scalar) {
-        self.vortex_core_radius_width_fraction = fraction;
-    }
-
     pub(crate) fn vortices_mut(&mut self) -> &mut [HorseshoeVortex] {
         &mut self.vortices
     }
+}
+
+/// Relative tolerance for spanwise station separation.
+///
+/// Applied against the longest interval on the surface rather than as an
+/// absolute length, so the check means the same thing whatever unit the model
+/// is expressed in.
+const MIN_STATION_SEPARATION: Scalar = 1.0e-9;
+
+/// Rejects section geometry the mesher cannot turn into a usable lattice.
+///
+/// Each of these cases previously generated "successfully" and produced NaN
+/// panel data that silently poisoned the whole AIC:
+///
+/// - a zero chord makes `claf` a `0.0 / 0.0`;
+/// - two sections at the same spanwise station leave a zero-length interval,
+///   whose interpolation parameter is `0.0 / 0.0`. Repeating a station is a
+///   standard AVL idiom for a spacing or control-surface break, so this is
+///   reachable from ordinary input;
+/// - sections that backtrack pass the arc-length test, because the arc
+///   accumulates `|Δ|` and is monotonic regardless of ordering, but produce
+///   strips that physically overlap and a near-singular AIC.
+fn validate_sections(surface: &Surface) -> Result<()> {
+    let sections = surface.sections();
+    let name = surface.name();
+
+    for (index, section) in sections.iter().enumerate() {
+        let leading_edge = section.leading_edge();
+        if !leading_edge.iter().all(|value| value.is_finite())
+            || !section.chord().is_finite()
+            || !section.twist_degrees().is_finite()
+        {
+            return Err(PegasusError::InvalidGeometry(format!(
+                "surface '{name}' section {index} has non-finite geometry"
+            )));
+        }
+        if section.chord() <= 0.0 {
+            return Err(PegasusError::InvalidGeometry(format!(
+                "surface '{name}' section {index} has chord {}; chord must be positive",
+                section.chord()
+            )));
+        }
+    }
+
+    let deltas: Vec<Vec3> = sections
+        .windows(2)
+        .map(|pair| pair[1].leading_edge() - pair[0].leading_edge())
+        .collect();
+    let longest = deltas
+        .iter()
+        .map(|delta| delta.yz().norm())
+        .fold(0.0, Scalar::max);
+    if longest <= 0.0 {
+        return Err(PegasusError::InvalidGeometry(format!(
+            "surface '{name}' has zero span"
+        )));
+    }
+
+    for (index, delta) in deltas.iter().enumerate() {
+        if delta.yz().norm() <= MIN_STATION_SEPARATION * longest {
+            return Err(PegasusError::InvalidGeometry(format!(
+                "surface '{name}' sections {index} and {} share a spanwise station; \
+                 use a single section, or separate them to define a break",
+                index + 1
+            )));
+        }
+    }
+
+    // A reversal in the y-z plane means the surface doubles back on itself.
+    for (index, pair) in deltas.windows(2).enumerate() {
+        if pair[0].yz().dot(&pair[1].yz()) < 0.0 {
+            return Err(PegasusError::InvalidGeometry(format!(
+                "surface '{name}' reverses spanwise direction at section {}; \
+                 sections must be ordered monotonically along the span",
+                index + 1
+            )));
+        }
+    }
+
+    Ok(())
 }
 
 fn reflect_swapped(point: &Vec3, y_offset: Scalar) -> Vec3 {
     Vec3::new(point.x, y_offset - point.y, point.z)
 }
 
-fn chordwise_spacing(
+pub(crate) fn chordwise_spacing(
     count: usize,
     distribution: SpacingType,
     cl_alpha_factor: Scalar,

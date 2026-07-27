@@ -206,12 +206,21 @@ impl VortexLatticeSolver {
         // The finiteness flag is accumulated during assembly, so rejecting a
         // singular system no longer costs a second full pass over the matrix
         // (10.6 MB at 1152 panels).
-        let all_finite;
-        (self.aic_matrix, self.velocity_influence_matrix, all_finite) =
+        // Assemble into locals and publish only once the result is known to be
+        // finite. Writing the fields first left `aic()`, `velocity_matrix()`,
+        // `linearized_aic()` and `solution_aic()` handing out NaN-laden
+        // matrices after a failed rebuild, paired with a stale `aic_lu` from
+        // whatever preceded them.
+        let (aic_matrix, velocity_influence_matrix, all_finite) =
             builder.normalwash_and_velocity_checked();
         if !all_finite {
+            self.aic_valid = false;
+            self.unit_responses_valid = false;
+            self.aic_lu = None;
             return Err(PegasusError::SingularSystem);
         }
+        self.aic_matrix = aic_matrix;
+        self.velocity_influence_matrix = velocity_influence_matrix;
         self.aic_lu = Some(factorize(&self.aic_matrix));
         self.aic_valid = true;
         self.unit_responses_valid = false;
@@ -430,17 +439,24 @@ impl VortexLatticeSolver {
         }
         let (normals, normal_derivatives) =
             self.effective_normals_with_derivative(condition, control_name);
-        let matrix = self.matrix_for_normals(&normals);
         let n = self.mesh.vortex_count();
-        let mut matrix_derivative = MatX::zeros(n, n);
+
+        // `matrix_derivative` was materialized as a dense N×N only to be used
+        // once, in `matrix_derivative * circulation`. Contracting as we go
+        // keeps the same O(N²) work without the allocation.
+        let circulation = &self.solution.circulation;
+        let mut matrix_derivative_times_circulation = VecX::zeros(n);
         for row in 0..n {
+            let mut sum = 0.0;
             for column in 0..n {
-                matrix_derivative[(row, column)] = normal_derivatives[row].dot(&Vec3::new(
+                let entry = normal_derivatives[row].dot(&Vec3::new(
                     self.velocity_influence_matrix[(3 * row, column)],
                     self.velocity_influence_matrix[(3 * row + 1, column)],
                     self.velocity_influence_matrix[(3 * row + 2, column)],
                 ));
+                sum += entry * circulation[column];
             }
+            matrix_derivative_times_circulation[row] = sum;
         }
         let freestream = Self::freestream_direction(condition);
         let omega = Vec3::new(
@@ -463,7 +479,21 @@ impl VortexLatticeSolver {
                     }
                 }),
         );
-        let rhs = rhs_derivative - matrix_derivative * &self.solution.circulation;
+        let rhs = rhs_derivative - matrix_derivative_times_circulation;
+
+        // The system here is the one the primal already solved: this function
+        // requires a valid solution and reads its circulation, so it is only
+        // meaningful at the solved condition, where `effective_normals_with_derivative`
+        // reproduces exactly the normals `solve` used. When that holds the
+        // cached factorization applies and a fresh O(N³) decomposition is pure
+        // waste. The normals are compared rather than assumed, so a caller who
+        // reaches here with a stale cache still gets a correct answer.
+        if self.solution_normals == normals
+            && let Some(lu) = self.solution_lu.as_ref().or(self.aic_lu.as_ref())
+        {
+            return solve_vector(lu, &rhs);
+        }
+        let matrix = self.matrix_for_normals(&normals);
         solve_vector(&factorize(&matrix), &rhs)
     }
 
@@ -473,21 +503,41 @@ impl VortexLatticeSolver {
                 "cannot solve an empty lattice".into(),
             ));
         }
+        // Every scalar that reaches the right-hand side is checked, including
+        // the three body rates. They were previously unchecked, so a NaN rate
+        // produced an all-NaN circulation reported as a valid solution.
+        //
+        // `dynamic_pressure` is checked for finiteness before its sign: every
+        // ordered comparison against NaN is false, so `x < 0.0` alone let NaN
+        // straight through.
         if !condition.alpha.is_finite()
             || !condition.beta.is_finite()
             || !condition.mach.is_finite()
+            || !condition.roll_rate.is_finite()
+            || !condition.pitch_rate.is_finite()
+            || !condition.yaw_rate.is_finite()
             || condition
                 .control_deflections
                 .iter()
                 .any(|(_, value)| !value.is_finite())
             || condition.mach < 0.0
+            || !condition.dynamic_pressure.is_finite()
             || condition.dynamic_pressure < 0.0
         {
             return Err(PegasusError::InvalidFlightCondition(
-                "angles, Mach, and dynamic pressure must be finite; Mach and \
-                 dynamic pressure must be nonnegative"
+                "angles, body rates, Mach, and dynamic pressure must be finite; \
+                 Mach and dynamic pressure must be nonnegative"
                     .into(),
             ));
+        }
+        // Prandtl-Glauert has no meaning at or above Mach 1. Returning the
+        // incompressible answer silently, as clamping beta to 1 did, hands back
+        // plausible numbers for a condition the method cannot model.
+        if condition.mach >= 1.0 {
+            return Err(PegasusError::InvalidFlightCondition(format!(
+                "Mach {} is not subsonic; the vortex-lattice method requires Mach < 1",
+                condition.mach
+            )));
         }
         if (condition.mach - self.current_mach).abs() > EPSILON {
             self.current_mach = condition.mach;

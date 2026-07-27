@@ -3,6 +3,7 @@
 use std::ops::{Add, Div, Mul, Neg, Sub};
 
 use crate::core::{EPSILON, PI, Scalar, Vec3, VecX};
+use crate::error::{PegasusError, Result};
 use crate::solver::{SolutionState, VortexLattice};
 
 const INV_2_PI: Scalar = 1.0 / (2.0 * PI);
@@ -195,7 +196,6 @@ impl Neg for Directional {
 
 /// Fixed-circulation directional derivative of far-field lift, side force,
 /// and induced drag with respect to lattice geometry.
-#[must_use]
 #[allow(clippy::too_many_arguments)]
 pub fn trefftz_geometry_jvp(
     mesh: &VortexLattice,
@@ -206,9 +206,20 @@ pub fn trefftz_geometry_jvp(
     bound_left_direction: &[Vec3],
     bound_right_direction: &[Vec3],
     strip_chord_direction: &[Scalar],
-) -> [Scalar; 3] {
+) -> Result<[Scalar; 3]> {
+    // Zero-filling a short slice returns a partial derivative that looks
+    // exactly like a correct one. `strip_chord_direction` in particular was
+    // never checked at all.
+    if bound_left_direction.len() != mesh.vortex_count()
+        || bound_right_direction.len() != mesh.vortex_count()
+        || strip_chord_direction.len() != mesh.strip_count()
+    {
+        return Err(PegasusError::InvalidGeometry(
+            "geometry direction slices must match the lattice dimensions".into(),
+        ));
+    }
     if !solution.is_valid || mesh.strip_count() == 0 || reference_area <= 0.0 {
-        return [0.0; 3];
+        return Ok([0.0; 3]);
     }
     let strip_count = mesh.strip_count();
     let mut gamma = vec![0.0; strip_count];
@@ -222,14 +233,8 @@ pub fn trefftz_geometry_jvp(
             .sum();
         let vortex_index = strip.first_vortex_index + strip.num_vortices - 1;
         let vortex = &mesh.vortices()[vortex_index];
-        let left_direction = bound_left_direction
-            .get(vortex_index)
-            .copied()
-            .unwrap_or_else(Vec3::zeros);
-        let right_direction = bound_right_direction
-            .get(vortex_index)
-            .copied()
-            .unwrap_or_else(Vec3::zeros);
+        let left_direction = bound_left_direction[vortex_index];
+        let right_direction = bound_right_direction[vortex_index];
         left[index] = [
             Directional::new(vortex.bound_vortex_left.y, left_direction.y),
             Directional::new(vortex.bound_vortex_left.z, left_direction.z),
@@ -302,5 +307,5 @@ pub fn trefftz_geometry_jvp(
         side = side - two * target_gamma * dz / scale;
         drag = drag + target_gamma * (dz * velocity_y - dy * velocity_z) / scale;
     }
-    [lift.derivative, side.derivative, drag.derivative]
+    Ok([lift.derivative, side.derivative, drag.derivative])
 }

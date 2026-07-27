@@ -30,4 +30,4 @@ pub mod trim;
 pub mod utils;
 pub mod visualization;
 
-pub use error::{PegasusError, Result};
+pub use error::{ParseLocation, PegasusError, Result};
