@@ -1,0 +1,263 @@
+//! Reflection reuse must be an optimization only: enabling it may never change
+//! a single bit of output, and it must decline meshes it cannot represent
+//! exactly rather than approximating them.
+
+use pegasus_vlm::core::{Scalar, SymmetryType, Vec3};
+use pegasus_vlm::geometry::{MeshInput, ReferenceQuantities, SurfaceMesh};
+use pegasus_vlm::solver::{
+    FlightCondition, InfluenceMatrixBuilder, SymmetryConfig, VortexLatticeSolver,
+};
+
+fn reference() -> ReferenceQuantities {
+    ReferenceQuantities {
+        area: 10.0,
+        chord: 1.0,
+        span: 10.0,
+        moment_reference_point: Vec3::new(0.25, 0.0, 0.0),
+    }
+}
+
+/// Flat y-duplicated wing, cosine-spaced chordwise.
+fn duplicated_wing(nx: usize, ny: usize) -> MeshInput {
+    let mut surface = SurfaceMesh::new("wing", nx, ny);
+    surface.y_duplicated = true;
+    for i in 0..=nx {
+        let chord = 0.5 * (1.0 - (std::f64::consts::PI * i as Scalar / nx as Scalar).cos());
+        for j in 0..=ny {
+            surface
+                .set_node(
+                    i,
+                    j,
+                    Vec3::new(chord, 5.0 * j as Scalar / ny as Scalar, 0.0),
+                )
+                .unwrap();
+        }
+    }
+    MeshInput {
+        surfaces: vec![surface],
+        reference: reference(),
+    }
+}
+
+/// Swept and dihedralled, so panel normals have all three components non-zero
+/// and the normalwash contraction is a genuine three-term sum.
+fn oblique_duplicated(nx: usize, ny: usize) -> MeshInput {
+    let mut surface = SurfaceMesh::new("swept", nx, ny);
+    surface.y_duplicated = true;
+    for i in 0..=nx {
+        for j in 0..=ny {
+            let span = j as Scalar / ny as Scalar;
+            let chordwise = i as Scalar / nx as Scalar;
+            surface
+                .set_node(
+                    i,
+                    j,
+                    Vec3::new(
+                        0.6 * span + chordwise * (1.0 - 0.3 * span),
+                        0.1 + 1.9 * span,
+                        0.35 * span + chordwise * 0.15 * span,
+                    ),
+                )
+                .unwrap();
+        }
+    }
+    MeshInput {
+        surfaces: vec![surface],
+        reference: reference(),
+    }
+}
+
+/// Duplicated about a plane that is not `y = 0`, so mirroring a coordinate is
+/// `2*plane - y` and rounds. Reflection reuse must decline this.
+fn offset_plane_wing(nx: usize, ny: usize) -> MeshInput {
+    let mut surface = SurfaceMesh::new("wing", nx, ny);
+    surface.y_duplicated = true;
+    surface.y_duplicate_plane = 0.35;
+    for i in 0..=nx {
+        for j in 0..=ny {
+            surface
+                .set_node(
+                    i,
+                    j,
+                    Vec3::new(
+                        i as Scalar / nx as Scalar,
+                        0.35 + 2.0 * j as Scalar / ny as Scalar,
+                        0.0,
+                    ),
+                )
+                .unwrap();
+        }
+    }
+    MeshInput {
+        surfaces: vec![surface],
+        reference: reference(),
+    }
+}
+
+/// Single surface with no duplicate, so no pairing exists.
+fn plain_wing(nx: usize, ny: usize) -> MeshInput {
+    let mut surface = SurfaceMesh::new("wing", nx, ny);
+    for i in 0..=nx {
+        for j in 0..=ny {
+            surface
+                .set_node(
+                    i,
+                    j,
+                    Vec3::new(
+                        i as Scalar / nx as Scalar,
+                        -2.0 + 4.0 * j as Scalar / ny as Scalar,
+                        0.0,
+                    ),
+                )
+                .unwrap();
+        }
+    }
+    MeshInput {
+        surfaces: vec![surface],
+        reference: reference(),
+    }
+}
+
+fn condition(mach: Scalar) -> FlightCondition {
+    FlightCondition {
+        alpha: 0.06,
+        beta: 0.03,
+        roll_rate: 0.01,
+        pitch_rate: 0.02,
+        yaw_rate: 0.015,
+        mach,
+        dynamic_pressure: 0.5 * 1.225 * 25.0 * 25.0,
+        ..FlightCondition::default()
+    }
+}
+
+/// Every `f64` the solver produced, as raw bits, so comparison is exact rather
+/// than tolerant.
+fn output_bits(
+    input: &MeshInput,
+    symmetry: SymmetryConfig,
+    mach: Scalar,
+    mirror: bool,
+) -> Vec<u64> {
+    let mut solver = VortexLatticeSolver::new();
+    solver.set_symmetry(symmetry);
+    solver.set_mirror_reuse(mirror);
+    solver.set_mesh(input).unwrap();
+    let solution = solver.solve(&condition(mach)).unwrap();
+
+    let mut bits = Vec::new();
+    bits.extend(solver.aic().iter().map(|value| value.to_bits()));
+    bits.extend(solver.velocity_matrix().iter().map(|value| value.to_bits()));
+    for column in [
+        &solution.circulation,
+        &solution.circulation_per_u,
+        &solution.circulation_per_v,
+        &solution.circulation_per_w,
+        &solution.circulation_per_p,
+        &solution.circulation_per_q,
+        &solution.circulation_per_r,
+    ] {
+        bits.extend(column.iter().map(|value| value.to_bits()));
+    }
+    bits.extend(
+        solution
+            .induced_velocity
+            .iter()
+            .map(|value| value.to_bits()),
+    );
+    bits
+}
+
+fn applies(input: &MeshInput, symmetry: SymmetryConfig, mach: Scalar) -> bool {
+    let mut solver = VortexLatticeSolver::new();
+    solver.set_symmetry(symmetry);
+    solver.set_mesh(input).unwrap();
+    let mut builder = InfluenceMatrixBuilder::new(solver.mesh());
+    builder.set_mach_number(mach);
+    builder.set_symmetry(symmetry);
+    builder.set_mirror_reuse(true);
+    builder.mirror_reuse_applies()
+}
+
+fn assert_bit_identical(label: &str, input: &MeshInput, symmetry: SymmetryConfig, mach: Scalar) {
+    let plain = output_bits(input, symmetry, mach, false);
+    let mirrored = output_bits(input, symmetry, mach, true);
+    assert_eq!(
+        plain.len(),
+        mirrored.len(),
+        "{label}: output length changed"
+    );
+    let differing = plain
+        .iter()
+        .zip(&mirrored)
+        .filter(|(left, right)| left != right)
+        .count();
+    assert_eq!(
+        differing,
+        0,
+        "{label}: reflection reuse changed {differing} of {} output values",
+        plain.len()
+    );
+}
+
+#[test]
+fn reflection_reuse_is_bit_identical_where_it_engages() {
+    let none = SymmetryConfig::default();
+    for (label, input, mach) in [
+        ("flat even span", duplicated_wing(6, 8), 0.0),
+        ("flat odd span", duplicated_wing(6, 7), 0.0),
+        ("flat compressible", duplicated_wing(6, 8), 0.2),
+        ("oblique normals", oblique_duplicated(4, 6), 0.0),
+        ("oblique compressible", oblique_duplicated(4, 6), 0.3),
+        ("single chordwise row", duplicated_wing(1, 5), 0.0),
+    ] {
+        assert!(
+            applies(&input, none, mach),
+            "{label}: expected reflection reuse to engage, but it declined"
+        );
+        assert_bit_identical(label, &input, none, mach);
+    }
+}
+
+#[test]
+fn reflection_reuse_declines_meshes_it_cannot_represent_exactly() {
+    let none = SymmetryConfig::default();
+    let z_image = SymmetryConfig {
+        z_symmetry: SymmetryType::Symmetric,
+        z_symmetry_plane: 0.4,
+        ..SymmetryConfig::default()
+    };
+
+    // A mirror plane away from the origin makes reflection a rounding
+    // subtraction rather than a sign flip.
+    assert!(!applies(&offset_plane_wing(4, 6), none, 0.0));
+    // Symmetry images add terms whose equivariance is not established.
+    assert!(!applies(&oblique_duplicated(4, 6), z_image, 0.0));
+    // Nothing to pair.
+    assert!(!applies(&plain_wing(4, 6), none, 0.0));
+
+    // Declining must still produce correct results, not merely refuse.
+    assert_bit_identical("offset plane", &offset_plane_wing(4, 6), none, 0.0);
+    assert_bit_identical("z image", &oblique_duplicated(4, 6), z_image, 0.0);
+    assert_bit_identical("not duplicated", &plain_wing(4, 6), none, 0.0);
+}
+
+#[test]
+fn reflection_reuse_leaves_the_default_path_alone() {
+    // The flag defaults to off, and a solver that never touches it must behave
+    // exactly like one explicitly opted out.
+    let input = duplicated_wing(6, 8);
+    let mut default_solver = VortexLatticeSolver::new();
+    default_solver.set_mesh(&input).unwrap();
+    assert!(!default_solver.mirror_reuse());
+
+    let solution = default_solver.solve(&condition(0.0)).unwrap();
+    let explicit = output_bits(&input, SymmetryConfig::default(), 0.0, false);
+    let observed: Vec<u64> = default_solver
+        .aic()
+        .iter()
+        .map(|value| value.to_bits())
+        .collect();
+    assert_eq!(observed, explicit[..observed.len()].to_vec());
+    assert!(solution.is_valid);
+}

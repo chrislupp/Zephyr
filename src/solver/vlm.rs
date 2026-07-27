@@ -85,6 +85,7 @@ fn solve_transpose_vector(factorization: &DynamicLu, rhs: &VecX) -> Result<VecX>
 pub struct VortexLatticeSolver {
     mesh: VortexLattice,
     symmetry: SymmetryConfig,
+    mirror_reuse: bool,
     reference_point: Vec3,
     reference_quantities: ReferenceQuantities,
     aic_matrix: MatX,
@@ -105,6 +106,7 @@ impl Default for VortexLatticeSolver {
         Self {
             mesh: VortexLattice::default(),
             symmetry: SymmetryConfig::default(),
+            mirror_reuse: false,
             reference_point: Vec3::zeros(),
             reference_quantities: ReferenceQuantities::default(),
             aic_matrix: MatX::zeros(0, 0),
@@ -150,6 +152,25 @@ impl VortexLatticeSolver {
         self.invalidate();
     }
 
+    /// Lets influence assembly derive mirrored entries by reflection rather
+    /// than evaluating them, for lattices built from `y_duplicated` surfaces.
+    ///
+    /// Off by default. Results are unaffected: assembly takes the fast path
+    /// only when it can prove the mesh satisfies the reflection identity
+    /// exactly, and the derived entries are bit-identical to evaluated ones.
+    /// Meshes that do not qualify -- symmetry images in use, partially
+    /// duplicated geometry, or a mirror plane that is not a pure sign flip --
+    /// fall back to evaluating every entry.
+    pub fn set_mirror_reuse(&mut self, enabled: bool) {
+        self.mirror_reuse = enabled;
+        self.invalidate();
+    }
+
+    #[must_use]
+    pub fn mirror_reuse(&self) -> bool {
+        self.mirror_reuse
+    }
+
     pub fn set_reference_point(&mut self, point: Vec3) {
         self.reference_point = point;
         self.unit_responses_valid = false;
@@ -181,6 +202,7 @@ impl VortexLatticeSolver {
         let mut builder = InfluenceMatrixBuilder::new(&self.mesh);
         builder.set_mach_number(self.current_mach);
         builder.set_symmetry(self.symmetry);
+        builder.set_mirror_reuse(self.mirror_reuse);
         // The finiteness flag is accumulated during assembly, so rejecting a
         // singular system no longer costs a second full pass over the matrix
         // (10.6 MB at 1152 panels).

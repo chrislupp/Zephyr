@@ -19,6 +19,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   Linux/macOS/Windows CI.
 - A committed v0.2.0 numerical oracle and a manifest covering all 488
   non-Philote CTest cases.
+- Opt-in reflection reuse for lattices built from `y_duplicated` surfaces, via
+  `set_mirror_reuse` on the solver and the influence builder. The induced
+  velocity is equivariant under the mirror `M = diag(1, -1, 1)`, so half the
+  influence entries can be derived rather than evaluated; measured 1.15-1.34x.
+  Off by default, and enabling it never changes results. Assembly verifies the
+  reflection relation against the actual panel geometry before using it and
+  falls back to evaluating every entry otherwise, so symmetry images, partially
+  duplicated meshes, and mirror planes away from `y = 0` are all handled
+  correctly rather than approximated. `mirror_reuse_applies` reports which path
+  a given mesh will take.
 - A non-default `parallel` feature that multithreads influence assembly over
   source panels via rayon. Each column writes a disjoint slice and reads
   nothing another column writes, so results are bit-identical to the serial
