@@ -73,18 +73,38 @@ pub fn horseshoe_vortex_velocity(
             w = cross.z * factor;
         }
     }
+    // The two trailing legs are summed with each other first, then added to the
+    // bound contribution, rather than accumulated into it one leg at a time.
+    //
+    // This makes the kernel equivariant under a y-reflection in floating point,
+    // not merely in exact arithmetic. A mirrored panel is evaluated with its
+    // bound endpoints swapped, so `(a, b)` become `(M·b, M·a)`; accumulating
+    // leg-at-a-time then associates the same three terms as
+    // `((bound + b_leg) + a_leg)` instead of `((bound + a_leg) + b_leg)`, and
+    // addition is commutative but not associative. Summing the legs pairwise
+    // removes the asymmetry, because `a_leg + b_leg` and `b_leg + a_leg` agree
+    // exactly.
+    //
+    // `0.0 - x` rather than `-x` for the `w` legs: the two are identical for
+    // every finite non-zero value, but unary negation maps `+0.0` to `-0.0`,
+    // which would leave the reflected and directly evaluated forms differing in
+    // the sign of zero.
+    let (mut leg_a_v, mut leg_a_w) = (0.0, 0.0);
     if a_mag > EPSILON {
         let axis_sq = a.y * a.y + a.z * a.z;
         let factor = -(1.0 - a.x / a_mag) / (axis_sq * axis_sq + core_4).sqrt();
-        v += a.z * factor;
-        w -= a.y * factor;
+        leg_a_v = a.z * factor;
+        leg_a_w = 0.0 - a.y * factor;
     }
+    let (mut leg_b_v, mut leg_b_w) = (0.0, 0.0);
     if b_mag > EPSILON {
         let axis_sq = b.y * b.y + b.z * b.z;
         let factor = (1.0 - b.x / b_mag) / (axis_sq * axis_sq + core_4).sqrt();
-        v += b.z * factor;
-        w -= b.y * factor;
+        leg_b_v = b.z * factor;
+        leg_b_w = 0.0 - b.y * factor;
     }
+    v += leg_a_v + leg_b_v;
+    w += leg_a_w + leg_b_w;
     Vec3::new(
         u * INV_4_PI / prandtl_glauert_factor,
         v * INV_4_PI,

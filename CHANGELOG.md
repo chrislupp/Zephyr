@@ -48,6 +48,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   plus a second full pass over the velocity matrix, and hoists the source panel
   width, core radii, and symmetry-image geometry out of the inner loop. Output
   is bit-for-bit unchanged.
+- The influence kernel sums its two trailing-leg contributions with each other
+  before adding them to the bound contribution, instead of accumulating them
+  one leg at a time. This is a reassociation, not a correction: neither order is
+  more accurate. It makes the kernel equivariant under a y-reflection in
+  floating point rather than only in exact arithmetic, which is what lets
+  mirrored influence entries be derived instead of evaluated.
+  **This shifts results.** Influence coefficients move by about one unit in the
+  last place; circulations move by that amplified by the AIC condition number,
+  measured as 1.5e-16 relative on an 8-panel wing rising to 4.2e-12 on 384
+  panels. All parity fixtures pass unchanged, the strictest with roughly three
+  orders of magnitude of tolerance to spare.
 - Rejecting a singular system no longer costs a separate full pass over the
   assembled normalwash matrix. Finiteness is accumulated while the matrix is
   written and reported through `normalwash_and_velocity_checked`.
