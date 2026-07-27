@@ -26,8 +26,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   Rust 1.93.1.
 - The public API uses owned Rust data, checked slices and indices,
   `PegasusError`, grouped `Coefficients`, and `AeroOutput`.
-- Dense primal and transposed AIC factorizations are cached and reused for
-  unit responses, repeated flight conditions, and batched adjoints.
+- A single partial-pivot AIC factorization is cached and reused for primal,
+  transposed-adjoint, unit-response, and repeated-flight-condition solves,
+  avoiding duplicate cubic work while preserving single-threaded execution.
 - Flight-condition, aircraft-section, and direct mesh-node gradients use
   analytical influence/force kernels and adjoint contractions; the Mach
   derivative no longer requires perturbed full solves.

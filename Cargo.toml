@@ -27,7 +27,7 @@ default = ["vtk"]
 vtk = ["dep:vtkio"]
 
 [dependencies]
-faer = "0.24.4"
+faer = { version = "0.24.4", default-features = false, features = ["std", "linalg"] }
 nalgebra = "0.35.0"
 num-complex = "0.4.6"
 thiserror = "2.0"

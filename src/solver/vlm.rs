@@ -1,6 +1,9 @@
 //! Cached primal vortex-lattice solver.
 
-use nalgebra::{Dyn, linalg::LU};
+use faer::{
+    MatMut, MatRef,
+    linalg::solvers::{PartialPivLu, Solve},
+};
 
 use crate::core::{EPSILON, MatX, Scalar, Vec3, VecX};
 use crate::error::{PegasusError, Result};
@@ -10,7 +13,72 @@ use super::{
     FlightCondition, InfluenceMatrixBuilder, SolutionState, SymmetryConfig, VortexLattice,
 };
 
-type DynamicLu = LU<Scalar, Dyn, Dyn>;
+type DynamicLu = PartialPivLu<Scalar>;
+
+fn factorize(matrix: &MatX) -> DynamicLu {
+    MatRef::from_column_major_slice(matrix.as_slice(), matrix.nrows(), matrix.ncols())
+        .partial_piv_lu()
+}
+
+fn solve_matrix(factorization: &DynamicLu, rhs: &MatX) -> Result<MatX> {
+    let mut solution = rhs.clone();
+    let (nrows, ncols) = solution.shape();
+    factorization.solve_in_place(MatMut::from_column_major_slice_mut(
+        solution.as_mut_slice(),
+        nrows,
+        ncols,
+    ));
+    if solution.iter().all(|value| value.is_finite()) {
+        Ok(solution)
+    } else {
+        Err(PegasusError::SingularSystem)
+    }
+}
+
+fn solve_vector(factorization: &DynamicLu, rhs: &VecX) -> Result<VecX> {
+    let mut solution = rhs.clone();
+    let nrows = solution.nrows();
+    factorization.solve_in_place(MatMut::from_column_major_slice_mut(
+        solution.as_mut_slice(),
+        nrows,
+        1,
+    ));
+    if solution.iter().all(|value| value.is_finite()) {
+        Ok(solution)
+    } else {
+        Err(PegasusError::SingularSystem)
+    }
+}
+
+fn solve_transpose_matrix(factorization: &DynamicLu, rhs: &MatX) -> Result<MatX> {
+    let mut solution = rhs.clone();
+    let (nrows, ncols) = solution.shape();
+    factorization.solve_transpose_in_place(MatMut::from_column_major_slice_mut(
+        solution.as_mut_slice(),
+        nrows,
+        ncols,
+    ));
+    if solution.iter().all(|value| value.is_finite()) {
+        Ok(solution)
+    } else {
+        Err(PegasusError::SingularSystem)
+    }
+}
+
+fn solve_transpose_vector(factorization: &DynamicLu, rhs: &VecX) -> Result<VecX> {
+    let mut solution = rhs.clone();
+    let nrows = solution.nrows();
+    factorization.solve_transpose_in_place(MatMut::from_column_major_slice_mut(
+        solution.as_mut_slice(),
+        nrows,
+        1,
+    ));
+    if solution.iter().all(|value| value.is_finite()) {
+        Ok(solution)
+    } else {
+        Err(PegasusError::SingularSystem)
+    }
+}
 
 /// Main VLM solver with cached AIC and six unit responses.
 #[derive(Clone, Debug)]
@@ -21,10 +89,9 @@ pub struct VortexLatticeSolver {
     reference_quantities: ReferenceQuantities,
     aic_matrix: MatX,
     velocity_influence_matrix: MatX,
-    solution_aic_matrix: MatX,
+    solution_aic_matrix: Option<MatX>,
     aic_lu: Option<DynamicLu>,
-    aic_transpose_lu: Option<DynamicLu>,
-    solution_transpose_lu: Option<DynamicLu>,
+    solution_lu: Option<DynamicLu>,
     solution_normals: Vec<Vec3>,
     aic_valid: bool,
     unit_circulation: MatX,
@@ -42,10 +109,9 @@ impl Default for VortexLatticeSolver {
             reference_quantities: ReferenceQuantities::default(),
             aic_matrix: MatX::zeros(0, 0),
             velocity_influence_matrix: MatX::zeros(0, 0),
-            solution_aic_matrix: MatX::zeros(0, 0),
+            solution_aic_matrix: None,
             aic_lu: None,
-            aic_transpose_lu: None,
-            solution_transpose_lu: None,
+            solution_lu: None,
             solution_normals: Vec::new(),
             aic_valid: false,
             unit_circulation: MatX::zeros(0, 6),
@@ -98,10 +164,9 @@ impl VortexLatticeSolver {
     fn invalidate(&mut self) {
         self.aic_valid = false;
         self.unit_responses_valid = false;
-        self.solution_aic_matrix = MatX::zeros(0, 0);
+        self.solution_aic_matrix = None;
         self.aic_lu = None;
-        self.aic_transpose_lu = None;
-        self.solution_transpose_lu = None;
+        self.solution_lu = None;
         self.solution_normals.clear();
         self.solution.is_valid = false;
     }
@@ -120,8 +185,7 @@ impl VortexLatticeSolver {
         if !self.aic_matrix.iter().all(|value| value.is_finite()) {
             return Err(PegasusError::SingularSystem);
         }
-        self.aic_lu = Some(self.aic_matrix.clone().lu());
-        self.aic_transpose_lu = Some(self.aic_matrix.transpose().lu());
+        self.aic_lu = Some(factorize(&self.aic_matrix));
         self.aic_valid = true;
         self.unit_responses_valid = false;
         Ok(())
@@ -167,12 +231,10 @@ impl VortexLatticeSolver {
             rhs.set_column(component, &self.unit_freestream_rhs(component));
             rhs.set_column(component + 3, &self.unit_rotation_rhs(component));
         }
-        self.unit_circulation = self
-            .aic_lu
-            .as_ref()
-            .ok_or(PegasusError::SingularSystem)?
-            .solve(&rhs)
-            .ok_or(PegasusError::SingularSystem)?;
+        self.unit_circulation = solve_matrix(
+            self.aic_lu.as_ref().ok_or(PegasusError::SingularSystem)?,
+            &rhs,
+        )?;
         let residual = &self.aic_matrix * &self.unit_circulation - rhs;
         if !residual.iter().all(|value| value.is_finite()) {
             return Err(PegasusError::SingularSystem);
@@ -324,9 +386,7 @@ impl VortexLatticeSolver {
                     .dot(normal);
             }
         }
-        factorization
-            .solve(&rhs)
-            .ok_or(PegasusError::SingularSystem)
+        solve_matrix(factorization, &rhs)
     }
 
     /// Analytical circulation derivative for one named control at the current
@@ -375,7 +435,7 @@ impl VortexLatticeSolver {
                 }),
         );
         let rhs = rhs_derivative - matrix_derivative * &self.solution.circulation;
-        matrix.lu().solve(&rhs).ok_or(PegasusError::SingularSystem)
+        solve_vector(&factorize(&matrix), &rhs)
     }
 
     pub fn solve(&mut self, condition: &FlightCondition) -> Result<SolutionState> {
@@ -408,8 +468,8 @@ impl VortexLatticeSolver {
             self.solve_unit_responses()?;
         }
         let (circulation, solution_units) = if condition.control_deflections.is_empty() {
-            self.solution_aic_matrix = self.aic_matrix.clone();
-            self.solution_transpose_lu = self.aic_transpose_lu.clone();
+            self.solution_aic_matrix = None;
+            self.solution_lu = None;
             self.solution_normals = self
                 .mesh
                 .vortices()
@@ -424,13 +484,11 @@ impl VortexLatticeSolver {
             let normals = self.effective_normals(condition);
             let matrix = self.matrix_for_normals(&normals);
             let rhs = self.rhs_for_normals(condition, &normals);
-            let factorization = matrix.clone().lu();
-            let circulation = factorization
-                .solve(&rhs)
-                .ok_or(PegasusError::SingularSystem)?;
+            let factorization = factorize(&matrix);
+            let circulation = solve_vector(&factorization, &rhs)?;
             let units = self.unit_responses_for_normals(&factorization, &normals)?;
-            self.solution_transpose_lu = Some(matrix.transpose().lu());
-            self.solution_aic_matrix = matrix;
+            self.solution_lu = Some(factorization);
+            self.solution_aic_matrix = Some(matrix);
             self.solution_normals = normals;
             (circulation, units)
         };
@@ -489,20 +547,18 @@ impl VortexLatticeSolver {
     /// rotations. Before the first solve this is empty.
     #[must_use]
     pub fn solution_aic(&self) -> &MatX {
-        &self.solution_aic_matrix
+        self.solution_aic_matrix
+            .as_ref()
+            .unwrap_or(&self.aic_matrix)
     }
 
     /// AIC to use for linearization: the current control-adjusted matrix when
     /// available, otherwise the cached undeflected matrix.
     #[must_use]
     pub fn linearized_aic(&self) -> &MatX {
-        if self.solution_aic_matrix.shape() == self.aic_matrix.shape()
-            && self.solution_aic_matrix.nrows() > 0
-        {
-            &self.solution_aic_matrix
-        } else {
-            &self.aic_matrix
-        }
+        self.solution_aic_matrix
+            .as_ref()
+            .unwrap_or(&self.aic_matrix)
     }
 
     pub(crate) fn linearized_normals(&self) -> &[Vec3] {
@@ -510,21 +566,21 @@ impl VortexLatticeSolver {
     }
 
     pub(crate) fn solve_linearized_transpose(&self, rhs: &VecX) -> Result<VecX> {
-        self.solution_transpose_lu
+        let factorization = self
+            .solution_lu
             .as_ref()
-            .or(self.aic_transpose_lu.as_ref())
-            .ok_or(PegasusError::InvalidSolution)?
-            .solve(rhs)
-            .ok_or(PegasusError::SingularSystem)
+            .or(self.aic_lu.as_ref())
+            .ok_or(PegasusError::InvalidSolution)?;
+        solve_transpose_vector(factorization, rhs)
     }
 
     pub(crate) fn solve_linearized_transpose_batched(&self, rhs: &MatX) -> Result<MatX> {
-        self.solution_transpose_lu
+        let factorization = self
+            .solution_lu
             .as_ref()
-            .or(self.aic_transpose_lu.as_ref())
-            .ok_or(PegasusError::InvalidSolution)?
-            .solve(rhs)
-            .ok_or(PegasusError::SingularSystem)
+            .or(self.aic_lu.as_ref())
+            .ok_or(PegasusError::InvalidSolution)?;
+        solve_transpose_matrix(factorization, rhs)
     }
 
     #[must_use]
