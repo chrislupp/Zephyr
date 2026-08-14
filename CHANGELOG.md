@@ -153,9 +153,29 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   live knobs are `InfluenceMatrixBuilder::{set_core_radius_chord_fraction,
   set_core_radius_width_fraction}`, which apply between panels on different
   components.
+- The internal forward-mode dual-number scalar that the Biot-Savart VJPs were
+  built on. `v0.2.0` had already deleted `gradients/dual_number.h` and
+  `gradients/autodiff_tape.h` in favour of hand-derived closed forms, so
+  carrying a dual through the kernel put back the machinery the behavioural
+  oracle deliberately removed. The three `horseshoe_velocity_vjp_*` functions
+  are now closed-form expressions matching the oracle's
+  `analytical_biot_savart.cpp`, and no automatic differentiation of any kind
+  remains in `src/`.
 
 ### Fixed
 
+- The Biot-Savart VJPs are now invariant under a uniform rescaling of the
+  geometry, matching the primal. `horseshoe_vortex_velocity` tests collinearity
+  with the dimensionless `cross_sq > EPSILON * a_sq * b_sq`, but the gradient
+  kernel compared the length⁴ quantity `cross_sq` against an absolute
+  `EPSILON` — the same class of bug that was fixed in influence assembly, but
+  left in place on the derivative side. Below roughly millimetre scale the
+  VJP therefore dropped the bound-leg term that the primal still evaluated: at
+  1e-4 scale the derivative disagreed with a centered difference by the entire
+  bound contribution, including a sign flip on the bound-right x-component,
+  with no error reported. A sweep of 12960 derivative components across four
+  decades of geometry scale now agrees with centered differences to 8.6e-7,
+  the truncation floor of the difference itself.
 - Flight-condition gradients now include the section drag polar. `strip_loads`
   folds a polar-interpolated viscous term into the strip's body force, which
   flows into the totals and, through `arm x force`, into the moments — but the

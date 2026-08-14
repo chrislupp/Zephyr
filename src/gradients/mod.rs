@@ -4,7 +4,6 @@ mod adjoint;
 mod aic;
 mod biot_savart;
 mod calculator;
-mod dual;
 mod forces;
 mod geometry_adjoint;
 mod mach;

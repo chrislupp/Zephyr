@@ -91,6 +91,59 @@ fn biot_savart_vjps_match_centered_differences() {
     }
 }
 
+/// The same check with every length scaled down by 1e-4.
+///
+/// `horseshoe_vortex_velocity` tests collinearity with the dimensionless
+/// `cross_sq > EPSILON * a_sq * b_sq`, but the VJP kernel used to compare the
+/// length⁴ quantity `cross_sq` against an absolute `EPSILON`. Below roughly
+/// millimetre scale that is false for ordinary panels, so the derivative
+/// dropped the bound-leg term the primal still evaluated — silently, and with
+/// no error reported. At this scale `cross_sq ≈ 1e-16` against an `EPSILON` of
+/// `1e-12`, while the primal's threshold is `1e-28`, so the two disagreed by
+/// the whole bound contribution: the bound_right x-derivative came out with the
+/// wrong sign entirely.
+///
+/// The tolerance is relative because the velocity itself grows as the geometry
+/// shrinks; at unit scale these derivatives are O(1), here they are O(1e6).
+#[test]
+fn biot_savart_vjps_match_centered_differences_at_small_scale() {
+    let scale = 1.0e-4;
+    let field = Vec3::new(0.72, 0.31, 0.18) * scale;
+    let left = Vec3::new(0.25, -0.4, 0.02) * scale;
+    let right = Vec3::new(0.28, 0.55, -0.01) * scale;
+    let seed = Vec3::new(0.4, -0.7, 1.2);
+    // The core radius is derived from panel size, so it scales with the mesh.
+    let core = 0.01 * scale;
+    let step = 1.0e-6 * scale;
+    let analytical = [
+        horseshoe_velocity_vjp_field_point(&field, &left, &right, 0.92, core, true, &seed),
+        horseshoe_velocity_vjp_bound_left(&field, &left, &right, 0.92, core, true, &seed),
+        horseshoe_velocity_vjp_bound_right(&field, &left, &right, 0.92, core, true, &seed),
+    ];
+    for (which, base) in [field, left, right].into_iter().enumerate() {
+        for component in 0..3 {
+            let mut plus = [field, left, right];
+            let mut minus = plus;
+            plus[which] = base;
+            minus[which] = base;
+            plus[which][component] += step;
+            minus[which][component] -= step;
+            let value = |points: [Vec3; 3]| {
+                horseshoe_vortex_velocity(&points[0], &points[1], &points[2], 0.92, core, true)
+                    .dot(&seed)
+            };
+            let finite = (value(plus) - value(minus)) / (2.0 * step);
+            let analytical = analytical[which][component];
+            let magnitude = analytical.abs().max(finite.abs());
+            assert!(
+                (analytical - finite).abs() <= 1.0e-5 * magnitude,
+                "vjp {which} component {component}: analytical {analytical:e} \
+                 against finite difference {finite:e}"
+            );
+        }
+    }
+}
+
 #[test]
 fn biot_savart_pg_derivative_matches_centered_difference() {
     let field = Vec3::new(0.72, 0.31, 0.18);
