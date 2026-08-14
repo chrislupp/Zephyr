@@ -430,6 +430,9 @@ impl ExplicitDiscipline for VlmDiscipline {
             ("roll_rate", &flight.by_roll_rate),
             ("pitch_rate", &flight.by_pitch_rate),
             ("yaw_rate", &flight.by_yaw_rate),
+            ("moment_ref_x", &flight.by_moment_reference[0]),
+            ("moment_ref_y", &flight.by_moment_reference[1]),
+            ("moment_ref_z", &flight.by_moment_reference[2]),
         ];
         for (input, gradients) in columns {
             for (output, value) in [
@@ -473,14 +476,6 @@ impl ExplicitDiscipline for VlmDiscipline {
             insert(output, "reference_chord", vec![by_chord]);
         }
 
-        // Moving the moment reference does change the moments; the v0.2.0
-        // discipline reported zero and that is reproduced here rather than
-        // silently improved, so a client sees the same Jacobian it always did.
-        for output in OUTPUTS {
-            for input in ["moment_ref_x", "moment_ref_y", "moment_ref_z"] {
-                insert(output, input, vec![0.0]);
-            }
-        }
         Ok(partials)
     }
 }

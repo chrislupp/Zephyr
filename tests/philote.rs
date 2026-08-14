@@ -603,3 +603,100 @@ async fn deferred_reference_quantity_partials_match_finite_differences() {
     }
     assert!(checked > 0);
 }
+
+/// Every entry of the VLM Jacobian, against differences of `compute`.
+///
+/// `vlm_discipline_node_and_flight_partials_match_finite_differences` covers the
+/// node, alpha and beta columns. This covers all thirteen scalar inputs at a
+/// condition where nothing is zero by symmetry — sideslip, compressibility, all
+/// three body rates, and an offset reference point — so no column can be
+/// silently zero and still pass.
+#[tokio::test]
+async fn vlm_discipline_every_scalar_partial_matches_finite_differences() {
+    let discipline = vlm_discipline(3, 4);
+    let mut inputs = vlm_inputs(3, 4, 1.0, 4.0);
+    inputs.insert("beta".to_string(), array(&[3.0_f64.to_radians()]));
+    inputs.insert("mach".to_string(), array(&[0.3]));
+    inputs.insert("roll_rate".to_string(), array(&[0.02]));
+    inputs.insert("pitch_rate".to_string(), array(&[0.03]));
+    inputs.insert("yaw_rate".to_string(), array(&[0.04]));
+    inputs.insert("moment_ref_z".to_string(), array(&[0.1]));
+
+    let partials = discipline.compute_partials(&inputs).await.unwrap();
+    for name in [
+        "reference_area",
+        "reference_chord",
+        "reference_span",
+        "moment_ref_x",
+        "moment_ref_y",
+        "moment_ref_z",
+        "alpha",
+        "beta",
+        "mach",
+        "dynamic_pressure",
+        "roll_rate",
+        "pitch_rate",
+        "yaw_rate",
+    ] {
+        let differences = difference(&discipline, &inputs, name, 0, 1.0e-6).await;
+        for output in ["CL", "CD", "CY", "Cl", "Cm", "Cn"] {
+            let exact = partials[&(output.to_string(), name.to_string())]
+                .as_slice()
+                .unwrap()[0];
+            let expected = differences[output][0];
+            assert_abs_diff_eq!(
+                exact,
+                expected,
+                epsilon = 1.0e-5 * expected.abs() + NOISE_FLOOR
+            );
+        }
+    }
+}
+
+/// A partial that is absent is a partial an optimizer reads as zero, so an
+/// undeclared pair whose difference is nonzero is as wrong as a declared pair
+/// carrying the wrong number. This sweeps both disciplines for that case.
+#[tokio::test]
+async fn disciplines_declare_every_partial_that_is_not_identically_zero() {
+    let vlm = vlm_discipline(3, 4);
+    let mut inputs = vlm_inputs(3, 4, 1.0, 4.0);
+    inputs.insert("beta".to_string(), array(&[3.0_f64.to_radians()]));
+    inputs.insert("mach".to_string(), array(&[0.3]));
+    inputs.insert("roll_rate".to_string(), array(&[0.02]));
+    inputs.insert("pitch_rate".to_string(), array(&[0.03]));
+    inputs.insert("yaw_rate".to_string(), array(&[0.04]));
+    let declared = vlm.compute_partials(&inputs).await.unwrap();
+    let names: Vec<String> = inputs.keys().cloned().collect();
+    for name in &names {
+        // The node array is long; a few entries establish the column exists.
+        for index in 0..inputs[name].len().min(4) {
+            let differences = difference(&vlm, &inputs, name, index, 1.0e-6).await;
+            for output in ["CL", "CD", "CY", "Cl", "Cm", "Cn"] {
+                let key = (output.to_string(), name.clone());
+                assert!(
+                    declared.contains_key(&key) || differences[output][0].abs() <= 1.0e-9,
+                    "d{output}/d{name}[{index}] is {:.3e} but is not declared",
+                    differences[output][0]
+                );
+            }
+        }
+    }
+
+    let mesh = mesh_discipline(2, 4, true);
+    let inputs = mesh_inputs(5);
+    let declared = mesh.compute_partials(&inputs).await.unwrap();
+    let names: Vec<String> = inputs.keys().cloned().collect();
+    for name in &names {
+        for index in 0..inputs[name].len() {
+            let differences = difference(&mesh, &inputs, name, index, 1.0e-7).await;
+            for (output, values) in &differences {
+                let peak = values.iter().fold(0.0_f64, |a, v| a.max(v.abs()));
+                let key = (output.clone(), name.clone());
+                assert!(
+                    declared.contains_key(&key) || peak <= 1.0e-8,
+                    "d{output}/d{name}[{index}] peaks at {peak:.3e} but is not declared"
+                );
+            }
+        }
+    }
+}

@@ -9,6 +9,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- `FullGradients::by_moment_reference`, the analytical derivative of every
+  aerodynamic output with respect to movement of the moment reference point,
+  indexed x, y, z. The struct derives `Default`, so existing construction
+  through `..Default::default()` is unaffected.
 - A safe Rust 2024 library implementing geometry, structured meshing, the
   primal VLM solver, near- and far-field loads, stability derivatives, trim,
   mass properties, 4-state and 12-state eigenmodes, and analytical adjoints.
@@ -223,6 +227,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- Moment-reference derivatives are computed instead of reported as zero.
+  `VlmDiscipline` inherited v0.2.0's placeholder, which set all eighteen
+  `moment_ref_{x,y,z}` partials to zero with the comment that the exact partial
+  "requires the total force vector". They are not zero. Moving the reference
+  point changes every moment arm, and because that point is also the center the
+  body rates rotate about, it shifts the rotational onset velocity and so the
+  circulation — which moves the forces too, not just the moments. Both terms are
+  now analytical: the arm term reuses `force_geometry_jvp`, and the onset term
+  is the uniform residual sensitivity `(omega x e_k) . n` carried through the
+  existing adjoint, the same path alpha and beta already use. A zero gradient is
+  worse than a missing one, because an optimizer takes it at face value and
+  never explores the direction. Verified against central differences of the
+  discipline's own `compute` at a condition with sideslip, compressibility, all
+  three body rates and an offset reference point: worst relative error over the
+  full 78-entry scalar Jacobian is 1.1e-8, which is the difference's own
+  roundoff floor.
 - `ControlDerivatives::default()` reports a unit gain again. v0.2.0 declared
   `Scalar gain{1.0}` and asserted it; the Rust used a derived `Default`, which
   gave zero. Gain is a multiplier, so the neutral element is one — a

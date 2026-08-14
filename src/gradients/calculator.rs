@@ -11,7 +11,8 @@ use super::mach::velocity_influence_mach_derivative;
 use super::section_geometry::section_direction;
 use super::{
     AdjointSolver, AeroOutput, OutputSelection, force_alpha_gradient, force_beta_gradient,
-    force_circulation_gradient, force_induced_velocity_gradient, trefftz_circulation_gradients,
+    force_circulation_gradient, force_geometry_jvp, force_induced_velocity_gradient,
+    trefftz_circulation_gradients,
 };
 
 /// Derivatives of all aerodynamic outputs with respect to one input.
@@ -66,6 +67,15 @@ pub struct FullGradients {
     pub by_yaw_rate: AeroGradients,
     /// Derivatives per unit Mach number.
     pub by_mach: AeroGradients,
+    /// Derivatives per unit movement of the moment reference point, indexed
+    /// x, y, z.
+    ///
+    /// Moving the reference point does two independent things: it changes every
+    /// moment arm, and — because the point is also the center the body rates
+    /// rotate about — it shifts the rotational onset velocity, which changes the
+    /// circulation. The second term vanishes when all three rates are zero, so
+    /// at a non-rotating condition only the moment outputs respond.
+    pub by_moment_reference: [AeroGradients; 3],
 }
 
 /// Section design variable.
@@ -370,6 +380,64 @@ impl GradientCalculator {
                 rhs_beta[index] = -normal.dot(&velocity_beta);
             }
         }
+        // Moment-reference sensitivities, also shared by every output.
+        //
+        // The reference point enters the residual only as the center the body
+        // rates rotate about: the onset term is `omega x (r_cp - r_ref)`, whose
+        // derivative along `e_k` is the *uniform* field `-(omega x e_k)`. That
+        // makes the residual sensitivity `(omega x e_k) . n`, the same shape as
+        // the alpha and beta rows above, and it is identically zero when the
+        // aircraft is not rotating.
+        let omega = Vec3::new(
+            condition.roll_rate,
+            condition.pitch_rate,
+            condition.yaw_rate,
+        );
+        let mut rhs_moment_reference = [
+            VecX::zeros(unknowns),
+            VecX::zeros(unknowns),
+            VecX::zeros(unknowns),
+        ];
+        if omega != Vec3::zeros() {
+            for axis in 0..3 {
+                let mut unit = Vec3::zeros();
+                unit[axis] = 1.0;
+                let sensitivity = omega.cross(&unit);
+                for (index, (vortex, normal)) in solver
+                    .mesh()
+                    .vortices()
+                    .iter()
+                    .zip(solver.linearized_normals())
+                    .enumerate()
+                {
+                    if vortex.affected_by_freestream {
+                        rhs_moment_reference[axis][index] = normal.dot(&sensitivity);
+                    }
+                }
+            }
+        }
+        // The explicit half is the moment-arm change at frozen circulation.
+        // `force_geometry_jvp` already expresses exactly that: moving the
+        // reference point by `+e_k` is moving every control point by `-e_k`
+        // relative to it, with the vortex lines held still. Reusing it rather
+        // than rewriting the contraction keeps this tied to the same force
+        // convention and normalization the primal uses.
+        let still = vec![Vec3::zeros(); unknowns];
+        let mut explicit_moment_reference = [[0.0; 6]; 3];
+        for axis in 0..3 {
+            let mut shift = Vec3::zeros();
+            shift[axis] = -1.0;
+            explicit_moment_reference[axis] = force_geometry_jvp(
+                solver.mesh(),
+                solver.solution(),
+                condition,
+                solver.reference_quantities(),
+                &still,
+                &still,
+                &vec![shift; unknowns],
+            )?;
+        }
+
         // Both return all six components at once, so they are built once
         // rather than once per output.
         let explicit_alpha = force_alpha_gradient(
@@ -444,6 +512,17 @@ impl GradientCalculator {
             result
                 .by_mach
                 .set(output, explicit_mach + lambda.dot(&residual_mach));
+            for axis in 0..3 {
+                // Induced drag comes from the Trefftz plane, which knows nothing
+                // of the moment reference, so it has no explicit term.
+                let explicit = if output == AeroOutput::InducedDrag {
+                    0.0
+                } else {
+                    explicit_moment_reference[axis][output_index]
+                };
+                result.by_moment_reference[axis]
+                    .set(output, explicit + lambda.dot(&rhs_moment_reference[axis]));
+            }
         }
         Ok(result)
     }
