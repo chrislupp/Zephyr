@@ -185,8 +185,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - The C++ API, C ABI expectations, CMake build, system Eigen/VTK/OpenMP
   discovery, GoogleTest, and C++ examples.
-- Philote servers, `MeshDiscipline`, `VlmDiscipline`, and Philote-dependent
-  OpenMDAO workflows. These integrations are deferred to a later release.
+- The Philote-dependent OpenMDAO workflows, including the chord-optimization
+  driver. The disciplines they drove are still shipped, behind the non-default
+  `philote` feature; only the Python workflows around them are gone. The
+  OpenAeroStruct comparison benchmarks under `examples/` are unaffected.
 - `GradientCalculator::set_finite_difference_step`, a deprecated no-op, along
   with the internal finite-difference machinery it documented. No finite
   difference remains anywhere in `src/`.
