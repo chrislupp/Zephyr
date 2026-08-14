@@ -1,7 +1,5 @@
 //! Analytical circulation derivatives of Trefftz-plane outputs.
 
-use std::ops::{Add, Div, Mul, Neg, Sub};
-
 use crate::core::{EPSILON, PI, Scalar, Vec3, VecX};
 use crate::error::{PegasusError, Result};
 use crate::solver::{SolutionState, VortexLattice};
@@ -66,7 +64,10 @@ pub fn trefftz_circulation_gradients(
         let target_strip = &mesh.strips()[target];
         let dy = right_yz[target].0 - left_yz[target].0;
         let dz = right_yz[target].1 - left_yz[target].1;
-        if dy.hypot(dz) <= EPSILON {
+        // `<` rather than `<=`, matching the primal far-field loop. The two
+        // disagreed only at exactly `EPSILON`, where the primal summed a strip
+        // whose circulation derivative this loop left at zero.
+        if dy.hypot(dz) < EPSILON {
             continue;
         }
         for source in 0..strip_count {
@@ -123,77 +124,6 @@ pub fn trefftz_circulation_gradients(
     result
 }
 
-#[derive(Clone, Copy)]
-struct Directional {
-    value: Scalar,
-    derivative: Scalar,
-}
-
-impl Directional {
-    const fn new(value: Scalar, derivative: Scalar) -> Self {
-        Self { value, derivative }
-    }
-
-    fn sqrt(self) -> Self {
-        let value = self.value.sqrt();
-        Self::new(value, 0.5 * self.derivative / value)
-    }
-
-    fn powi4(self) -> Self {
-        Self::new(
-            self.value.powi(4),
-            4.0 * self.value.powi(3) * self.derivative,
-        )
-    }
-}
-
-impl Add for Directional {
-    type Output = Self;
-
-    fn add(self, rhs: Self) -> Self::Output {
-        Self::new(self.value + rhs.value, self.derivative + rhs.derivative)
-    }
-}
-
-impl Sub for Directional {
-    type Output = Self;
-
-    fn sub(self, rhs: Self) -> Self::Output {
-        Self::new(self.value - rhs.value, self.derivative - rhs.derivative)
-    }
-}
-
-impl Mul for Directional {
-    type Output = Self;
-
-    #[allow(clippy::suspicious_arithmetic_impl)]
-    fn mul(self, rhs: Self) -> Self::Output {
-        Self::new(
-            self.value * rhs.value,
-            self.derivative * rhs.value + self.value * rhs.derivative,
-        )
-    }
-}
-
-impl Div for Directional {
-    type Output = Self;
-
-    fn div(self, rhs: Self) -> Self::Output {
-        Self::new(
-            self.value / rhs.value,
-            (self.derivative * rhs.value - self.value * rhs.derivative) / rhs.value.powi(2),
-        )
-    }
-}
-
-impl Neg for Directional {
-    type Output = Self;
-
-    fn neg(self) -> Self::Output {
-        Self::new(-self.value, -self.derivative)
-    }
-}
-
 /// Fixed-circulation directional derivative of far-field lift, side force,
 /// and induced drag with respect to lattice geometry.
 #[allow(clippy::too_many_arguments)]
@@ -223,9 +153,18 @@ pub fn trefftz_geometry_jvp(
     }
     let strip_count = mesh.strip_count();
     let mut gamma = vec![0.0; strip_count];
-    let mut left = vec![[Directional::new(0.0, 0.0); 2]; strip_count];
-    let mut right = left.clone();
-    let mut center = left.clone();
+    // Trailing-edge station coordinates and their directional rates. `d_*` is
+    // the derivative of the preceding quantity along the perturbation
+    // direction; the circulation is held fixed, so its rate is identically zero
+    // and never appears below.
+    let mut y_left = vec![0.0; strip_count];
+    let mut z_left = vec![0.0; strip_count];
+    let mut y_right = vec![0.0; strip_count];
+    let mut z_right = vec![0.0; strip_count];
+    let mut d_y_left = vec![0.0; strip_count];
+    let mut d_z_left = vec![0.0; strip_count];
+    let mut d_y_right = vec![0.0; strip_count];
+    let mut d_z_right = vec![0.0; strip_count];
     for (index, strip) in mesh.strips().iter().enumerate() {
         gamma[index] = solution
             .circulation
@@ -233,79 +172,114 @@ pub fn trefftz_geometry_jvp(
             .sum();
         let vortex_index = strip.first_vortex_index + strip.num_vortices - 1;
         let vortex = &mesh.vortices()[vortex_index];
-        let left_direction = bound_left_direction[vortex_index];
-        let right_direction = bound_right_direction[vortex_index];
-        left[index] = [
-            Directional::new(vortex.bound_vortex_left.y, left_direction.y),
-            Directional::new(vortex.bound_vortex_left.z, left_direction.z),
-        ];
-        right[index] = [
-            Directional::new(vortex.bound_vortex_right.y, right_direction.y),
-            Directional::new(vortex.bound_vortex_right.z, right_direction.z),
-        ];
-        center[index] = [
-            Directional::new(
-                0.5 * (left[index][0].value + right[index][0].value),
-                0.5 * (left[index][0].derivative + right[index][0].derivative),
-            ),
-            Directional::new(
-                0.5 * (left[index][1].value + right[index][1].value),
-                0.5 * (left[index][1].derivative + right[index][1].derivative),
-            ),
-        ];
+        y_left[index] = vortex.bound_vortex_left.y;
+        z_left[index] = vortex.bound_vortex_left.z;
+        y_right[index] = vortex.bound_vortex_right.y;
+        z_right[index] = vortex.bound_vortex_right.z;
+        d_y_left[index] = bound_left_direction[vortex_index].y;
+        d_z_left[index] = bound_left_direction[vortex_index].z;
+        d_y_right[index] = bound_right_direction[vortex_index].y;
+        d_z_right[index] = bound_right_direction[vortex_index].z;
     }
+    let y_center = |i: usize| 0.5 * (y_left[i] + y_right[i]);
+    let z_center = |i: usize| 0.5 * (z_left[i] + z_right[i]);
+    let d_y_center = |i: usize| 0.5 * (d_y_left[i] + d_y_right[i]);
+    let d_z_center = |i: usize| 0.5 * (d_z_left[i] + d_z_right[i]);
 
-    let mut lift = Directional::new(0.0, 0.0);
-    let mut side = Directional::new(0.0, 0.0);
-    let mut drag = Directional::new(0.0, 0.0);
-    let scale = Directional::new(reference_area, 0.0);
-    let two = Directional::new(2.0, 0.0);
-    let inv_2_pi = Directional::new(INV_2_PI, 0.0);
+    let mut d_lift = 0.0;
+    let mut d_side = 0.0;
+    let mut d_drag = 0.0;
     for target in 0..strip_count {
         let target_strip = &mesh.strips()[target];
-        let dy = right[target][0] - left[target][0];
-        let dz = right[target][1] - left[target][1];
-        if dy.value.hypot(dz.value) < EPSILON {
+        let dy = y_right[target] - y_left[target];
+        let dz = z_right[target] - z_left[target];
+        // Same test as the primal far-field loop in `ForceCalculator`, so the
+        // derivative includes exactly the strips the primal sums over.
+        if dy.hypot(dz) < EPSILON {
             continue;
         }
-        let mut velocity_y = Directional::new(0.0, 0.0);
-        let mut velocity_z = Directional::new(0.0, 0.0);
+        let d_dy = d_y_right[target] - d_y_left[target];
+        let d_dz = d_z_right[target] - d_z_left[target];
+
+        let (mut velocity_y, mut velocity_z) = (0.0, 0.0);
+        let (mut d_velocity_y, mut d_velocity_z) = (0.0, 0.0);
         for source in 0..strip_count {
             let source_strip = &mesh.strips()[source];
-            let source_dy = right[source][0] - left[source][0];
-            let source_dz = right[source][1] - left[source][1];
-            let source_width = (source_dy * source_dy + source_dz * source_dz).sqrt();
-            let core = if target_strip.surface_index == source_strip.surface_index {
-                Directional::new(0.0, 0.0)
+            let source_dy = y_right[source] - y_left[source];
+            let source_dz = z_right[source] - z_left[source];
+            let d_source_dy = d_y_right[source] - d_y_left[source];
+            let d_source_dz = d_z_right[source] - d_z_left[source];
+            let source_width = source_dy.hypot(source_dz);
+            // d|w|/dt = (w . dw/dt) / |w|, undefined only for a zero-width
+            // strip, which contributes no core anyway.
+            let d_source_width = if source_width > 0.0 {
+                (source_dy * d_source_dy + source_dz * d_source_dz) / source_width
             } else {
-                let chord = Directional::new(
-                    source_strip.chord_center,
-                    strip_chord_direction.get(source).copied().unwrap_or(0.0),
-                ) * Directional::new(core_chord_fraction, 0.0);
-                let width = source_width * Directional::new(core_width_fraction, 0.0);
-                if chord.value >= width.value {
-                    chord
+                0.0
+            };
+
+            // `max` is differentiable away from the tie; the branch is taken on
+            // the values so the rate follows whichever term is active, matching
+            // the primal's selection exactly.
+            let (core, d_core) = if target_strip.surface_index == source_strip.surface_index {
+                (0.0, 0.0)
+            } else {
+                let chord = core_chord_fraction * source_strip.chord_center;
+                let d_chord = core_chord_fraction * strip_chord_direction[source];
+                let width = core_width_fraction * source_width;
+                let d_width = core_width_fraction * d_source_width;
+                if chord >= width {
+                    (chord, d_chord)
                 } else {
-                    width
+                    (width, d_width)
                 }
             };
-            let dy1 = center[target][0] - left[source][0];
-            let dy2 = center[target][0] - right[source][0];
-            let dz1 = center[target][1] - left[source][1];
-            let dz2 = center[target][1] - right[source][1];
-            let radius1 = ((dy1 * dy1 + dz1 * dz1) * (dy1 * dy1 + dz1 * dz1) + core.powi4()).sqrt();
-            let radius2 = ((dy2 * dy2 + dz2 * dz2) * (dy2 * dy2 + dz2 * dz2) + core.powi4()).sqrt();
-            if radius1.value > EPSILON && radius2.value > EPSILON {
-                let source_gamma = Directional::new(gamma[source], 0.0);
-                velocity_y = velocity_y + inv_2_pi * source_gamma * (dz1 / radius1 - dz2 / radius2);
-                velocity_z =
-                    velocity_z + inv_2_pi * source_gamma * (-dy1 / radius1 + dy2 / radius2);
+            let core_4 = core.powi(4);
+            let d_core_4 = 4.0 * core.powi(3) * d_core;
+
+            let dy1 = y_center(target) - y_left[source];
+            let dy2 = y_center(target) - y_right[source];
+            let dz1 = z_center(target) - z_left[source];
+            let dz2 = z_center(target) - z_right[source];
+            let d_dy1 = d_y_center(target) - d_y_left[source];
+            let d_dy2 = d_y_center(target) - d_y_right[source];
+            let d_dz1 = d_z_center(target) - d_z_left[source];
+            let d_dz2 = d_z_center(target) - d_z_right[source];
+
+            // r = sqrt(q^2 + c^4) with q = dy^2 + dz^2, so
+            // dr/dt = (q dq/dt + c^3 dc/dt * 2) / r, written out through the
+            // intermediates to keep each step readable.
+            let q1 = dy1 * dy1 + dz1 * dz1;
+            let q2 = dy2 * dy2 + dz2 * dz2;
+            let d_q1 = 2.0 * (dy1 * d_dy1 + dz1 * d_dz1);
+            let d_q2 = 2.0 * (dy2 * d_dy2 + dz2 * d_dz2);
+            let radius1 = (q1 * q1 + core_4).sqrt();
+            let radius2 = (q2 * q2 + core_4).sqrt();
+            if radius1 > EPSILON && radius2 > EPSILON {
+                let d_radius1 = 0.5 * (2.0 * q1 * d_q1 + d_core_4) / radius1;
+                let d_radius2 = 0.5 * (2.0 * q2 * d_q2 + d_core_4) / radius2;
+                let source_gamma = gamma[source];
+                velocity_y += INV_2_PI * source_gamma * (dz1 / radius1 - dz2 / radius2);
+                velocity_z += INV_2_PI * source_gamma * (-dy1 / radius1 + dy2 / radius2);
+                // Quotient rule on each of the four dz/r and dy/r terms.
+                d_velocity_y += INV_2_PI
+                    * source_gamma
+                    * ((d_dz1 * radius1 - dz1 * d_radius1) / (radius1 * radius1)
+                        - (d_dz2 * radius2 - dz2 * d_radius2) / (radius2 * radius2));
+                d_velocity_z += INV_2_PI
+                    * source_gamma
+                    * (-(d_dy1 * radius1 - dy1 * d_radius1) / (radius1 * radius1)
+                        + (d_dy2 * radius2 - dy2 * d_radius2) / (radius2 * radius2));
             }
         }
-        let target_gamma = Directional::new(gamma[target], 0.0);
-        lift = lift + two * target_gamma * dy / scale;
-        side = side - two * target_gamma * dz / scale;
-        drag = drag + target_gamma * (dz * velocity_y - dy * velocity_z) / scale;
+        // The reference area is not a design variable here, so it scales the
+        // rate the same way it scales the value.
+        let target_gamma = gamma[target];
+        d_lift += 2.0 * target_gamma * d_dy / reference_area;
+        d_side -= 2.0 * target_gamma * d_dz / reference_area;
+        d_drag += target_gamma
+            * (d_dz * velocity_y + dz * d_velocity_y - d_dy * velocity_z - dy * d_velocity_z)
+            / reference_area;
     }
-    Ok([lift.derivative, side.derivative, drag.derivative])
+    Ok([d_lift, d_side, d_drag])
 }

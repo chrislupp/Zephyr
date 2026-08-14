@@ -153,6 +153,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   live knobs are `InfluenceMatrixBuilder::{set_core_radius_chord_fraction,
   set_core_radius_width_fraction}`, which apply between panels on different
   components.
+- The `Directional` forward-mode scalar in `gradients/trefftz.rs`, a second
+  dual number under another name, along with its five operator impls.
+  `trefftz_geometry_jvp` now carries the value and its directional rate as
+  plain paired scalars through hand-written closed forms. With this and the
+  Biot-Savart change, no operator-overloaded differentiation scalar of any kind
+  remains in `src/`.
 - The internal forward-mode dual-number scalar that the Biot-Savart VJPs were
   built on. `v0.2.0` had already deleted `gradients/dual_number.h` and
   `gradients/autodiff_tape.h` in favour of hand-derived closed forms, so
@@ -164,6 +170,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- The Trefftz circulation gradients now skip exactly the strips the primal
+  far-field loop skips. `ForceCalculator` drops a strip when its trailing-edge
+  width is `< EPSILON` and `trefftz_circulation_gradients` used `<=`, so a strip
+  of width exactly `EPSILON` was summed into the primal while its circulation
+  derivative was left at zero.
 - The Biot-Savart VJPs are now invariant under a uniform rescaling of the
   geometry, matching the primal. `horseshoe_vortex_velocity` tests collinearity
   with the dimensionless `cross_sq > EPSILON * a_sq * b_sq`, but the gradient
