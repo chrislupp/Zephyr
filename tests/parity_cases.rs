@@ -130,6 +130,27 @@ const PORTED: &[&str] = &[
     "MeshInputTest.BasicSolveProducesValidResults",
     "MeshInputTest.ConsistencyWithAircraftPath",
     "MeshInputTest.MeshDimensions",
+    // vortex_lattice_test.cpp -> tests/vortex_lattice.rs
+    "VortexLatticeTest.EmptyAircraft",
+    "VortexLatticeTest.RectangularWingBasicCounts",
+    "VortexLatticeTest.RectangularWingGeometry",
+    "VortexLatticeTest.VortexQuarterChord",
+    "VortexLatticeTest.ControlPointThreeQuarterChord",
+    "VortexLatticeTest.NormalVectorsFlatWing",
+    "VortexLatticeTest.TwistedWingNormals",
+    "VortexLatticeTest.YDuplicateSymmetry",
+    "VortexLatticeTest.TaperedWingChordDistribution",
+    "VortexLatticeTest.SurfaceInfoConsistency",
+    "VortexLatticeTest.StripVortexIndicesConsistent",
+    "VortexLatticeTest.ClearAndRegenerate",
+    "VortexLatticeTest.GetMeshInputNullByDefault",
+    "VortexLatticeTest.MutableStripAccess",
+    "VortexLatticeTest.GetVorticesMutable",
+    "VortexLatticeTest.GetStripsMutable",
+    "VortexLatticeTest.ControlSurfaceNamesEmpty",
+    "VortexLatticeTest.ControlSurfaceInfluencesSize",
+    "VortexLatticeTest.RecalculateNormals",
+    "VortexLatticeTest.TwistOffsetEquivalentToGeometricTwist",
     // control_surface_test.cpp -> tests/control_surface.rs
     "ControlSurfaceDefinitionTest.NameDefaultsToEmpty",
     "ControlSurfaceDefinitionTest.SetValues",
@@ -348,6 +369,13 @@ const PORTED: &[&str] = &[
 const UNPORTABLE: &[&str] = &[
     "ApparentMassTest.DefaultState",
     "EigenmodeAnalysisTest.SetApparentMass",
+    // vortex_lattice_test.cpp: `VortexLattice::{Get,Set}VortexCoreRadius*` was a
+    // second pair of core-radius knobs never passed to assembly — setting them
+    // left the AIC bit-identical — and has been removed. `MutableVortexAccess`
+    // asserted in-place panel mutation through a public reference; `vortices_mut`
+    // is crate-private so the lattice cannot be desynchronised from its caches.
+    "VortexLatticeTest.CoreRadiusFractions",
+    "VortexLatticeTest.MutableVortexAccess",
 ];
 
 const CATEGORIES: &[&str] = &[
@@ -444,18 +472,18 @@ fn ported_case_count_is_recorded() {
     let unportable = UNPORTABLE.len();
     let total = manifest.cases.len();
     assert_eq!(
-        ported, 259,
+        ported, 279,
         "{ported} of {total} frozen C++ cases are individually ported; \
          update this count when that changes"
     );
     assert_eq!(
-        unportable, 2,
+        unportable, 4,
         "{unportable} of {total} frozen C++ cases cover removed behaviour; \
          update this count when that changes"
     );
     assert_eq!(
         total - ported - unportable,
-        227,
+        205,
         "the remaining porting backlog changed; update this count deliberately"
     );
 }

@@ -78,15 +78,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `PegasusError::Parse` carries a structured `ParseLocation { path, line }`
   instead of a pre-formatted string, so callers can recover the line number and
   file programmatically. `PegasusError` is now `#[non_exhaustive]`.
-- 259 of the 488 frozen C++ cases now have their real assertions reproduced in
-  Rust, up from none. Twelve C++ files are complete: `geometry_test` (78),
-  `eigenmode_test` (34 of 36, the other two covering removed behaviour),
-  `math_utilities_test` (31), `control_surface_test` (27), `section_test` (22),
-  `cubic_spline_test` (12), `body_test` (11), `flight_constraints_test` (11),
-  `force_calculator_test` (11), `stability_derivatives_test` (11),
-  `aerodynamic_results_test` (8) and `mesh_input_test` (3). `parity_cases.rs`
-  tracks ported, unportable and backlog counts separately and asserts all
-  three, so the remaining 227 cannot be misreported.
+- 279 of the 488 frozen C++ cases now have their real assertions reproduced in
+  Rust, up from none, with 4 recorded as unportable because they cover
+  behaviour that was deliberately removed. Thirteen C++ files are complete:
+  `geometry_test` (78), `eigenmode_test` (34 of 36), `math_utilities_test`
+  (31), `control_surface_test` (27), `section_test` (22),
+  `vortex_lattice_test` (20 of 22), `cubic_spline_test` (12), `body_test` (11),
+  `flight_constraints_test` (11), `force_calculator_test` (11),
+  `stability_derivatives_test` (11), `aerodynamic_results_test` (8) and
+  `mesh_input_test` (3). `parity_cases.rs` tracks ported, unportable and
+  backlog counts separately and asserts all three, so the remaining 205 cannot
+  be misreported.
 - `tests/parity_cases.rs` no longer generates one test per frozen CTest case.
   The 488 generated tests all dispatched to one of eight category-level smoke
   checks, so every case within a category ran byte-identical assertions
