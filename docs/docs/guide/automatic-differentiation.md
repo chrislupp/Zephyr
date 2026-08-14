@@ -2,65 +2,29 @@
 sidebar_position: 4
 ---
 
-# Automatic Differentiation
+# Analytical and Adjoint Gradients
 
-VLM provides analytical gradient computation for use in gradient-based optimization. Gradients are computed using the adjoint method, which efficiently computes derivatives of scalar outputs with respect to many inputs.
+Pegasus provides safe analytical VJPs for the regularized Biot–Savart kernel,
+AIC rows and columns, near-field forces, and Trefftz induced drag.
+`TotalDerivative` solves the transposed aerodynamic system for an `AeroOutput`.
 
-## Gradient Calculator
+The alpha derivative contains both terms:
 
-The `GradientCalculator` provides a high-level interface for computing derivatives of aerodynamic coefficients with respect to flight conditions and geometry parameters.
-
-### Flight Condition Derivatives
-
-```cpp
-GradientCalculator grad_calc;
-grad_calc.SetAircraft(aircraft);
-
-FullGradients gradients = grad_calc.ComputeFlightConditionDerivatives();
+```text
+dJ/dalpha = explicit fixed-circulation force/axis term
+          + lambdaᵀ db/dalpha
 ```
 
-The returned `FullGradients` struct contains `AeroGradients` for each perturbation variable ($\alpha$, $\beta$, $p$, $q$, $r$, $M$), where each `AeroGradients` holds:
-- `dCL`, `dCD`, `dCY` — force coefficient derivatives
-- `dCl`, `dCm`, `dCn` — moment coefficient derivatives
-- `dCDi` — induced drag derivative
+The explicit term includes freestream dependence and the
+body-to-stability-axis rotation. This completes the derivative that was
+disabled in Pegasus 0.2.0.
 
-### Geometry Gradients
+`GradientCalculator` supports flight-condition, aircraft-section, and direct
+mesh-node inputs. Angle, rate, and Mach derivatives use analytical influence
+and force kernels. Geometry evaluation performs one primal solve, reuses the
+cached transpose factorization for a batched adjoint, and contracts each
+section or node direction without resolving the aerodynamic system.
 
-Derivatives with respect to wing section geometry (chord, twist, leading edge position):
-
-```cpp
-GeometryGradients geo_grads = grad_calc.ComputeGeometryGradients();
-
-for (const auto& section_grad : geo_grads.section_gradients) {
-    std::cout << "Surface: " << section_grad.surface_name
-              << " Section: " << section_grad.section_index << std::endl;
-    std::cout << "  dCL/dchord = " << section_grad.chord_derivs.dCL << std::endl;
-    std::cout << "  dCL/dtwist = " << section_grad.twist_derivs.dCL << std::endl;
-}
-```
-
-### Mesh Node Gradients
-
-For direct mesh-level sensitivity, derivatives can be computed with respect to mesh node positions:
-
-```cpp
-grad_calc.SetMesh(solver.GetMesh());
-auto mesh_grads = grad_calc.ComputeMeshNodeGradients();
-```
-
-## Adjoint Solver
-
-The `AdjointSolver` provides the low-level adjoint solve for custom objective functions:
-
-```cpp
-AdjointSolver adjoint(solver);
-
-// Get force gradients w.r.t. circulation
-ForceGradients fg = ComputeForceGradients(
-    solver.GetMesh(), solution, condition, aircraft);
-
-// Solve adjoint system for CL objective
-VecX adjoint_vector = adjoint.SolveAdjoint(fg.dCL_dGamma);
-```
-
-The adjoint vector can then be used to compute total derivatives with respect to any input parameter through the chain rule.
+`OutputSelection` leaves disabled results exactly zero and avoids their
+adjoint and quadratic velocity-kernel work. The deprecated
+finite-difference-step setter is a compatibility no-op.

@@ -19,16 +19,9 @@ coverage:
 ignore:
   - "tests/**/*"
   - "examples/**/*"
-  - "**/test_*.cpp"
-  - "**/*_test.cpp"
-  - "build/**/*"
-  - "cmake-build-*/**/*"
+  - "benches/**/*"
   - "scripts/**/*"
   - "docs/**/*"
-  - "src/philote/**/*"
-  - "include/pegasus/philote/**/*"
-  - "src/visualization/**/*"
-  - "include/pegasus/visualization/**/*"
 
 comment:
   layout: "reach,diff,flags,tree"

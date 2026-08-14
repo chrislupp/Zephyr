@@ -4,67 +4,9 @@ sidebar_position: 2
 
 # Aircraft
 
-```cpp
-#include "pegasus/geometry/aircraft.h"
-```
+`Aircraft` owns surfaces and bodies plus reference area, chord, span, moment
+reference point, Mach, profile drag, and symmetry settings. Collections are
+exposed as slices with checked/name-based access. Aggregate methods report
+panel counts, area, span, and ordered unique control/design-variable names.
 
-Top-level geometry container representing a complete aircraft configuration.
-
-## Constructors
-
-```cpp
-Aircraft();
-Aircraft(const std::string& title);
-```
-
-## Reference Quantities
-
-```cpp
-void SetReferenceArea(Scalar area);
-Scalar GetReferenceArea() const;
-
-void SetReferenceChord(Scalar chord);
-Scalar GetReferenceChord() const;
-
-void SetReferenceSpan(Scalar span);
-Scalar GetReferenceSpan() const;
-
-void SetMomentReferencePoint(const Vec3& point);
-Vec3 GetMomentReferencePoint() const;
-```
-
-## Flow Settings
-
-```cpp
-void SetMachNumber(Scalar mach);
-Scalar GetMachNumber() const;
-
-void SetProfileDragCoefficient(Scalar cd0);
-Scalar GetProfileDragCoefficient() const;
-```
-
-## Surface Management
-
-```cpp
-void AddSurface(const Surface& surface);
-const std::vector<Surface>& GetSurfaces() const;
-Index GetNumSurfaces() const;
-const Surface& GetSurface(Index index) const;
-const Surface* FindSurfaceByName(const std::string& name) const;
-```
-
-## Computed Properties
-
-```cpp
-Index ComputeTotalVortexCount() const;
-Index ComputeTotalStripCount() const;
-Scalar ComputeTotalPlanformArea() const;
-Scalar ComputeTotalSpan() const;
-```
-
-## Control Surfaces
-
-```cpp
-std::vector<std::string> GetControlSurfaceNames() const;
-Index GetNumControlSurfaces() const;
-```
+See the [`Aircraft` rustdoc](https://docs.rs/pegasus-vlm/latest/pegasus_vlm/geometry/struct.Aircraft.html).
