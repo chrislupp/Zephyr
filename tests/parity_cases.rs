@@ -114,6 +114,57 @@ const PORTED: &[&str] = &[
     "CubicSplineTest.InvalidInputThrows",
     "CubicSplineTest.EvaluateBeforeBuildThrows",
     "CubicSplineTest.ValidityAndSizeQueries",
+    // body_test.cpp -> tests/body.rs
+    "BodyTest.DefaultConstruction",
+    "BodyTest.NamedConstruction",
+    "BodyTest.SetName",
+    "BodyTest.AddAndGetSections",
+    "BodyTest.NodeCount",
+    "BodyTest.NodeSpacing",
+    "BodyTest.Translation",
+    "BodyTest.Scale",
+    "BodyTest.DefaultScale",
+    "BodyTest.DefaultTranslation",
+    "BodyTest.YDuplicate",
+    // mesh_input_test.cpp -> tests/mesh_input.rs
+    "MeshInputTest.BasicSolveProducesValidResults",
+    "MeshInputTest.ConsistencyWithAircraftPath",
+    "MeshInputTest.MeshDimensions",
+    // section_test.cpp -> tests/section.rs
+    "SectionUnitTest.DefaultConstructor",
+    "SectionUnitTest.ParameterizedConstructor",
+    "SectionUnitTest.ConstructorWithAirfoil",
+    "SectionUnitTest.GetAirfoilWithoutCustomReturnsFlat",
+    "SectionUnitTest.GetAirfoilMutableCreatesFlat",
+    "SectionUnitTest.GetAirfoilWithCustomReturnsCustom",
+    "SectionUnitTest.SetAirfoil",
+    "SectionUnitTest.SetLeadingEdgePosition",
+    "SectionUnitTest.SetChord",
+    "SectionUnitTest.SetTwistAngle",
+    "SectionUnitTest.TwistAngleRadians",
+    "SectionUnitTest.ClAlphaFactor",
+    "SectionUnitTest.TwistOffsetDefaultsToZero",
+    "SectionUnitTest.TwistOffsetAddsToGeometricTwist",
+    "SectionUnitTest.AddControlSurface",
+    "SectionUnitTest.AddDesignVariable",
+    "SectionUnitTest.SpanwisePanelCount",
+    "SectionUnitTest.SpanwiseSpacingEnum",
+    "SectionUnitTest.SpanwiseSpacingNumericUniform",
+    "SectionUnitTest.SpanwiseSpacingNumericCosine",
+    "SectionUnitTest.SpanwiseSpacingNumericSine",
+    "SectionUnitTest.ViscousPolar",
+    // flight_constraints_test.cpp -> tests/flight_constraints.rs
+    "OperatingVariablesTest.DefaultNumVariables",
+    "OperatingVariablesTest.NumVariablesWithControls",
+    "OperatingVariablesTest.DefaultValues",
+    "TrimConstraintsTest.DefaultAllFree",
+    "TrimConstraintsTest.ConstraintCountWithControls",
+    "TrimConstraintsTest.AllConstraintTypesCount",
+    "TrimPresetsTest.LevelFlightRatesFixed",
+    "TrimPresetsTest.LevelTrimmedFlight",
+    "TrimPresetsTest.SteadyTurn",
+    "TrimPresetsTest.SteadySideslipAllFields",
+    "VariableConstraintTest.DefaultState",
 ];
 
 /// Frozen cases that cannot be ported because the feature they cover no longer
@@ -227,7 +278,7 @@ fn ported_case_count_is_recorded() {
     let unportable = UNPORTABLE.len();
     let total = manifest.cases.len();
     assert_eq!(
-        ported, 51,
+        ported, 98,
         "{ported} of {total} frozen C++ cases are individually ported; \
          update this count when that changes"
     );
@@ -238,7 +289,7 @@ fn ported_case_count_is_recorded() {
     );
     assert_eq!(
         total - ported - unportable,
-        435,
+        388,
         "the remaining porting backlog changed; update this count deliberately"
     );
 }
