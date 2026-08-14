@@ -26,6 +26,14 @@
 //!
 //! Porting the individual C++ assertions is tracked by [`PORTED`] below. The
 //! count is asserted so that it can only move deliberately.
+//!
+//! Every one of the 491 cases in the v0.2.0 CTest suite now falls into exactly
+//! one of four buckets, and that partition is asserted:
+//!
+//! - [`PORTED`] (478) — a Rust test asserts the same behaviour
+//! - [`UNPORTABLE`] (4) — the behaviour was deliberately removed in 0.3
+//! - [`NOT_IN_ORACLE`] (6) — a manifest entry with no C++ test behind it
+//! - [`DEFERRED_PORTED`] (3) — Philote cases, ported once the feature landed
 
 use std::collections::HashSet;
 
@@ -644,6 +652,47 @@ fn manifest_matches_its_recorded_provenance() {
     );
 }
 
+/// The three Philote cases the manifest deferred, now ported.
+///
+/// They sit in `provenance.deferred_philote_cases` rather than in `cases`,
+/// because when the manifest was frozen the Rust tree had no disciplines to
+/// port them into. It does now, so they are covered in `tests/philote.rs` and
+/// the C++ suite is accounted for end to end: 488 in scope plus these 3 is the
+/// recorded 491.
+const DEFERRED_PORTED: &[&str] = &[
+    // tests/philote.rs::deferred_reference_quantity_partials_match_finite_differences
+    "MeshDisciplineRefTest.PartialsFiniteDifference",
+    // tests/philote.rs::deferred_rectangular_wing_reference_quantities
+    "MeshDisciplineRefTest.RectangularWingArea",
+    // tests/philote.rs::deferred_tapered_wing_reference_quantities
+    "MeshDisciplineRefTest.TaperedWingArea",
+];
+
+/// Ties [`DEFERRED_PORTED`] to the manifest so it cannot drift from the frozen
+/// record of what was set aside.
+#[test]
+fn deferred_philote_cases_are_all_accounted_for() {
+    let manifest = manifest();
+    let deferred: HashSet<&str> = manifest
+        .provenance
+        .deferred_philote_cases
+        .iter()
+        .map(String::as_str)
+        .collect();
+    let covered: HashSet<&str> = DEFERRED_PORTED.iter().copied().collect();
+    assert_eq!(
+        deferred, covered,
+        "every deferred Philote case must now have a port, and nothing else may claim to be one"
+    );
+    let in_scope: HashSet<&str> = manifest.cases.iter().map(|c| c.cpp_test.as_str()).collect();
+    for name in DEFERRED_PORTED {
+        assert!(
+            !in_scope.contains(name),
+            "{name} was deferred, so it must not also appear in the in-scope manifest"
+        );
+    }
+}
+
 #[test]
 fn manifest_case_inventory_is_well_formed() {
     let manifest = manifest();
@@ -738,5 +787,10 @@ fn ported_case_count_is_recorded() {
         total - ported - unportable - NOT_IN_ORACLE.len(),
         0,
         "the remaining porting backlog changed; update this count deliberately"
+    );
+    assert_eq!(
+        ported + unportable + NOT_IN_ORACLE.len() + DEFERRED_PORTED.len(),
+        manifest.provenance.ctest_cases,
+        "every case in the v0.2.0 CTest suite must be ported, unportable, or absent upstream"
     );
 }

@@ -483,3 +483,123 @@ async fn the_mesh_discipline_output_drives_the_vlm_discipline() {
     assert!(outputs["CL"][0] > 0.0);
     assert!(outputs["CL"][0].is_finite());
 }
+
+// ============================================================================
+// The three Philote cases the frozen manifest deferred
+//
+// `ctest-manifest.json` records 491 C++ cases, of which 3 were excluded as
+// `deferred_philote_cases` because the disciplines did not exist in the Rust
+// tree. They do now, so those three are ported here and the C++ suite is
+// accounted for end to end.
+// ============================================================================
+
+/// Ports `MeshDisciplineRefTest.RectangularWingArea`.
+///
+/// A duplicated unit-chord wing of half span 5: area 10, span 10, MAC 1. The
+/// numbers are closed-form, so this checks the reference integrals rather than
+/// the code's own output.
+#[tokio::test]
+async fn deferred_rectangular_wing_reference_quantities() {
+    let (nx, ny) = (2, 4);
+    let stations = ny + 1;
+    let discipline = mesh_discipline(nx, ny, true);
+
+    let eta: Vec<f64> = (0..stations).map(|j| j as f64 / ny as f64).collect();
+    let mut inputs = HashMap::new();
+    inputs.insert("chord".to_string(), array(&vec![1.0; stations]));
+    inputs.insert("twist".to_string(), array(&vec![0.0; stations]));
+    inputs.insert("xle".to_string(), array(&vec![0.0; stations]));
+    inputs.insert("zle".to_string(), array(&vec![0.0; stations]));
+    inputs.insert("eta".to_string(), array(&eta));
+    inputs.insert("halfspan".to_string(), array(&[5.0]));
+
+    let outputs = discipline.compute(&inputs).await.unwrap();
+    assert_abs_diff_eq!(outputs["reference_area"][0], 10.0, epsilon = 1.0e-12);
+    assert_abs_diff_eq!(outputs["reference_span"][0], 10.0, epsilon = 1.0e-12);
+    assert_abs_diff_eq!(outputs["reference_chord"][0], 1.0, epsilon = 1.0e-12);
+}
+
+/// Ports `MeshDisciplineRefTest.TaperedWingArea`.
+///
+/// Chord runs 2 to 1 over a half span of 4, duplicated: area 12, span 8. The
+/// MAC is recomputed here from the chord-weighted definition rather than
+/// hard-coded, so it checks the weighting and not just a number.
+#[tokio::test]
+async fn deferred_tapered_wing_reference_quantities() {
+    let (nx, ny) = (1, 4);
+    let stations = ny + 1;
+    let half_span = 4.0;
+    let discipline = mesh_discipline(nx, ny, true);
+
+    let eta: Vec<f64> = (0..stations).map(|j| j as f64 / ny as f64).collect();
+    let chord: Vec<f64> = eta.iter().map(|e| 2.0 - e).collect();
+    let mut inputs = HashMap::new();
+    inputs.insert("chord".to_string(), array(&chord));
+    inputs.insert("twist".to_string(), array(&vec![0.0; stations]));
+    inputs.insert("xle".to_string(), array(&vec![0.0; stations]));
+    inputs.insert("zle".to_string(), array(&vec![0.0; stations]));
+    inputs.insert("eta".to_string(), array(&eta));
+    inputs.insert("halfspan".to_string(), array(&[half_span]));
+
+    let outputs = discipline.compute(&inputs).await.unwrap();
+    assert_abs_diff_eq!(outputs["reference_area"][0], 12.0, epsilon = 1.0e-12);
+    assert_abs_diff_eq!(outputs["reference_span"][0], 8.0, epsilon = 1.0e-12);
+
+    let segment = half_span / ny as f64;
+    let mut numerator = 0.0;
+    let mut denominator = 0.0;
+    for interval in 0..ny {
+        let (left, right) = (chord[interval], chord[interval + 1]);
+        numerator += 0.5 * (left * left + right * right) * segment;
+        denominator += 0.5 * (left + right) * segment;
+    }
+    assert_abs_diff_eq!(
+        outputs["reference_chord"][0],
+        numerator / denominator,
+        epsilon = 1.0e-12
+    );
+}
+
+/// Ports `MeshDisciplineRefTest.PartialsFiniteDifference`.
+///
+/// The reference-quantity partials against differences of `compute`, on the
+/// tapered fixture the frozen case used. `mesh_discipline_partials_match_finite_differences`
+/// covers every partial on a different geometry; this pins the same check to
+/// the frozen one.
+#[tokio::test]
+async fn deferred_reference_quantity_partials_match_finite_differences() {
+    let (nx, ny) = (1, 4);
+    let stations = ny + 1;
+    let discipline = mesh_discipline(nx, ny, true);
+
+    let eta: Vec<f64> = (0..stations).map(|j| j as f64 / ny as f64).collect();
+    let chord: Vec<f64> = eta.iter().map(|e| 2.0 - e).collect();
+    // A nonzero dihedral so the `zle` partials are not trivially zero.
+    let zle: Vec<f64> = eta.iter().map(|e| 0.2 * e).collect();
+    let mut inputs = HashMap::new();
+    inputs.insert("chord".to_string(), array(&chord));
+    inputs.insert("twist".to_string(), array(&vec![0.0; stations]));
+    inputs.insert("xle".to_string(), array(&vec![0.0; stations]));
+    inputs.insert("zle".to_string(), array(&zle));
+    inputs.insert("eta".to_string(), array(&eta));
+    inputs.insert("halfspan".to_string(), array(&[4.0]));
+
+    let partials = discipline.compute_partials(&inputs).await.unwrap();
+    let mut checked = 0usize;
+    for name in ["chord", "zle", "halfspan", "eta"] {
+        for index in 0..inputs[name].len() {
+            let differences = difference(&discipline, &inputs, name, index, 1.0e-7).await;
+            for output in ["reference_area", "reference_chord"] {
+                let block = &partials[&(output.to_string(), name.to_string())];
+                let expected = differences[output][0];
+                assert_abs_diff_eq!(
+                    block.as_slice().unwrap()[index],
+                    expected,
+                    epsilon = 1.0e-5 * expected.abs() + NOISE_FLOOR
+                );
+                checked += 1;
+            }
+        }
+    }
+    assert!(checked > 0);
+}

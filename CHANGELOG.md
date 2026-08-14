@@ -21,7 +21,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   non-Philote CTest cases in `tests/fixtures/parity/ctest-manifest.json`. The
   manifest records which cases existed and at what tolerance; it carries no
   expected values and is not itself a behavioural oracle. Numerical parity is
-  asserted by `tests/oracle_parity.rs` against committed v0.2.0 fixtures.
+  asserted by `tests/oracle_parity.rs` against committed v0.2.0 fixtures. The
+  three Philote cases the manifest deferred are now ported as well, so all 491
+  cases in the v0.2.0 CTest suite are individually accounted for: 478 ported,
+  4 covering deliberately removed behaviour, 6 manifest entries with no C++
+  test behind them, and those 3. `tests/parity_cases.rs` asserts the partition.
 - Opt-in reflection reuse for lattices built from `y_duplicated` surfaces, via
   `set_mirror_reuse` on the solver and the influence builder. The induced
   velocity is equivariant under the mirror `M = diag(1, -1, 1)`, so half the
