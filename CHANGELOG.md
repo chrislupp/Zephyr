@@ -40,6 +40,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   on an 8-performance-core M1 Pro. The default build remains single-threaded.
   `faer/rayon` is deliberately not enabled, since gemm's cache blocking differs
   between its sequential and parallel paths and would perturb the LU's last ULP.
+- Philote-MDO disciplines behind a non-default `philote` feature, built on the
+  `philote-mdo` crate: `VlmDiscipline` maps node meshes plus a flight condition
+  to the six force and moment coefficients, and `MeshDiscipline` maps a
+  section parameterization to a node mesh and reference quantities. Both
+  declare analytical partials — the VLM node partials come from the adjoint, so
+  a gradient-based optimizer pays one transposed solve per output rather than
+  one primal solve per node coordinate. Runnable servers are in
+  `examples/philote_{vlm,mesh}_server.rs`.
+  The feature is off by default and nothing outside `src/philote/` references
+  it, so the library's own dependency graph, `cargo package` output and
+  feature-off build are unchanged. Per-surface options accept either JSON
+  arrays or the comma-separated strings the v0.2.0 C++ discipline used, so a
+  client written against either works unchanged.
 
 ### Changed
 

@@ -25,6 +25,8 @@ pub mod error;
 pub mod geometry;
 pub mod gradients;
 pub mod io;
+#[cfg(feature = "philote")]
+pub mod philote;
 pub mod solver;
 pub mod trim;
 pub mod utils;

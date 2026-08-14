@@ -34,6 +34,17 @@ vtk = ["dep:vtkio"]
 # differ between its sequential and rayon paths, which changes the order in
 # which partial panels accumulate in the LU and would perturb the last ULP.
 parallel = ["dep:rayon"]
+# Exposes the solver as Philote-MDO gRPC disciplines. Off by default: it pulls
+# in an async runtime and a gRPC stack, which the library itself does not need
+# and which would otherwise burden every consumer of the core crate.
+philote = [
+    "dep:philote-mdo",
+    "dep:async-trait",
+    "dep:ndarray",
+    "dep:serde_json",
+    "dep:tokio",
+    "dep:tonic",
+]
 
 [dependencies]
 faer = { version = "0.24.4", default-features = false, features = ["std", "linalg"] }
@@ -43,12 +54,33 @@ rayon = { version = "1.11", optional = true }
 thiserror = "2.0"
 vtkio = { version = "0.6.3", optional = true }
 
+# `philote` feature only. Versions track what philote-mdo 0.2 resolves to, so a
+# discipline built here links the same ndarray and tonic the wire format uses.
+async-trait = { version = "0.1", optional = true }
+ndarray = { version = "0.16", optional = true }
+philote-mdo = { version = "0.2.0", optional = true }
+serde_json = { version = "1", optional = true }
+tokio = { version = "1", features = ["macros", "rt-multi-thread"], optional = true }
+tonic = { version = "0.12", optional = true }
+
 [dev-dependencies]
 approx = "0.5"
+# `philote` feature tests only; harmless when the feature is off.
+ndarray = "0.16"
+tokio = { version = "1", features = ["macros", "rt-multi-thread"] }
 criterion = "0.7"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 tempfile = "3"
+
+# The Philote servers only build with the feature that provides the gRPC stack.
+[[example]]
+name = "philote_vlm_server"
+required-features = ["philote"]
+
+[[example]]
+name = "philote_mesh_server"
+required-features = ["philote"]
 
 [[bench]]
 name = "analysis_scaling"

@@ -45,8 +45,16 @@ coordinate/sign conventions, and the deliberate unit split: geometry
 incidence and twist are degrees; flight angles, rates, controls, trim, and
 derivatives are radians.
 
-The legacy behavioral oracle is tag `v0.2.0`, commit `556b0ea`. C++, CMake,
-Philote, and Philote-dependent OpenMDAO code do not belong in the 0.3 tree.
+The legacy behavioral oracle is tag `v0.2.0`, commit `556b0ea`. C++ and CMake
+do not belong in the 0.3 tree.
+
+Philote lives behind the non-default `philote` feature in `src/philote/`, built
+on the `philote-mdo` crate. Nothing outside that module and its two example
+servers may reference it, and the feature must stay off by default: the gRPC
+stack and async runtime it pulls in are not dependencies of the library itself.
+`cargo clippy --all-targets` and `cargo test` with the feature off must stay
+clean, which is what keeps the core crate's dependency graph unchanged for
+consumers who do not want MDO transport.
 
 `CHANGELOG.md` follows Keep a Changelog. Every user-visible change must update
 its Unreleased section.
