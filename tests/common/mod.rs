@@ -47,6 +47,68 @@ pub fn controlled_wing() -> Aircraft {
     aircraft
 }
 
+/// Wing with a one-sided aileron plus a vertical fin carrying a rudder.
+///
+/// The lateral-directional constraint types need a configuration whose side
+/// force, roll and yaw responses are all non-degenerate. A planar symmetric
+/// wing has `CY_beta = Cn_beta = 0`, which makes those rows of the trim
+/// Jacobian singular, so the fin is load-bearing rather than decorative.
+/// The aileron covers the left outboard interval only: a full-span symmetric
+/// flap has `Cl_delta = 0` and could not drive a roll-moment constraint.
+pub fn lateral_directional_aircraft() -> Aircraft {
+    let aileron = ControlSurfaceDefinition {
+        name: "aileron".into(),
+        hinge_x_fraction: 0.75,
+        hinge_vector: Vec3::y(),
+        sign: 1.0,
+        gain: 1.0,
+    };
+    let rudder = ControlSurfaceDefinition {
+        name: "rudder".into(),
+        hinge_x_fraction: 0.6,
+        hinge_vector: Vec3::z(),
+        sign: 1.0,
+        gain: 1.0,
+    };
+
+    let mut left_tip = Section::new(Vec3::new(0.0, -2.0, 0.0), 1.0, 0.0);
+    left_tip.add_control_surface(aileron.clone());
+    left_tip.set_spanwise_panel_count(3);
+    let mut left_inboard = Section::new(Vec3::new(0.0, -0.5, 0.0), 1.0, 0.0);
+    left_inboard.add_control_surface(aileron);
+    left_inboard.set_spanwise_panel_count(3);
+    let mut right_inboard = Section::new(Vec3::new(0.0, 0.5, 0.0), 1.0, 0.0);
+    right_inboard.set_spanwise_panel_count(3);
+    let right_tip = Section::new(Vec3::new(0.0, 2.0, 0.0), 1.0, 0.0);
+
+    let mut wing = Surface::new("Wing");
+    wing.set_chordwise_panel_count(3);
+    wing.add_section(left_tip);
+    wing.add_section(left_inboard);
+    wing.add_section(right_inboard);
+    wing.add_section(right_tip);
+
+    let mut fin_root = Section::new(Vec3::new(1.6, 0.0, 0.0), 0.8, 0.0);
+    fin_root.add_control_surface(rudder.clone());
+    let mut fin_tip = Section::new(Vec3::new(1.8, 0.0, 1.0), 0.6, 0.0);
+    fin_tip.add_control_surface(rudder);
+
+    let mut fin = Surface::new("Fin");
+    fin.set_chordwise_panel_count(3);
+    fin.set_spanwise_panel_count(4);
+    fin.add_section(fin_root);
+    fin.add_section(fin_tip);
+
+    let mut aircraft = Aircraft::new("Lateral-directional fixture");
+    aircraft.set_reference_area(4.0);
+    aircraft.set_reference_chord(1.0);
+    aircraft.set_reference_span(4.0);
+    aircraft.set_moment_reference_point(Vec3::new(0.25, 0.0, 0.0));
+    aircraft.add_surface(wing);
+    aircraft.add_surface(fin);
+    aircraft
+}
+
 pub fn rectangular_mesh(nx: usize, ny: usize) -> MeshInput {
     let mut surface = SurfaceMesh::new("Wing", nx, ny);
     for i in 0..=nx {

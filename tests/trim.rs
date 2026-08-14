@@ -8,7 +8,39 @@ use pegasus_vlm::trim::{
     TrimStatus, VariableConstraint,
 };
 
-use common::{controlled_wing, rectangular_wing};
+use common::{controlled_wing, lateral_directional_aircraft, rectangular_wing};
+
+fn fixed(target: f64) -> VariableConstraint {
+    VariableConstraint {
+        kind: ConstraintType::Fixed,
+        target,
+    }
+}
+
+fn drives(kind: ConstraintType, target: f64) -> VariableConstraint {
+    VariableConstraint { kind, target }
+}
+
+fn coefficient(results: &pegasus_vlm::aero::AerodynamicResults, kind: ConstraintType) -> f64 {
+    match kind {
+        ConstraintType::Lift => results.coefficients.lift,
+        ConstraintType::Side => results.coefficients.side,
+        ConstraintType::RollMoment => results.coefficients.roll,
+        ConstraintType::PitchMoment => results.coefficients.pitch,
+        ConstraintType::YawMoment => results.coefficients.yaw,
+        ConstraintType::Free | ConstraintType::Fixed => {
+            panic!("{kind:?} does not name a coefficient")
+        }
+    }
+}
+
+fn deflection(state: &OperatingVariables, name: &str) -> Option<f64> {
+    state
+        .control_deflections
+        .iter()
+        .find(|(candidate, _)| candidate == name)
+        .map(|(_, value)| *value)
+}
 
 #[test]
 fn operating_variables_count_includes_ordered_controls() {
@@ -195,4 +227,176 @@ fn controlled_pitch_trim_uses_control_derivative_column() {
             .iter()
             .any(|(name, value)| name == "elevator" && value.is_finite())
     );
+}
+
+/// Side force, roll moment and yaw moment as constraints on the *state*
+/// variables.
+///
+/// Only `Lift` and `PitchMoment` had ever appeared in a test, so the three
+/// lateral-directional arms of `build_system` were never entered. Driving all
+/// three at once also proves the rows are wired to distinct coefficients: if
+/// any two selected the same one the 3x3 block would be rank-deficient and the
+/// solve would report `SingularJacobian` instead of converging.
+#[test]
+fn lateral_state_constraints_trim_their_own_coefficients() {
+    let aircraft = lateral_directional_aircraft();
+    let constraints = TrimConstraints {
+        alpha: fixed(3.0 * DEGREES_TO_RADIANS),
+        beta: drives(ConstraintType::Side, 0.0),
+        roll_rate: drives(ConstraintType::RollMoment, 0.0),
+        pitch_rate: fixed(0.0),
+        yaw_rate: drives(ConstraintType::YawMoment, 0.0),
+        controls: Vec::new(),
+    };
+    // Displaced away from the answer so the Newton step is actually taken;
+    // starting at the solution would satisfy the assertions without ever
+    // solving the lateral block.
+    let initial = OperatingVariables {
+        alpha: 3.0 * DEGREES_TO_RADIANS,
+        beta: 4.0 * DEGREES_TO_RADIANS,
+        roll_rate: 0.05,
+        yaw_rate: 0.05,
+        ..OperatingVariables::default()
+    };
+    // Tightened well below the 1e-6 default so "the coefficient equals its
+    // target" is an assertion about the constraint wiring rather than about
+    // the default stopping tolerance.
+    let mut trim = TrimSolver::new();
+    trim.set_options(TrimOptions {
+        tolerance: 1.0e-12,
+        max_iterations: 40,
+        ..TrimOptions::default()
+    });
+    let mut solver = VortexLatticeSolver::new();
+    let result = trim.solve(&aircraft, &mut solver, &constraints, Some(&initial));
+
+    assert!(result.converged, "{}", result.diagnostic);
+    assert_eq!(result.status, TrimStatus::Converged);
+    assert!(result.iterations > 1, "converged without taking a step");
+    assert_abs_diff_eq!(
+        result.aerodynamic_results.coefficients.side,
+        0.0,
+        epsilon = 1.0e-9
+    );
+    assert_abs_diff_eq!(
+        result.aerodynamic_results.coefficients.roll,
+        0.0,
+        epsilon = 1.0e-9
+    );
+    assert_abs_diff_eq!(
+        result.aerodynamic_results.coefficients.yaw,
+        0.0,
+        epsilon = 1.0e-9
+    );
+    // CY = Cl = Cn = 0 has a unique root at beta = p = r = 0 for this
+    // configuration, so recovering it confirms the residuals were the
+    // coefficients themselves and not some other quantity that also vanishes.
+    assert_abs_diff_eq!(result.state.beta, 0.0, epsilon = 1.0e-9);
+    assert_abs_diff_eq!(result.state.roll_rate, 0.0, epsilon = 1.0e-9);
+    assert_abs_diff_eq!(result.state.yaw_rate, 0.0, epsilon = 1.0e-9);
+    assert_abs_diff_eq!(
+        result.state.alpha,
+        3.0 * DEGREES_TO_RADIANS,
+        epsilon = 1.0e-12
+    );
+}
+
+/// Every coefficient constraint applied to a *control* rather than a state.
+///
+/// This is the `kind =>` arm of the control loop, which reads both the target
+/// coefficient and the matching control derivative. Only `PitchMoment` was
+/// covered, so a mismatch between the two lookups -- residual on one
+/// coefficient, Jacobian column from another -- was undetectable for the
+/// remaining four.
+#[test]
+fn control_constraints_trim_each_coefficient_to_its_target() {
+    for (control, kind, target) in [
+        ("aileron", ConstraintType::Lift, 0.30),
+        ("rudder", ConstraintType::Side, 0.02),
+        ("aileron", ConstraintType::RollMoment, 0.05),
+        ("rudder", ConstraintType::YawMoment, 0.03),
+    ] {
+        let aircraft = lateral_directional_aircraft();
+        let other = if control == "aileron" {
+            "rudder"
+        } else {
+            "aileron"
+        };
+        let constraints = TrimConstraints {
+            alpha: fixed(3.0 * DEGREES_TO_RADIANS),
+            beta: fixed(0.0),
+            roll_rate: fixed(0.0),
+            pitch_rate: fixed(0.0),
+            yaw_rate: fixed(0.0),
+            // The unconstrained control stays in the list so the inactive-control
+            // skip is exercised in both the assembly and the state update.
+            controls: vec![
+                (control.into(), drives(kind, target)),
+                (other.into(), VariableConstraint::default()),
+            ],
+        };
+        // No deflections seeded: the update has to append the control to the
+        // state rather than accumulate into an existing entry.
+        let initial = OperatingVariables {
+            alpha: 3.0 * DEGREES_TO_RADIANS,
+            ..OperatingVariables::default()
+        };
+        let mut trim = TrimSolver::new();
+        trim.set_options(TrimOptions {
+            tolerance: 1.0e-12,
+            max_iterations: 40,
+            ..TrimOptions::default()
+        });
+        let mut solver = VortexLatticeSolver::new();
+        let result = trim.solve(&aircraft, &mut solver, &constraints, Some(&initial));
+
+        assert!(
+            result.converged,
+            "{control} / {kind:?}: {}",
+            result.diagnostic
+        );
+        assert_abs_diff_eq!(
+            coefficient(&result.aerodynamic_results, kind),
+            target,
+            epsilon = 1.0e-9
+        );
+        let moved = deflection(&result.state, control)
+            .unwrap_or_else(|| panic!("{control} was never added to the trimmed state"));
+        assert!(
+            moved.abs() > 1.0e-6,
+            "{control} / {kind:?}: target reached without deflecting the control"
+        );
+        assert_eq!(
+            deflection(&result.state, other),
+            None,
+            "the free control must not be driven"
+        );
+    }
+}
+
+/// A control pinned by `Fixed`, the control-loop counterpart of
+/// [`fixed_alpha_constraint_is_satisfied_exactly`].
+#[test]
+fn fixed_control_constraint_is_satisfied_exactly() {
+    let aircraft = lateral_directional_aircraft();
+    let constraints = TrimConstraints {
+        alpha: fixed(2.0 * DEGREES_TO_RADIANS),
+        beta: fixed(0.0),
+        roll_rate: fixed(0.0),
+        pitch_rate: fixed(0.0),
+        yaw_rate: fixed(0.0),
+        controls: vec![("rudder".into(), fixed(5.0 * DEGREES_TO_RADIANS))],
+    };
+    let mut solver = VortexLatticeSolver::new();
+    let result = TrimSolver::new().solve(&aircraft, &mut solver, &constraints, None);
+
+    assert!(result.converged, "{}", result.diagnostic);
+    assert_abs_diff_eq!(
+        deflection(&result.state, "rudder").expect("rudder missing from the trimmed state"),
+        5.0 * DEGREES_TO_RADIANS,
+        epsilon = 1.0e-12
+    );
+    // A deflected rudder on this fixture produces side force, so the fixed
+    // deflection reached the solve rather than only the state vector.
+    assert!(result.aerodynamic_results.coefficients.side.abs() > 1.0e-4);
 }
