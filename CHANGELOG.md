@@ -20,7 +20,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Pure-Rust `.vtu` and `.vtp` export through the default `vtk` feature,
   including ASCII/binary output and atomic file replacement.
 - Native Rust examples, a Criterion scaling benchmark, Rust API guides, and
-  Linux/macOS/Windows CI.
+  Linux CI.
 - A committed v0.2.0 numerical oracle, and a frozen inventory of the 488
   non-Philote CTest cases in `tests/fixtures/parity/ctest-manifest.json`. The
   manifest records which cases existed and at what tolerance; it carries no
