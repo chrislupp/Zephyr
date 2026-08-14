@@ -134,6 +134,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - The missing fixed-circulation alpha term in the adjoint force derivative now
   includes freestream and body-to-stability-axis effects. The former disabled
   CL validation is enabled and extended across all six primary coefficients.
+- Section drag polars are now applied to the loads. v0.2.0 parsed `CDCL`,
+  interpolated the six coefficients onto each strip and set `has_viscous_data`,
+  but no force path ever read them back — every reference to `viscous_polar` in
+  the C++ tree is a write. `strip_loads` folds the polar-interpolated term into
+  the strip body force, so drag, roll, pitch and yaw now respond to a `CDCL`
+  block that the oracle silently ignored. Lift and side are unchanged, since
+  the added vector is parallel to the stability drag axis.
+- `ApparentMass` now affects the eigenmode state matrices. v0.2.0 exposed
+  `SetApparentMass` and stored the value, but `eigenmode_analysis.cpp` never
+  read it, so the setter was inert. The effective mass is
+  `m + tr(M_apparent) / 3` and the effective inertia adds the matching diagonal
+  entry. **The averaging convention is this implementation's own** — the oracle
+  defined no formula to reproduce, so there is nothing to be at parity with
+  here. `include_effects` still defaults to `false`, so a default build is
+  unaffected; enabling it produces eigenvalues v0.2.0 would not have produced.
 
 ### Removed
 
