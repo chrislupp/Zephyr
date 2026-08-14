@@ -130,6 +130,34 @@ const PORTED: &[&str] = &[
     "MeshInputTest.BasicSolveProducesValidResults",
     "MeshInputTest.ConsistencyWithAircraftPath",
     "MeshInputTest.MeshDimensions",
+    // gradient_calculator_test.cpp -> tests/gradient_calculator.rs
+    "GradientCalculatorTest.AlphaDerivativesMatchStabilityDerivatives",
+    "GradientCalculatorTest.BetaDerivativesMatchStabilityDerivatives",
+    "GradientCalculatorTest.RollRateDerivativesMatchStabilityDerivatives",
+    "GradientCalculatorTest.PitchRateDerivativesMatchStabilityDerivatives",
+    "GradientCalculatorTest.YawRateDerivativesMatchStabilityDerivatives",
+    "GradientCalculatorTest.MachDerivativesComputed",
+    "GradientCalculatorTest.MachDerivativesAtLowMach",
+    "GradientCalculatorTest.MachDerivativesAtHighMach",
+    "GradientCalculatorTest.FullGradientsComputation",
+    "GradientCalculatorTest.DerivativesAtZeroAlpha",
+    "GradientCalculatorTest.OutputSelectionSubsetMatchesFullResults",
+    "GradientCalculatorTest.OutputSelectionSingleOutput",
+    "GradientCalculatorTest.OutputSelectionAllDisabled",
+    "GradientCalculatorTest.OutputSelectionBetaDerivatives",
+    "GradientCalculatorTest.OutputSelectionGeometryGradients",
+    "GradientCalculatorWithTailTest.CmAlphaIsNegativeWithTail",
+    "GradientCalculatorWithTailTest.MatchesStabilityDerivatives",
+    "GeometryGradientTest.ChordGradientIsNonZero",
+    "GeometryGradientTest.TwistGradientPhysicallyCorrect",
+    "GeometryGradientTest.SpanPositionGradientNonZero",
+    "GeometryGradientTest.FullGeometryGradientsReturnsAllSections",
+    "GeometryGradientTest.GetChordGradientsForExtraction",
+    "GeometryGradientTest.GetTwistGradientsForExtraction",
+    "GeometryGradientTest.DihedralGradientAffectsRollingMoment",
+    "GeometryGradientTest.GradientsAreSymmetricForSymmetricSections",
+    "MultiSurfaceGeometryGradientTest.GradientsComputedForAllSurfaces",
+    "MultiSurfaceGeometryGradientTest.TailTwistAffectsPitchingMoment",
     // mesh_sensitivity_test.cpp -> tests/mesh_sensitivity.rs
     "MeshSensitivityTest.ExtractMeshArrays",
     "MeshSensitivityTest.BuildSectionStripMappingSingleSurface",
@@ -324,7 +352,6 @@ const PORTED: &[&str] = &[
     "VortexLatticeTest.ControlSurfaceNamesEmpty",
     "VortexLatticeTest.ControlSurfaceInfluencesSize",
     "VortexLatticeTest.RecalculateNormals",
-    "VortexLatticeTest.TwistOffsetEquivalentToGeometricTwist",
     // control_surface_test.cpp -> tests/control_surface.rs
     "ControlSurfaceDefinitionTest.NameDefaultsToEmpty",
     "ControlSurfaceDefinitionTest.SetValues",
@@ -504,8 +531,6 @@ const PORTED: &[&str] = &[
     "SectionUnitTest.SetTwistAngle",
     "SectionUnitTest.TwistAngleRadians",
     "SectionUnitTest.ClAlphaFactor",
-    "SectionUnitTest.TwistOffsetDefaultsToZero",
-    "SectionUnitTest.TwistOffsetAddsToGeometricTwist",
     "SectionUnitTest.AddControlSurface",
     "SectionUnitTest.AddDesignVariable",
     "SectionUnitTest.SpanwisePanelCount",
@@ -526,6 +551,29 @@ const PORTED: &[&str] = &[
     "TrimPresetsTest.SteadyTurn",
     "TrimPresetsTest.SteadySideslipAllFields",
     "VariableConstraintTest.DefaultState",
+];
+
+/// Manifest entries with no corresponding test in the v0.2.0 C++ tree.
+///
+/// The manifest claims provenance from tag `v0.2.0` (commit `556b0ea`), but
+/// these six names match no `TEST`, `TEST_F` or `TEST_P` declaration anywhere
+/// under `tests/` at that tag — verified by extracting all 482 declarations and
+/// diffing. `ForwardJvpBatchTest` does not exist as a suite at all; the three
+/// `TwistOffset*` names sit in suites that do exist but were never declared.
+///
+/// They are therefore not portable *as ports*: there are no upstream assertions
+/// to reproduce. The behaviour they name is real and is covered by ordinary
+/// Rust tests — a surface angle offset adds to section twist
+/// (`solver/lattice.rs`), and the batched JVP, transpose identity and
+/// mesh-perturbation checks live in `tests/gradients.rs` — but claiming them as
+/// ported would assert a provenance that does not exist.
+const NOT_IN_ORACLE: &[&str] = &[
+    "SectionUnitTest.TwistOffsetDefaultsToZero",
+    "SectionUnitTest.TwistOffsetAddsToGeometricTwist",
+    "VortexLatticeTest.TwistOffsetEquivalentToGeometricTwist",
+    "ForwardJvpBatchTest.BatchMatchesPerDirectionJVPs",
+    "ForwardJvpBatchTest.GeometryVJPsAreExactTransposes",
+    "ForwardJvpBatchTest.MeshPerturbationJVPMatchesResolve",
 ];
 
 /// Frozen cases that cannot be ported because the feature they cover no longer
@@ -619,17 +667,28 @@ fn manifest_case_inventory_is_well_formed() {
 fn ported_cases_exist_in_the_manifest() {
     let manifest = manifest();
     let known: HashSet<&str> = manifest.cases.iter().map(|c| c.cpp_test.as_str()).collect();
-    for name in PORTED.iter().chain(UNPORTABLE) {
+    for name in PORTED.iter().chain(UNPORTABLE).chain(NOT_IN_ORACLE) {
         assert!(
             known.contains(name),
             "PORTED/UNPORTABLE names a case that is not in the frozen manifest: {name}"
         );
     }
     let ported: HashSet<&str> = PORTED.iter().copied().collect();
+    let unportable: HashSet<&str> = UNPORTABLE.iter().copied().collect();
     for name in UNPORTABLE {
         assert!(
             !ported.contains(name),
             "{name} is listed as both ported and unportable"
+        );
+    }
+    for name in NOT_IN_ORACLE {
+        assert!(
+            !ported.contains(name),
+            "{name} has no upstream test, so it cannot be ported"
+        );
+        assert!(
+            !unportable.contains(name),
+            "{name} is listed as both absent upstream and unportable"
         );
     }
 }
@@ -646,9 +705,14 @@ fn ported_case_count_is_recorded() {
     let unportable = UNPORTABLE.len();
     let total = manifest.cases.len();
     assert_eq!(
-        ported, 440,
+        ported, 464,
         "{ported} of {total} frozen C++ cases are individually ported; \
          update this count when that changes"
+    );
+    assert_eq!(
+        NOT_IN_ORACLE.len(),
+        6,
+        "manifest entries with no v0.2.0 counterpart; update deliberately"
     );
     assert_eq!(
         unportable, 4,
@@ -656,8 +720,8 @@ fn ported_case_count_is_recorded() {
          update this count when that changes"
     );
     assert_eq!(
-        total - ported - unportable,
-        44,
+        total - ported - unportable - NOT_IN_ORACLE.len(),
+        14,
         "the remaining porting backlog changed; update this count deliberately"
     );
 }

@@ -78,17 +78,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `PegasusError::Parse` carries a structured `ParseLocation { path, line }`
   instead of a pre-formatted string, so callers can recover the line number and
   file programmatically. `PegasusError` is now `#[non_exhaustive]`.
-- 440 of the 488 frozen C++ cases now have their real assertions reproduced in
-  Rust, up from none, with 4 recorded as unportable because they cover
-  behaviour that was deliberately removed. Twenty-six C++ files are complete:
-  every non-gradient file, plus `mesh_sensitivity_test` (14),
-  `analytical_forces_test` (11), `analytical_biot_savart_test` (10),
-  `adjoint_solver_test` (10), `analytical_aic_test` (9),
-  `analytical_trefftz_test` (8) and `mesh_node_gradient_test` (5). The
-  remaining 44 are `gradient_calculator_test` and
-  `optvl_gradient_validation_test`. `parity_cases.rs` tracks ported, unportable
-  and backlog counts separately and asserts all three, so they cannot be
-  misreported.
+- 464 of the 488 frozen C++ cases now have their real assertions reproduced in
+  Rust, up from none. Twenty-seven C++ files are complete, including
+  `gradient_calculator_test` (27) and `mesh_sensitivity_test` (14); only
+  `optvl_gradient_validation_test` (14) remains. `parity_cases.rs` tracks four
+  disjoint counts and asserts all of them: 464 ported, 4 unportable because the
+  behaviour was deliberately removed, 6 with no v0.2.0 counterpart at all, and
+  14 outstanding.
+- Six manifest entries are recorded as having no corresponding test in the
+  v0.2.0 C++ tree. The manifest claims provenance from commit `556b0ea`, but
+  `ForwardJvpBatchTest.{BatchMatchesPerDirectionJVPs,
+  GeometryVJPsAreExactTransposes, MeshPerturbationJVPMatchesResolve}`,
+  `SectionUnitTest.{TwistOffsetDefaultsToZero, TwistOffsetAddsToGeometricTwist}`
+  and `VortexLatticeTest.TwistOffsetEquivalentToGeometricTwist` match no
+  `TEST`, `TEST_F` or `TEST_P` declaration anywhere under `tests/` at that tag —
+  found by extracting all 482 declarations and diffing against the manifest's
+  488. They cannot be ported, since there are no upstream assertions to
+  reproduce. The behaviour they name is real and is covered on its own merits:
+  a surface angle offset adding to section twist is now asserted in
+  `tests/vortex_lattice.rs`, and the batched-JVP, transpose-identity and
+  mesh-perturbation checks already live in `tests/gradients.rs`.
 - `tests/parity_cases.rs` no longer generates one test per frozen CTest case.
   The 488 generated tests all dispatched to one of eight category-level smoke
   checks, so every case within a category ran byte-identical assertions

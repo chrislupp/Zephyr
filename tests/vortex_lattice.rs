@@ -344,3 +344,45 @@ fn recalculating_normals_on_unchanged_geometry_is_idempotent() {
         epsilon = 1.0e-10
     );
 }
+
+/// A surface angle offset adds to every section's geometric twist.
+///
+/// This is not a port. Three manifest entries name this behaviour
+/// (`SectionUnitTest.TwistOffset*`, `VortexLatticeTest.TwistOffsetEquivalentToGeometricTwist`)
+/// but no such test exists at v0.2.0 — see `NOT_IN_ORACLE` in
+/// `tests/parity_cases.rs`. The behaviour is real, so it is covered here on its
+/// own merits: `lattice.rs` adds the surface offset to both section twists when
+/// building each interval, which means an offset of `d` degrees produces the
+/// same lattice as adding `d` to every section's twist directly.
+#[test]
+fn a_surface_angle_offset_equals_adding_the_same_twist_to_every_section() {
+    let build = |section_twist: f64, offset: f64| {
+        let mut wing = Surface::new("Wing");
+        wing.set_chordwise_panel_count(2);
+        wing.set_spanwise_panel_count(3);
+        wing.set_angle_offset_degrees(offset);
+        wing.add_section(Section::new(Vec3::new(0.0, 0.0, 0.0), 1.0, section_twist));
+        wing.add_section(Section::new(Vec3::new(0.0, 2.0, 0.0), 1.0, section_twist));
+        let mut aircraft = Aircraft::new("Offset");
+        aircraft.add_surface(wing);
+        lattice(&aircraft)
+    };
+
+    // Zero offset leaves the twist alone.
+    let plain = build(3.0, 0.0);
+    let offset = build(0.0, 3.0);
+    let combined = build(3.0, 0.0);
+
+    for (left, right) in plain.strips().iter().zip(offset.strips()) {
+        assert_abs_diff_eq!(left.twist_angle, right.twist_angle, epsilon = 1.0e-12);
+    }
+    // And the two routes produce identical panel normals, not merely identical
+    // twist bookkeeping.
+    for (left, right) in combined.vortices().iter().zip(offset.vortices()) {
+        assert_abs_diff_eq!(
+            left.normal_at_control_point,
+            right.normal_at_control_point,
+            epsilon = 1.0e-12
+        );
+    }
+}
