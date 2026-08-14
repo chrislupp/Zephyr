@@ -78,20 +78,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `PegasusError::Parse` carries a structured `ParseLocation { path, line }`
   instead of a pre-formatted string, so callers can recover the line number and
   file programmatically. `PegasusError` is now `#[non_exhaustive]`.
-- 373 of the 488 frozen C++ cases now have their real assertions reproduced in
+- 392 of the 488 frozen C++ cases now have their real assertions reproduced in
   Rust, up from none, with 4 recorded as unportable because they cover
-  behaviour that was deliberately removed. Nineteen C++ files are complete,
-  including every non-gradient file: `geometry_test` (78), `eigenmode_test`
-  (34 of 36), `math_utilities_test` (31), `control_surface_test` (27),
-  `section_test` (22), `solver_test` (20), `vortex_lattice_test` (20 of 22),
-  `mass_reader_test` (19), `influence_matrix_test` (18), `trim_solver_test`
-  (17), `cubic_spline_test` (12), `body_test` (11),
-  `flight_constraints_test` (11), `force_calculator_test` (11),
-  `rectangular_wing_test` (11), `stability_derivatives_test` (11),
-  `vtk_export_test` (9), `aerodynamic_results_test` (8) and `mesh_input_test`
-  (3). The remaining 111 are the gradient suites. `parity_cases.rs` tracks
-  ported, unportable and backlog counts separately and asserts all three, so
-  they cannot be misreported.
+  behaviour that was deliberately removed. Twenty-one C++ files are complete:
+  every non-gradient file, plus `analytical_biot_savart_test` (10) and
+  `analytical_aic_test` (9). The remaining 92 are the rest of the gradient
+  suites. `parity_cases.rs` tracks ported, unportable and backlog counts
+  separately and asserts all three, so they cannot be misreported.
 - `tests/parity_cases.rs` no longer generates one test per frozen CTest case.
   The 488 generated tests all dispatched to one of eight category-level smoke
   checks, so every case within a category ran byte-identical assertions
