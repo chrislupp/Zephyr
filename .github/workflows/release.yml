@@ -6,6 +6,7 @@ on:
     branches: [main]
 
 env:
+  CARGO_TERM_COLOR: always
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
 
 permissions:
@@ -17,282 +18,216 @@ jobs:
       github.event.pull_request.merged == true &&
       (contains(github.event.pull_request.labels.*.name, 'release') ||
        contains(github.event.pull_request.labels.*.name, 'prerelease'))
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
 
     steps:
-    # -- Checkout --------------------------------------------------------
-    - name: Checkout main
-      uses: actions/checkout@v4
-      with:
-        ref: main
-        fetch-depth: 0
-        token: ${{ secrets.RELEASE_TOKEN }}
+      - name: Checkout main
+        uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+          token: ${{ secrets.RELEASE_TOKEN }}
 
-    # -- GPG setup for signed commits ------------------------------------
-    - name: Generate ephemeral GPG key
-      run: |
-        cat > /tmp/gpg-key-params <<GPGEOF
-        %no-protection
-        Key-Type: RSA
-        Key-Length: 4096
-        Subkey-Type: RSA
-        Subkey-Length: 4096
-        Name-Real: github-actions[bot]
-        Name-Email: 41898282+github-actions[bot]@users.noreply.github.com
-        Expire-Date: 1d
-        GPGEOF
-        gpg --batch --gen-key /tmp/gpg-key-params
-        KEY_ID=$(gpg --list-secret-keys --keyid-format=long | grep sec | awk '{print $2}' | cut -d'/' -f2)
-        echo "GPG_KEY_ID=${KEY_ID}" >> "$GITHUB_ENV"
+      - name: Configure signed release commits
+        run: |
+          cat > /tmp/gpg-key-params <<GPGEOF
+          %no-protection
+          Key-Type: RSA
+          Key-Length: 4096
+          Subkey-Type: RSA
+          Subkey-Length: 4096
+          Name-Real: github-actions[bot]
+          Name-Email: 41898282+github-actions[bot]@users.noreply.github.com
+          Expire-Date: 1d
+          GPGEOF
+          gpg --batch --gen-key /tmp/gpg-key-params
+          KEY_ID=$(gpg --list-secret-keys --keyid-format=long | awk '/sec/{print $2; exit}' | cut -d/ -f2)
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git config user.signingkey "$KEY_ID"
+          git config commit.gpgsign true
+          git config tag.gpgsign true
 
-        git config user.name  "github-actions[bot]"
-        git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-        git config user.signingkey "${KEY_ID}"
-        git config commit.gpgsign true
-        git config tag.gpgsign true
+      - name: Validate release labels
+        id: labels
+        env:
+          LABELS: ${{ join(github.event.pull_request.labels.*.name, ' ') }}
+        run: |
+          IS_RELEASE=false
+          IS_PRERELEASE=false
+          BUMP=""
+          BUMP_COUNT=0
+          QUALIFIER=""
+          QUALIFIER_COUNT=0
 
-    # -- Extract and validate PR labels ----------------------------------
-    - name: Extract labels
-      id: labels
-      env:
-        LABELS: ${{ join(github.event.pull_request.labels.*.name, ' ') }}
-      run: |
-        echo "Labels on PR: $LABELS"
+          for label in $LABELS; do
+            case "$label" in
+              release) IS_RELEASE=true ;;
+              prerelease) IS_PRERELEASE=true ;;
+              major|minor|patch)
+                BUMP="$label"
+                BUMP_COUNT=$((BUMP_COUNT + 1))
+                ;;
+              alpha|beta|rc)
+                QUALIFIER="$label"
+                QUALIFIER_COUNT=$((QUALIFIER_COUNT + 1))
+                ;;
+            esac
+          done
 
-        # Release type
-        IS_RELEASE=false
-        IS_PRERELEASE=false
-        for l in $LABELS; do
-          case "$l" in
-            release)    IS_RELEASE=true ;;
-            prerelease) IS_PRERELEASE=true ;;
-          esac
-        done
-
-        if $IS_RELEASE && $IS_PRERELEASE; then
-          echo "::error::PR must have exactly one of 'release' or 'prerelease', not both."
-          exit 1
-        fi
-
-        # Version bump
-        BUMP=""
-        BUMP_COUNT=0
-        for l in $LABELS; do
-          case "$l" in
-            major|minor|patch)
-              BUMP="$l"
-              BUMP_COUNT=$((BUMP_COUNT + 1))
-              ;;
-          esac
-        done
-
-        if [ "$BUMP_COUNT" -ne 1 ]; then
-          echo "::error::PR must have exactly one of 'major', 'minor', or 'patch' labels."
-          exit 1
-        fi
-
-        # Pre-release qualifier
-        QUALIFIER=""
-        QUAL_COUNT=0
-        for l in $LABELS; do
-          case "$l" in
-            alpha|beta|rc)
-              QUALIFIER="$l"
-              QUAL_COUNT=$((QUAL_COUNT + 1))
-              ;;
-          esac
-        done
-
-        if $IS_PRERELEASE && [ "$QUAL_COUNT" -ne 1 ]; then
-          echo "::error::Pre-release PRs must have exactly one of 'alpha', 'beta', or 'rc' labels."
-          exit 1
-        fi
-
-        if $IS_RELEASE && [ "$QUAL_COUNT" -ne 0 ]; then
-          echo "::error::Stable release PRs must not have 'alpha', 'beta', or 'rc' labels."
-          exit 1
-        fi
-
-        echo "is_release=$IS_RELEASE"       >> "$GITHUB_OUTPUT"
-        echo "is_prerelease=$IS_PRERELEASE" >> "$GITHUB_OUTPUT"
-        echo "bump=$BUMP"                   >> "$GITHUB_OUTPUT"
-        echo "qualifier=$QUALIFIER"         >> "$GITHUB_OUTPUT"
-
-    # -- Calculate new version -------------------------------------------
-    - name: Calculate version
-      id: version
-      run: |
-        # Read current version from CMakeLists.txt
-        CURRENT=$(grep -oP 'VERSION\s+\K[0-9]+\.[0-9]+\.[0-9]+' CMakeLists.txt | head -1)
-        IFS='.' read -r MAJOR MINOR PATCH <<< "$CURRENT"
-        echo "Current version: ${MAJOR}.${MINOR}.${PATCH}"
-
-        BUMP="${{ steps.labels.outputs.bump }}"
-        case "$BUMP" in
-          major) MAJOR=$((MAJOR + 1)); MINOR=0; PATCH=0 ;;
-          minor) MINOR=$((MINOR + 1)); PATCH=0 ;;
-          patch) PATCH=$((PATCH + 1)) ;;
-        esac
-
-        NEW_VERSION="${MAJOR}.${MINOR}.${PATCH}"
-
-        if [ "${{ steps.labels.outputs.is_prerelease }}" = "true" ]; then
-          QUALIFIER="${{ steps.labels.outputs.qualifier }}"
-
-          # Find the latest pre-release tag for this version+qualifier
-          PRERELEASE_NUM=1
-          PATTERN="v${NEW_VERSION}-${QUALIFIER}."
-          LATEST_TAG=$(git tag -l "${PATTERN}*" | sort -V | tail -n1 || true)
-          if [ -n "$LATEST_TAG" ]; then
-            PREV_NUM=$(echo "$LATEST_TAG" | grep -oP "${QUALIFIER}\.\K[0-9]+")
-            PRERELEASE_NUM=$((PREV_NUM + 1))
+          if $IS_RELEASE && $IS_PRERELEASE; then
+            echo "::error::Use exactly one of the release or prerelease labels."
+            exit 1
+          fi
+          if [ "$BUMP_COUNT" -ne 1 ]; then
+            echo "::error::Use exactly one of the major, minor, or patch labels."
+            exit 1
+          fi
+          if $IS_PRERELEASE && [ "$QUALIFIER_COUNT" -ne 1 ]; then
+            echo "::error::Prereleases require exactly one alpha, beta, or rc label."
+            exit 1
+          fi
+          if $IS_RELEASE && [ "$QUALIFIER_COUNT" -ne 0 ]; then
+            echo "::error::Stable releases cannot have alpha, beta, or rc labels."
+            exit 1
           fi
 
-          TAG_VERSION="v${NEW_VERSION}-${QUALIFIER}.${PRERELEASE_NUM}"
-          IS_PRERELEASE=true
-        else
-          TAG_VERSION="v${NEW_VERSION}"
-          IS_PRERELEASE=false
-        fi
+          echo "is_release=$IS_RELEASE" >> "$GITHUB_OUTPUT"
+          echo "is_prerelease=$IS_PRERELEASE" >> "$GITHUB_OUTPUT"
+          echo "bump=$BUMP" >> "$GITHUB_OUTPUT"
+          echo "qualifier=$QUALIFIER" >> "$GITHUB_OUTPUT"
 
-        echo "new_version=${NEW_VERSION}"     >> "$GITHUB_OUTPUT"
-        echo "tag_version=${TAG_VERSION}"     >> "$GITHUB_OUTPUT"
-        echo "is_prerelease=${IS_PRERELEASE}" >> "$GITHUB_OUTPUT"
-        echo "New version: ${NEW_VERSION}, Tag: ${TAG_VERSION}"
+      - name: Calculate release version
+        id: version
+        run: |
+          CURRENT=$(git tag --list 'v*' --sort=-v:refname |
+            sed -nE '/^v[0-9]+\.[0-9]+\.[0-9]+$/ { s/^v//; p; q; }')
+          if [ -z "$CURRENT" ]; then
+            CURRENT=$(python3 -c \
+              'import tomllib; print(tomllib.load(open("Cargo.toml", "rb"))["package"]["version"].split("-", 1)[0])')
+          fi
+          if [ -z "$CURRENT" ]; then
+            echo "::error::Could not determine the latest stable version."
+            exit 1
+          fi
+          IFS='.' read -r MAJOR MINOR PATCH <<EOF
+          $CURRENT
+          EOF
 
-    # -- Update copyright years and source version headers (stable releases only)
-    - name: Update copyright years and version headers
-      if: steps.labels.outputs.is_release == 'true'
-      run: python3 scripts/update_copyright.py --version ${{ steps.version.outputs.new_version }} .
+          case "${{ steps.labels.outputs.bump }}" in
+            major) MAJOR=$((MAJOR + 1)); MINOR=0; PATCH=0 ;;
+            minor) MINOR=$((MINOR + 1)); PATCH=0 ;;
+            patch) PATCH=$((PATCH + 1)) ;;
+          esac
+          BASE_VERSION="${MAJOR}.${MINOR}.${PATCH}"
+          PACKAGE_VERSION="$BASE_VERSION"
 
-    # -- Update CMakeLists.txt version -----------------------------------
-    - name: Update CMakeLists.txt version
-      run: |
-        NEW_VERSION="${{ steps.version.outputs.new_version }}"
-        sed -i 's/\(VERSION\s\+\)[0-9]\+\.[0-9]\+\.[0-9]\+/\1'"$NEW_VERSION"'/' CMakeLists.txt
+          if [ "${{ steps.labels.outputs.is_prerelease }}" = "true" ]; then
+            QUALIFIER="${{ steps.labels.outputs.qualifier }}"
+            LATEST_TAG=$(git tag -l "v${BASE_VERSION}-${QUALIFIER}.*" | sort -V | tail -n1)
+            PRERELEASE_NUMBER=1
+            if [ -n "$LATEST_TAG" ]; then
+              PREVIOUS_NUMBER="${LATEST_TAG##*.}"
+              PRERELEASE_NUMBER=$((PREVIOUS_NUMBER + 1))
+            fi
+            PACKAGE_VERSION="${BASE_VERSION}-${QUALIFIER}.${PRERELEASE_NUMBER}"
+          fi
 
-        echo "CMakeLists.txt updated:"
-        grep "project(Pegasus" CMakeLists.txt
+          echo "base_version=$BASE_VERSION" >> "$GITHUB_OUTPUT"
+          echo "package_version=$PACKAGE_VERSION" >> "$GITHUB_OUTPUT"
+          echo "tag_version=v${PACKAGE_VERSION}" >> "$GITHUB_OUTPUT"
+          echo "Release version: $PACKAGE_VERSION"
 
-    # -- Update CHANGELOG.md ---------------------------------------------
-    - name: Update CHANGELOG.md
-      run: |
-        TAG="${{ steps.version.outputs.tag_version }}"
-        VERSION="${{ steps.version.outputs.new_version }}"
-        DATE=$(date +%Y-%m-%d)
-        REPO="https://github.com/chrislupp/Pegasus"
+      - name: Write release version
+        run: |
+          python3 scripts/update_copyright.py \
+            --version "${{ steps.version.outputs.package_version }}" .
+          cargo check
+          grep -m1 '^version = ' Cargo.toml
+          grep -A1 '^name = "pegasus-vlm"$' Cargo.lock
 
-        if [ "${{ steps.version.outputs.is_prerelease }}" = "true" ]; then
-          HEADER="${TAG#v}"
-        else
-          HEADER="${VERSION}"
-        fi
+      - name: Finalize changelog
+        run: |
+          TAG="${{ steps.version.outputs.tag_version }}"
+          VERSION="${{ steps.version.outputs.package_version }}"
+          DATE=$(date +%Y-%m-%d)
+          REPOSITORY="https://github.com/chrislupp/Pegasus"
 
-        # Replace [Unreleased] header with version header and add new [Unreleased]
-        sed -i "s/^## \[Unreleased\]/## [Unreleased]\n\n## [${HEADER}] - ${DATE}/" CHANGELOG.md
+          sed -i "s/^## \[Unreleased\]/## [Unreleased]\n\n## [${VERSION}] - ${DATE}/" CHANGELOG.md
+          sed -i '/^\[Unreleased\]:/d' CHANGELOG.md
+          printf '\\n[Unreleased]: %s/compare/%s...HEAD\\n[%s]: %s/releases/tag/%s\\n' \
+            "$REPOSITORY" "$TAG" "$VERSION" "$REPOSITORY" "$TAG" >> CHANGELOG.md
 
-        # Update comparison links
-        # Remove existing [Unreleased] link
-        sed -i '/^\[Unreleased\]:/d' CHANGELOG.md
+      - name: Test and package release
+        run: |
+          cargo test --release --all-features
+          cargo test --no-default-features
+          cargo package --allow-dirty --locked
 
-        # Add new links at the bottom
-        echo "[Unreleased]: ${REPO}/compare/${TAG}...HEAD" >> CHANGELOG.md
-        echo "[${HEADER}]: ${REPO}/releases/tag/${TAG}" >> CHANGELOG.md
+      - name: Set up Node.js
+        if: steps.labels.outputs.is_release == 'true'
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: docs/package-lock.json
 
-    # -- Create docs version snapshot (stable releases only) -------------
-    - name: Setup Node.js
-      if: steps.labels.outputs.is_release == 'true'
-      uses: actions/setup-node@v4
-      with:
-        node-version: '20'
-        cache: 'npm'
-        cache-dependency-path: docs/package-lock.json
+      - name: Snapshot stable documentation
+        if: steps.labels.outputs.is_release == 'true'
+        working-directory: docs
+        run: |
+          npm ci
+          npx docusaurus docs:version "${{ steps.version.outputs.base_version }}"
+          npm run build
 
-    - name: Install docs dependencies
-      if: steps.labels.outputs.is_release == 'true'
-      run: npm ci
-      working-directory: docs
+      - name: Commit release metadata
+        run: |
+          VERSION="${{ steps.version.outputs.package_version }}"
+          git add -A
+          git commit -S -m "chore: release version ${VERSION}"
 
-    - name: Create docs version snapshot
-      if: steps.labels.outputs.is_release == 'true'
-      run: npx docusaurus docs:version ${{ steps.version.outputs.new_version }}
-      working-directory: docs
+      - name: Create and push release tag
+        run: |
+          TAG="${{ steps.version.outputs.tag_version }}"
+          git tag -s "$TAG" -m "Release ${TAG}"
+          git push origin main
+          git push origin "$TAG"
 
-    - name: Update docs default version
-      if: steps.labels.outputs.is_release == 'true'
-      run: |
-        VERSION="${{ steps.version.outputs.new_version }}"
-        sed -i "s/lastVersion: \"[^\"]*\"/lastVersion: \"${VERSION}\"/" docs/docusaurus.config.ts
+      - name: Extract release notes
+        run: |
+          VERSION="${{ steps.version.outputs.package_version }}"
+          awk -v version="$VERSION" '
+            /^## \[/ {
+              if (found) exit
+              if (index($0, "[" version "]")) found=1
+              next
+            }
+            found { print }
+          ' CHANGELOG.md > /tmp/release-notes.md
 
-    # -- Commit and tag --------------------------------------------------
-    - name: Commit release changes
-      run: |
-        TAG="${{ steps.version.outputs.tag_version }}"
-        VERSION="${TAG#v}"
+      - name: Publish GitHub release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.version.outputs.tag_version }}
+          name: ${{ steps.version.outputs.tag_version }}
+          body_path: /tmp/release-notes.md
+          files: target/package/pegasus-vlm-*.crate
+          prerelease: ${{ steps.labels.outputs.is_prerelease }}
+        env:
+          GITHUB_TOKEN: ${{ secrets.RELEASE_TOKEN }}
 
-        git add -A
-        git commit -S -m "chore: release version ${VERSION}"
-
-    - name: Create annotated tag
-      run: |
-        TAG="${{ steps.version.outputs.tag_version }}"
-        git tag -a "$TAG" -m "Release ${TAG}"
-
-    - name: Push commit and tag
-      run: |
-        git push origin main
-        git push origin "${{ steps.version.outputs.tag_version }}"
-
-    # -- Extract release notes -------------------------------------------
-    - name: Extract release notes
-      id: notes
-      run: |
-        TAG="${{ steps.version.outputs.tag_version }}"
-        VERSION="${TAG#v}"
-
-        # Extract the section for this version from CHANGELOG.md
-        NOTES=$(awk -v ver="$VERSION" '
-          /^## \[/ {
-            if (found) exit
-            if (index($0, "[" ver "]")) found=1
-            next
-          }
-          found { print }
-        ' CHANGELOG.md)
-
-        # Write to file for the release action
-        echo "$NOTES" > /tmp/release-notes.md
-        echo "Release notes:"
-        cat /tmp/release-notes.md
-
-    # -- Create GitHub Release -------------------------------------------
-    - name: Create GitHub Release
-      uses: softprops/action-gh-release@v2
-      with:
-        tag_name: ${{ steps.version.outputs.tag_version }}
-        name: ${{ steps.version.outputs.tag_version }}
-        body_path: /tmp/release-notes.md
-        prerelease: ${{ steps.version.outputs.is_prerelease }}
-      env:
-        GITHUB_TOKEN: ${{ secrets.RELEASE_TOKEN }}
-
-    # -- Merge back to develop -------------------------------------------
-    - name: Merge main back to develop
-      env:
-        GITHUB_TOKEN: ${{ secrets.RELEASE_TOKEN }}
-      run: |
-        git fetch origin develop
-        git checkout develop
-
-        if git merge main --no-edit; then
-          git push origin develop
-          echo "Successfully merged main back to develop"
-        else
-          git merge --abort
-          echo "::warning::Auto-merge failed due to conflicts. Creating PR."
-          gh pr create \
-            --base develop \
-            --head main \
-            --title "chore: merge release ${{ steps.version.outputs.tag_version }} back to develop" \
-            --body "Automatic merge of release changes back to develop failed due to conflicts. Please resolve manually."
-        fi
+      - name: Merge release metadata back to develop
+        env:
+          GH_TOKEN: ${{ secrets.RELEASE_TOKEN }}
+        run: |
+          git fetch origin develop
+          git checkout develop
+          if git merge main --no-edit; then
+            git push origin develop
+          else
+            git merge --abort
+            gh pr create \
+              --base develop \
+              --head main \
+              --title "chore: merge release ${{ steps.version.outputs.tag_version }} back to develop" \
+              --body "The automatic release merge conflicted. Please resolve it manually."

@@ -1,11 +1,5 @@
 #!/usr/bin/env python3
-"""Update copyright year ranges and version numbers in source files.
-
-Scans .cpp, .h, .hpp, .cmake, and CMakeLists.txt files for copyright headers and updates:
-- Copyright year ranges (end year to current year)
-- Version numbers (to match the project version)
-Skips build/, _deps/, docs/, and node_modules/ directories.
-"""
+"""Update copyright year ranges and the Cargo package version."""
 
 import argparse
 import re
@@ -16,12 +10,9 @@ from pathlib import Path
 COPYRIGHT_PATTERN = re.compile(
     r"(Copyright\s+)(\d{4})(-\d{4})?(,\s*Christopher\s+A\.\s+Lupp)"
 )
-VERSION_PATTERN = re.compile(
-    r"(Version\s+)\d+\.\d+\.\d+"
-)
-SOURCE_EXTENSIONS = {".cpp", ".h", ".hpp", ".cmake"}
-CMAKE_FILENAME = "CMakeLists.txt"
-SKIP_DIRS = {"build", "_deps", "docs", "node_modules"}
+VERSION_PATTERN = re.compile(r'(?m)^(version\s*=\s*")[^"]+(")$')
+SOURCE_EXTENSIONS = {".rs", ".py", ".md", ".toml"}
+SKIP_DIRS = {"build", "target", "docs", "node_modules"}
 
 
 def update_file(path: Path, year: str, version: str | None, dry_run: bool) -> bool:
@@ -37,8 +28,8 @@ def update_file(path: Path, year: str, version: str | None, dry_run: bool) -> bo
 
     new_text = COPYRIGHT_PATTERN.sub(replace_match, text)
 
-    if version:
-        new_text = VERSION_PATTERN.sub(rf"\g<1>{version}", new_text)
+    if version and path.name == "Cargo.toml":
+        new_text = VERSION_PATTERN.sub(rf"\g<1>{version}\g<2>", new_text, count=1)
 
     if new_text != text:
         if not dry_run:
@@ -81,7 +72,7 @@ def main():
     for path in sorted(root.rglob("*")):
         if any(part in SKIP_DIRS for part in path.parts):
             continue
-        if path.suffix not in SOURCE_EXTENSIONS and path.name != CMAKE_FILENAME:
+        if path.suffix not in SOURCE_EXTENSIONS:
             continue
         scanned += 1
         if update_file(path, args.year, args.version, args.dry_run):

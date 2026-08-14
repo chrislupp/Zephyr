@@ -1,0 +1,104 @@
+[package]
+name = "pegasus-vlm"
+version = "0.2.0"
+edition = "2024"
+rust-version = "1.93"
+description = "Vortex Lattice Method aerodynamics library"
+license = "GPL-3.0-or-later"
+repository = "https://github.com/chrislupp/Pegasus"
+readme = "README.md"
+keywords = ["aerodynamics", "vlm", "aircraft", "optimization"]
+categories = ["science", "simulation"]
+include = [
+    "/src/**",
+    "/tests/**",
+    "/examples/*.rs",
+    "/benches/**",
+    "/Cargo.toml",
+    "/Cargo.lock",
+    "/rust-toolchain.toml",
+    "/README.md",
+    "/CHANGELOG.md",
+    "/LICENSE",
+]
+
+[features]
+default = ["vtk"]
+vtk = ["dep:vtkio"]
+# Multithreads influence assembly over source panels. Off by default so the
+# standard build stays single-threaded. Results are bit-identical to the serial
+# build and independent of the thread count, because each source column writes a
+# disjoint slice and reads nothing another column writes.
+#
+# Deliberately does NOT enable `faer/rayon`: gemm's cache-blocking parameters
+# differ between its sequential and rayon paths, which changes the order in
+# which partial panels accumulate in the LU and would perturb the last ULP.
+parallel = ["dep:rayon"]
+# Exposes the solver as Philote-MDO gRPC disciplines. Off by default: it pulls
+# in an async runtime and a gRPC stack, which the library itself does not need
+# and which would otherwise burden every consumer of the core crate.
+philote = [
+    "dep:philote-mdo",
+    "dep:async-trait",
+    "dep:ndarray",
+    "dep:serde_json",
+    "dep:tokio",
+    "dep:tonic",
+]
+
+[dependencies]
+faer = { version = "0.24.4", default-features = false, features = ["std", "linalg"] }
+nalgebra = "0.35.0"
+num-complex = "0.4.6"
+rayon = { version = "1.11", optional = true }
+thiserror = "2.0"
+vtkio = { version = "0.6.3", optional = true }
+
+# `philote` feature only. Versions track what philote-mdo 0.2 resolves to, so a
+# discipline built here links the same ndarray and tonic the wire format uses.
+async-trait = { version = "0.1", optional = true }
+ndarray = { version = "0.16", optional = true }
+philote-mdo = { version = "0.2.0", optional = true }
+serde_json = { version = "1", optional = true }
+tokio = { version = "1", features = ["macros", "rt-multi-thread"], optional = true }
+tonic = { version = "0.12", optional = true }
+
+[dev-dependencies]
+approx = "0.5"
+# `philote` feature tests only; harmless when the feature is off.
+ndarray = "0.16"
+tokio = { version = "1", features = ["macros", "rt-multi-thread"] }
+criterion = "0.7"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+tempfile = "3"
+
+# The Philote servers only build with the feature that provides the gRPC stack.
+[[example]]
+name = "philote_vlm_server"
+required-features = ["philote"]
+
+[[example]]
+name = "philote_mesh_server"
+required-features = ["philote"]
+
+[[bench]]
+name = "analysis_scaling"
+harness = false
+
+# Cargo ignores a library's profile settings when the crate is consumed as a
+# dependency, so this governs only this workspace's examples, benches, and
+# tests. It matters because the influence kernel is defined in a different
+# module from the assembly loop that calls it N^2 times: without fat LTO and a
+# single codegen unit it is not reliably inlined, and the loop loses the
+# instruction-level parallelism that hides its divide/sqrt latency.
+[profile.release]
+lto = "fat"
+codegen-units = 1
+debug = 1          # line tables only; symbolizes profiles, no runtime cost
+
+[lints.rust]
+unsafe_code = "forbid"
+
+[lints.clippy]
+all = "warn"

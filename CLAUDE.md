@@ -1,155 +1,60 @@
 # AI Agent Guidelines for Project Pegasus
 
-## Project Overview
+Pegasus is a safe Rust 2024 vortex-lattice-method library. The crate package is
+`pegasus-vlm`, its import name is `pegasus_vlm`, and the pinned toolchain is
+Rust 1.93.1.
 
-Pegasus is a Vortex Lattice Method aerodynamic analysis library written in C++17. It provides VLM solving, force computation, stability derivatives, trim analysis, eigenmode analysis, and analytical gradient computation. Ported from OptVL.
+## Required checks
 
-## Build System
-
-### Requirements
-- CMake 3.16+
-- C++17 compatible compiler
-- Eigen 5.0+
-
-### Build Commands
-```bash
-# Configure (from repository root)
-cmake -B build -DCMAKE_BUILD_TYPE=Release
-
-# Build all
-cmake --build build
-
-# Build specific target
-cmake --build build --target <target_name>
-
-# Run all tests
-ctest --test-dir build
-
-# Run specific test executable
-./build/tests/pegasus_unit_tests
-./build/tests/pegasus_integration_tests
-```
-
-### Linting and Formatting
-Before pushing any changes to the remote, always run formatting and linting checks:
+Run these before handing off code changes:
 
 ```bash
-# Check formatting (must pass before push)
-find include src tests examples -name '*.h' -o -name '*.cpp' | xargs clang-format --dry-run --Werror
-
-# Auto-fix formatting
-find include src tests examples -name '*.h' -o -name '*.cpp' | xargs clang-format -i
-
-# Run clang-tidy (requires cmake configure with compile commands)
-cmake -B build -DCMAKE_EXPORT_COMPILE_COMMANDS=ON
-run-clang-tidy -p build -header-filter='include/pegasus/' 'src/.*\.cpp$'
+cargo fmt --check
+cargo clippy --all-targets --all-features -- -D warnings
+cargo test --all-features
+cargo test --release --all-features
+cargo test --no-default-features
+RUSTDOCFLAGS="-D warnings" cargo doc --all-features --no-deps
+cargo package
 ```
 
-### Key CMake Options
-- `PEGASUS_BUILD_TESTS=ON|OFF` - Enable/disable test building (default: ON)
-- `PEGASUS_BUILD_EXAMPLES=ON|OFF` - Enable/disable example programs (default: ON)
-- `PEGASUS_ENABLE_VTK=ON|OFF` - Enable VTK visualization export (default: ON)
-- `PEGASUS_BUILD_PHILOTE=ON|OFF` - Build Philote-Cpp MDO discipline interface (default: OFF)
+Coverage is enforced in CI with `cargo llvm-cov --fail-under-lines 92`.
+Docusaurus changes should additionally pass `npm ci && npm run build` from
+`docs/`.
 
-## Code Organization
+## Layout
 
-```
-include/pegasus/          # Public headers
-  core/                   # Types, constants
-  geometry/               # Airfoil, Section, Surface, Aircraft
-  io/                     # AVL/mass file readers
-  solver/                 # VLM solver, influence matrix
-  aero/                   # Forces, stability derivatives
-  trim/                   # Trim solver
-  dynamics/               # Eigenmode analysis
-  gradients/              # Analytical gradient computation
-  utils/                  # Cubic spline, math utilities
-src/                      # Implementation files
-tests/                    # Unit and integration tests
-examples/                 # Example programs
-scripts/                  # Build and release scripts
-docs/                     # Docusaurus documentation site
+```text
+src/
+  geometry/       aircraft, sections, airfoils, bodies, direct meshes
+  solver/         lattice generation, Biot-Savart, AIC, cached solutions
+  aero/           near/far-field loads and stability derivatives
+  gradients/      safe analytical kernels, adjoints, geometry sensitivities
+  trim/           constraints, presets, Newton solver
+  dynamics/       mass properties and eigenmode analysis
+  io/             AVL geometry and mass readers
+  visualization/  feature-gated vtkio exports
+tests/            feature tests and frozen v0.2.0 parity fixtures
+examples/         native Rust workflows and CSV scaling runner
+benches/          Criterion benchmark
+docs/             Docusaurus site
 ```
 
-## CI/CD
+The source forbids unsafe code. Preserve double precision, panel ordering,
+coordinate/sign conventions, and the deliberate unit split: geometry
+incidence and twist are degrees; flight angles, rates, controls, trim, and
+derivatives are radians.
 
-### Build Workflow (`.github/workflows/build.yml`)
-Runs on every push and PR:
-- **Format**: clang-format-18 check on `include/` and `src/`
-- **Clang-Tidy**: Static analysis on PRs to `main`/`develop`
-- **Build**: GCC 14, Release, CTest
-- **Coverage**: Clang 18, llvm-cov LCOV, Codecov upload
+The legacy behavioral oracle is tag `v0.2.0`, commit `556b0ea`. C++ and CMake
+do not belong in the 0.3 tree.
 
-### Docs Workflow (`.github/workflows/docs.yml`)
-Deploys Docusaurus docs to GitHub Pages on push to `develop` when `docs/**` or `include/**` change.
+Philote lives behind the non-default `philote` feature in `src/philote/`, built
+on the `philote-mdo` crate. Nothing outside that module and its two example
+servers may reference it, and the feature must stay off by default: the gRPC
+stack and async runtime it pulls in are not dependencies of the library itself.
+`cargo clippy --all-targets` and `cargo test` with the feature off must stay
+clean, which is what keeps the core crate's dependency graph unchanged for
+consumers who do not want MDO transport.
 
-### Release Workflow (`.github/workflows/release.yml`)
-Label-driven release pipeline. Triggered when a labeled PR is merged to `main`.
-
-**Label system** (applied to PRs targeting `main`):
-
-| Purpose | Labels (pick exactly one per row) |
-|---------|-----------------------------------|
-| Release type | `release` OR `prerelease` |
-| Version bump | `major`, `minor`, or `patch` |
-| Pre-release qualifier | `alpha`, `beta`, or `rc` (only with `prerelease`) |
-
-### Changelog
-`CHANGELOG.md` follows [Keep a Changelog](https://keepachangelog.com/) format. New changes go under `[Unreleased]`. The release workflow converts this to a versioned section automatically.
-
-**Important**: EVERY code change MUST include a corresponding `CHANGELOG.md` update in the same commit. This applies to all additions, modifications, and removals — no exceptions. If something previously added is later removed, update the changelog to reflect that removal. Never commit code changes without updating the changelog.
-
-## Coding Conventions
-
-### Style
-- Use 4-space indentation
-- Opening braces on same line for control structures, new line for functions/classes
-- Member variables use trailing underscore: `member_variable_`
-- Prefer `auto` for complex types, explicit types for primitives
-- Google-based clang-format with 80-column limit
-
-### Namespace
-- Primary namespace: `pegasus`
-- Gradient computation sub-namespace: `pegasus::gradients`
-
-### Copyright Header
-All source files must include the copyright header:
-```
-/*
-    Project Pegasus
-    Version X.Y.Z
-
-    Copyright YYYY, Christopher A. Lupp
-    ...GPL-3.0 license block...
-*/
-```
-
-## Testing
-
-### Test Framework
-Uses Google Test (gtest).
-
-### Running Tests
-```bash
-# All tests
-ctest --test-dir build
-
-# Specific test with verbose output
-./build/tests/pegasus_unit_tests --gtest_filter="*PatternHere*"
-```
-
-## Pull Requests
-
-When creating PRs:
-- Target `develop` for feature work, `main` only for releases
-- Label with appropriate type: `enhancement`, `bug`, `documentation`, etc.
-
-## Git Workflow
-
-- **`main`**: Stable releases only. PRs from `develop` with release labels.
-- **`develop`**: Integration branch. Feature branches merge here.
-- **`feature/*`**: Feature branches off `develop`.
-
-## License
-
-GPL-3.0-or-later. All source files must include the license header.
+`CHANGELOG.md` follows Keep a Changelog. Every user-visible change must update
+its Unreleased section.

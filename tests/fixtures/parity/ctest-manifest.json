@@ -1,0 +1,3431 @@
+{
+  "provenance": {
+    "tag": "v0.2.0",
+    "commit": "556b0ea",
+    "ctest_cases": 491,
+    "deferred_philote_cases": [
+      "MeshDisciplineRefTest.PartialsFiniteDifference",
+      "MeshDisciplineRefTest.RectangularWingArea",
+      "MeshDisciplineRefTest.TaperedWingArea"
+    ],
+    "rust_parity_cases": 488
+  },
+  "cases": [
+    {
+      "cpp_test": "CubicSplineTest.LinearDataInterpolation",
+      "rust_test": "parity_000_cubicsplinetest_lineardatainterpolation",
+      "category": "geometry",
+      "tolerance": 1e-12,
+      "enabled": true
+    },
+    {
+      "cpp_test": "CubicSplineTest.QuadraticDataWithMatchingBoundaryConditions",
+      "rust_test": "parity_001_cubicsplinetest_quadraticdatawithmatchingboundaryconditions",
+      "category": "geometry",
+      "tolerance": 1e-12,
+      "enabled": true
+    },
+    {
+      "cpp_test": "CubicSplineTest.SinusoidalData",
+      "rust_test": "parity_002_cubicsplinetest_sinusoidaldata",
+      "category": "geometry",
+      "tolerance": 1e-12,
+      "enabled": true
+    },
+    {
+      "cpp_test": "CubicSplineTest.EvaluateAllConsistency",
+      "rust_test": "parity_003_cubicsplinetest_evaluateallconsistency",
+      "category": "geometry",
+      "tolerance": 1e-12,
+      "enabled": true
+    },
+    {
+      "cpp_test": "CubicSplineTest.EndpointInterpolation",
+      "rust_test": "parity_004_cubicsplinetest_endpointinterpolation",
+      "category": "geometry",
+      "tolerance": 1e-12,
+      "enabled": true
+    },
+    {
+      "cpp_test": "CubicSplineTest.SpecifiedSlopeBoundaryCondition",
+      "rust_test": "parity_005_cubicsplinetest_specifiedslopeboundarycondition",
+      "category": "geometry",
+      "tolerance": 1e-12,
+      "enabled": true
+    },
+    {
+      "cpp_test": "CubicSplineTest.TwoPointSpline",
+      "rust_test": "parity_006_cubicsplinetest_twopointspline",
+      "category": "geometry",
+      "tolerance": 1e-12,
+      "enabled": true
+    },
+    {
+      "cpp_test": "CubicSplineTest.NonUniformSpacing",
+      "rust_test": "parity_007_cubicsplinetest_nonuniformspacing",
+      "category": "geometry",
+      "tolerance": 1e-12,
+      "enabled": true
+    },
+    {
+      "cpp_test": "CubicSplineTest.ExtrapolationBehavior",
+      "rust_test": "parity_008_cubicsplinetest_extrapolationbehavior",
+      "category": "geometry",
+      "tolerance": 1e-12,
+      "enabled": true
+    },
+    {
+      "cpp_test": "CubicSplineTest.InvalidInputThrows",
+      "rust_test": "parity_009_cubicsplinetest_invalidinputthrows",
+      "category": "geometry",
+      "tolerance": 1e-12,
+      "enabled": true
+    },
+    {
+      "cpp_test": "CubicSplineTest.EvaluateBeforeBuildThrows",
+      "rust_test": "parity_010_cubicsplinetest_evaluatebeforebuildthrows",
+      "category": "geometry",
+      "tolerance": 1e-12,
+      "enabled": true
+    },
+    {
+      "cpp_test": "CubicSplineTest.ValidityAndSizeQueries",
+      "rust_test": "parity_011_cubicsplinetest_validityandsizequeries",
+      "category": "geometry",
+      "tolerance": 1e-12,
+      "enabled": true
+    },
+    {
+      "cpp_test": "AirfoilTest.FlatPlateCreation",
+      "rust_test": "parity_012_airfoiltest_flatplatecreation",
+      "category": "geometry",
+      "tolerance": 1e-12,
+      "enabled": true
+    },
+    {
+      "cpp_test": "AirfoilTest.Naca0012Creation",
+      "rust_test": "parity_013_airfoiltest_naca0012creation",
+      "category": "geometry",
+      "tolerance": 1e-12,
+      "enabled": true
+    },
+    {
+      "cpp_test": "AirfoilTest.Naca2412Creation",
+      "rust_test": "parity_014_airfoiltest_naca2412creation",
+      "category": "geometry",
+      "tolerance": 1e-12,
+      "enabled": true
+    },
+    {
+      "cpp_test": "AirfoilTest.Naca4DigitFromString",
+      "rust_test": "parity_015_airfoiltest_naca4digitfromstring",
+      "category": "geometry",
+      "tolerance": 1e-12,
+      "enabled": true
+    },
+    {
+      "cpp_test": "AirfoilTest.CamberSlopeAtLeadingEdge",
+      "rust_test": "parity_016_airfoiltest_camberslopeatleadingedge",
+      "category": "geometry",
+      "tolerance": 1e-12,
+      "enabled": true
+    },
+    {
+      "cpp_test": "AirfoilExtraTest.InvalidNacaString",
+      "rust_test": "parity_017_airfoilextratest_invalidnacastring",
+      "category": "geometry",
+      "tolerance": 1e-12,
+      "enabled": true
+    },
+    {
+      "cpp_test": "AirfoilExtraTest.NacaCodeOutOfRange",
+      "rust_test": "parity_018_airfoilextratest_nacacodeoutofrange",
+      "category": "geometry",
+      "tolerance": 1e-12,
+      "enabled": true
+    },
+    {
+      "cpp_test": "AirfoilExtraTest.NacaZeroThickness",
+      "rust_test": "parity_019_airfoilextratest_nacazerothickness",
+      "category": "geometry",
+      "tolerance": 1e-12,
+      "enabled": true
+    },
+    {
+      "cpp_test": "AirfoilExtraTest.EvaluateThicknessNaca0012",
+      "rust_test": "parity_020_airfoilextratest_evaluatethicknessnaca0012",
+      "category": "geometry",
+      "tolerance": 1e-12,
+      "enabled": true
+    },
+    {
+      "cpp_test": "AirfoilExtraTest.EvaluateCamberClamping",
+      "rust_test": "parity_021_airfoilextratest_evaluatecamberclamping",
+      "category": "geometry",
+      "tolerance": 1e-12,
+      "enabled": true
+    },
+    {
+      "cpp_test": "AirfoilExtraTest.InvalidAirfoilReturnsZero",
+      "rust_test": "parity_022_airfoilextratest_invalidairfoilreturnszero",
+      "category": "geometry",
+      "tolerance": 1e-12,
+      "enabled": true
+    },
+    {
+      "cpp_test": "AirfoilExtraTest.SetName",
+      "rust_test": "parity_023_airfoilextratest_setname",
+      "category": "geometry",
+      "tolerance": 1e-12,
+      "enabled": true
+    },
+    {
+      "cpp_test": "AirfoilExtraTest.CreateFromCoordinatesCamberLine",
+      "rust_test": "parity_024_airfoilextratest_createfromcoordinatescamberline",
+      "category": "geometry",
+      "tolerance": 1e-12,
+      "enabled": true
+    },
+    {
+      "cpp_test": "AirfoilExtraTest.CreateFromCoordinatesMismatch",
+      "rust_test": "parity_025_airfoilextratest_createfromcoordinatesmismatch",
+      "category": "geometry",
+      "tolerance": 1e-12,
+      "enabled": true
+    },
+    {
+      "cpp_test": "AirfoilExtraTest.CreateFromCoordinatesTooFew",
+      "rust_test": "parity_026_airfoilextratest_createfromcoordinatestoofew",
+      "category": "geometry",
+      "tolerance": 1e-12,
+      "enabled": true
+    },
+    {
+      "cpp_test": "AirfoilExtraTest.CreateFromCoordinatesFullAirfoil",
+      "rust_test": "parity_027_airfoilextratest_createfromcoordinatesfullairfoil",
+      "category": "geometry",
+      "tolerance": 1e-12,
+      "enabled": true
+    },
+    {
+      "cpp_test": "AirfoilExtraTest.CreateFromCoordinateFileNotFound",
+      "rust_test": "parity_028_airfoilextratest_createfromcoordinatefilenotfound",
+      "category": "geometry",
+      "tolerance": 1e-12,
+      "enabled": true
+    },
+    {
+      "cpp_test": "AirfoilExtraTest.CamberXY",
+      "rust_test": "parity_029_airfoilextratest_camberxy",
+      "category": "geometry",
+      "tolerance": 1e-12,
+      "enabled": true
+    },
+    {
+      "cpp_test": "SectionTest.DefaultConstruction",
+      "rust_test": "parity_030_sectiontest_defaultconstruction",
+      "category": "geometry",
+      "tolerance": 1e-12,
+      "enabled": true
+    },
+    {
+      "cpp_test": "SectionTest.ParameterizedConstruction",
+      "rust_test": "parity_031_sectiontest_parameterizedconstruction",
+      "category": "geometry",
+      "tolerance": 1e-12,
+      "enabled": true
+    },
+    {
+      "cpp_test": "SectionTest.AirfoilAssignment",
+      "rust_test": "parity_032_sectiontest_airfoilassignment",
+      "category": "geometry",
+      "tolerance": 1e-12,
+      "enabled": true
+    },
+    {
+      "cpp_test": "SectionTest.ControlSurface",
+      "rust_test": "parity_033_sectiontest_controlsurface",
+      "category": "geometry",
+      "tolerance": 1e-12,
+      "enabled": true
+    },
+    {
+      "cpp_test": "SurfaceTest.BasicConstruction",
+      "rust_test": "parity_034_surfacetest_basicconstruction",
+      "category": "geometry",
+      "tolerance": 1e-12,
+      "enabled": true
+    },
+    {
+      "cpp_test": "SurfaceTest.AddSections",
+      "rust_test": "parity_035_surfacetest_addsections",
+      "category": "geometry",
+      "tolerance": 1e-12,
+      "enabled": true
+    },
+    {
+      "cpp_test": "SurfaceTest.PlanformAreaRectangular",
+      "rust_test": "parity_036_surfacetest_planformarearectangular",
+      "category": "geometry",
+      "tolerance": 1e-12,
+      "enabled": true
+    },
+    {
+      "cpp_test": "SurfaceTest.PlanformAreaTapered",
+      "rust_test": "parity_037_surfacetest_planformareatapered",
+      "category": "geometry",
+      "tolerance": 1e-12,
+      "enabled": true
+    },
+    {
+      "cpp_test": "SurfaceTest.YDuplicateDoublesArea",
+      "rust_test": "parity_038_surfacetest_yduplicatedoublesarea",
+      "category": "geometry",
+      "tolerance": 1e-12,
+      "enabled": true
+    },
+    {
+      "cpp_test": "SurfaceExtraTest.MeanAerodynamicChordRectangular",
+      "rust_test": "parity_039_surfaceextratest_meanaerodynamicchordrectangular",
+      "category": "geometry",
+      "tolerance": 1e-12,
+      "enabled": true
+    },
+    {
+      "cpp_test": "SurfaceExtraTest.MeanAerodynamicChordTapered",
+      "rust_test": "parity_040_surfaceextratest_meanaerodynamicchordtapered",
+      "category": "geometry",
+      "tolerance": 1e-12,
+      "enabled": true
+    },
+    {
+      "cpp_test": "SurfaceExtraTest.MeanAerodynamicChordSingleSection",
+      "rust_test": "parity_041_surfaceextratest_meanaerodynamicchordsinglesection",
+      "category": "geometry",
+      "tolerance": 1e-12,
+      "enabled": true
+    },
+    {
+      "cpp_test": "SurfaceExtraTest.MeanAerodynamicChordEmpty",
+      "rust_test": "parity_042_surfaceextratest_meanaerodynamicchordempty",
+      "category": "geometry",
+      "tolerance": 1e-12,
+      "enabled": true
+    },
+    {
+      "cpp_test": "SurfaceExtraTest.ComputeSpan",
+      "rust_test": "parity_043_surfaceextratest_computespan",
+      "category": "geometry",
+      "tolerance": 1e-12,
+      "enabled": true
+    },
+    {
+      "cpp_test": "SurfaceExtraTest.ComputeSpanYDuplicate",
+      "rust_test": "parity_044_surfaceextratest_computespanyduplicate",
+      "category": "geometry",
+      "tolerance": 1e-12,
+      "enabled": true
+    },
+    {
+      "cpp_test": "SurfaceExtraTest.ComputeSpanEmpty",
+      "rust_test": "parity_045_surfaceextratest_computespanempty",
+      "category": "geometry",
+      "tolerance": 1e-12,
+      "enabled": true
+    },
+    {
+      "cpp_test": "SurfaceExtraTest.PlanformAreaSingleSection",
+      "rust_test": "parity_046_surfaceextratest_planformareasinglesection",
+      "category": "geometry",
+      "tolerance": 1e-12,
+      "enabled": true
+    },
+    {
+      "cpp_test": "SurfaceExtraTest.HasViscousDragDefault",
+      "rust_test": "parity_047_surfaceextratest_hasviscousdragdefault",
+      "category": "geometry",
+      "tolerance": 1e-12,
+      "enabled": true
+    },
+    {
+      "cpp_test": "SurfaceExtraTest.HasViscousDragNonZero",
+      "rust_test": "parity_048_surfaceextratest_hasviscousdragnonzero",
+      "category": "geometry",
+      "tolerance": 1e-12,
+      "enabled": true
+    },
+    {
+      "cpp_test": "SurfaceExtraTest.ChordwiseSpacingNumeric",
+      "rust_test": "parity_049_surfaceextratest_chordwisespacingnumeric",
+      "category": "geometry",
+      "tolerance": 1e-12,
+      "enabled": true
+    },
+    {
+      "cpp_test": "SurfaceExtraTest.SpanwiseSpacingNumeric",
+      "rust_test": "parity_050_surfaceextratest_spanwisespacingnumeric",
+      "category": "geometry",
+      "tolerance": 1e-12,
+      "enabled": true
+    },
+    {
+      "cpp_test": "SurfaceExtraTest.ClearYDuplicate",
+      "rust_test": "parity_051_surfaceextratest_clearyduplicate",
+      "category": "geometry",
+      "tolerance": 1e-12,
+      "enabled": true
+    },
+    {
+      "cpp_test": "SurfaceExtraTest.AerodynamicOptions",
+      "rust_test": "parity_052_surfaceextratest_aerodynamicoptions",
+      "category": "geometry",
+      "tolerance": 1e-12,
+      "enabled": true
+    },
+    {
+      "cpp_test": "SurfaceExtraTest.CoordinateTransforms",
+      "rust_test": "parity_053_surfaceextratest_coordinatetransforms",
+      "category": "geometry",
+      "tolerance": 1e-12,
+      "enabled": true
+    },
+    {
+      "cpp_test": "SurfaceExtraTest.ComponentIndex",
+      "rust_test": "parity_054_surfaceextratest_componentindex",
+      "category": "geometry",
+      "tolerance": 1e-12,
+      "enabled": true
+    },
+    {
+      "cpp_test": "SurfaceExtraTest.SectionAccessors",
+      "rust_test": "parity_055_surfaceextratest_sectionaccessors",
+      "category": "geometry",
+      "tolerance": 1e-12,
+      "enabled": true
+    },
+    {
+      "cpp_test": "AircraftTest.DefaultValues",
+      "rust_test": "parity_056_aircrafttest_defaultvalues",
+      "category": "geometry",
+      "tolerance": 1e-12,
+      "enabled": true
+    },
+    {
+      "cpp_test": "AircraftTest.AddSurface",
+      "rust_test": "parity_057_aircrafttest_addsurface",
+      "category": "geometry",
+      "tolerance": 1e-12,
+      "enabled": true
+    },
+    {
+      "cpp_test": "AircraftTest.FindSurfaceByName",
+      "rust_test": "parity_058_aircrafttest_findsurfacebyname",
+      "category": "geometry",
+      "tolerance": 1e-12,
+      "enabled": true
+    },
+    {
+      "cpp_test": "AircraftTest.ReferenceQuantities",
+      "rust_test": "parity_059_aircrafttest_referencequantities",
+      "category": "geometry",
+      "tolerance": 1e-12,
+      "enabled": true
+    },
+    {
+      "cpp_test": "AircraftTest.FlowConditions",
+      "rust_test": "parity_060_aircrafttest_flowconditions",
+      "category": "geometry",
+      "tolerance": 1e-12,
+      "enabled": true
+    },
+    {
+      "cpp_test": "AircraftTest.Symmetry",
+      "rust_test": "parity_061_aircrafttest_symmetry",
+      "category": "geometry",
+      "tolerance": 1e-12,
+      "enabled": true
+    },
+    {
+      "cpp_test": "AircraftTest.Bodies",
+      "rust_test": "parity_062_aircrafttest_bodies",
+      "category": "geometry",
+      "tolerance": 1e-12,
+      "enabled": true
+    },
+    {
+      "cpp_test": "AircraftTest.SurfaceAccessors",
+      "rust_test": "parity_063_aircrafttest_surfaceaccessors",
+      "category": "geometry",
+      "tolerance": 1e-12,
+      "enabled": true
+    },
+    {
+      "cpp_test": "AircraftTest.MoveSurface",
+      "rust_test": "parity_064_aircrafttest_movesurface",
+      "category": "geometry",
+      "tolerance": 1e-12,
+      "enabled": true
+    },
+    {
+      "cpp_test": "AircraftTest.ControlSurfaceNames",
+      "rust_test": "parity_065_aircrafttest_controlsurfacenames",
+      "category": "geometry",
+      "tolerance": 1e-12,
+      "enabled": true
+    },
+    {
+      "cpp_test": "AircraftTest.DesignVariableNames",
+      "rust_test": "parity_066_aircrafttest_designvariablenames",
+      "category": "geometry",
+      "tolerance": 1e-12,
+      "enabled": true
+    },
+    {
+      "cpp_test": "AircraftTest.ComputeTotalVortexCount",
+      "rust_test": "parity_067_aircrafttest_computetotalvortexcount",
+      "category": "geometry",
+      "tolerance": 1e-12,
+      "enabled": true
+    },
+    {
+      "cpp_test": "AircraftTest.ComputeTotalVortexCountYDuplicate",
+      "rust_test": "parity_068_aircrafttest_computetotalvortexcountyduplicate",
+      "category": "geometry",
+      "tolerance": 1e-12,
+      "enabled": true
+    },
+    {
+      "cpp_test": "AircraftTest.ComputeTotalStripCount",
+      "rust_test": "parity_069_aircrafttest_computetotalstripcount",
+      "category": "geometry",
+      "tolerance": 1e-12,
+      "enabled": true
+    },
+    {
+      "cpp_test": "AircraftTest.ComputeTotalStripCountYDuplicate",
+      "rust_test": "parity_070_aircrafttest_computetotalstripcountyduplicate",
+      "category": "geometry",
+      "tolerance": 1e-12,
+      "enabled": true
+    },
+    {
+      "cpp_test": "AircraftTest.ComputeTotalPlanformArea",
+      "rust_test": "parity_071_aircrafttest_computetotalplanformarea",
+      "category": "geometry",
+      "tolerance": 1e-12,
+      "enabled": true
+    },
+    {
+      "cpp_test": "AircraftTest.ComputeTotalSpan",
+      "rust_test": "parity_072_aircrafttest_computetotalspan",
+      "category": "geometry",
+      "tolerance": 1e-12,
+      "enabled": true
+    },
+    {
+      "cpp_test": "AvlReaderTest.ParseSimpleGeometry",
+      "rust_test": "parity_073_avlreadertest_parsesimplegeometry",
+      "category": "io",
+      "tolerance": 0.0,
+      "enabled": true
+    },
+    {
+      "cpp_test": "AvlReaderTest.ParseWithNacaAirfoil",
+      "rust_test": "parity_074_avlreadertest_parsewithnacaairfoil",
+      "category": "io",
+      "tolerance": 0.0,
+      "enabled": true
+    },
+    {
+      "cpp_test": "AvlReaderTest.ParseWithYDuplicate",
+      "rust_test": "parity_075_avlreadertest_parsewithyduplicate",
+      "category": "io",
+      "tolerance": 0.0,
+      "enabled": true
+    },
+    {
+      "cpp_test": "AvlReaderTest.ParseWithControlSurface",
+      "rust_test": "parity_076_avlreadertest_parsewithcontrolsurface",
+      "category": "io",
+      "tolerance": 0.0,
+      "enabled": true
+    },
+    {
+      "cpp_test": "AvlReaderExtraTest.ReadFileNotFound",
+      "rust_test": "parity_077_avlreaderextratest_readfilenotfound",
+      "category": "io",
+      "tolerance": 0.0,
+      "enabled": true
+    },
+    {
+      "cpp_test": "AvlReaderExtraTest.ParseEmptyContent",
+      "rust_test": "parity_078_avlreaderextratest_parseemptycontent",
+      "category": "io",
+      "tolerance": 0.0,
+      "enabled": true
+    },
+    {
+      "cpp_test": "AvlReaderExtraTest.ParseWithComments",
+      "rust_test": "parity_079_avlreaderextratest_parsewithcomments",
+      "category": "io",
+      "tolerance": 0.0,
+      "enabled": true
+    },
+    {
+      "cpp_test": "AvlReaderExtraTest.ParseWithProfileDrag",
+      "rust_test": "parity_080_avlreaderextratest_parsewithprofiledrag",
+      "category": "io",
+      "tolerance": 0.0,
+      "enabled": true
+    },
+    {
+      "cpp_test": "AvlReaderExtraTest.ParseWithSymmetry",
+      "rust_test": "parity_081_avlreaderextratest_parsewithsymmetry",
+      "category": "io",
+      "tolerance": 0.0,
+      "enabled": true
+    },
+    {
+      "cpp_test": "AvlReaderExtraTest.ParseSurfaceModifiers",
+      "rust_test": "parity_082_avlreaderextratest_parsesurfacemodifiers",
+      "category": "io",
+      "tolerance": 0.0,
+      "enabled": true
+    },
+    {
+      "cpp_test": "AvlReaderExtraTest.ParseSectionSpanwise",
+      "rust_test": "parity_083_avlreaderextratest_parsesectionspanwise",
+      "category": "io",
+      "tolerance": 0.0,
+      "enabled": true
+    },
+    {
+      "cpp_test": "AvlReaderExtraTest.ParseWithDesignVariable",
+      "rust_test": "parity_084_avlreaderextratest_parsewithdesignvariable",
+      "category": "io",
+      "tolerance": 0.0,
+      "enabled": true
+    },
+    {
+      "cpp_test": "AvlReaderExtraTest.ParseWithBody",
+      "rust_test": "parity_085_avlreaderextratest_parsewithbody",
+      "category": "io",
+      "tolerance": 0.0,
+      "enabled": true
+    },
+    {
+      "cpp_test": "AvlReaderExtraTest.ParseBodyAtEnd",
+      "rust_test": "parity_086_avlreaderextratest_parsebodyatend",
+      "category": "io",
+      "tolerance": 0.0,
+      "enabled": true
+    },
+    {
+      "cpp_test": "AvlReaderExtraTest.ParseVerbose",
+      "rust_test": "parity_087_avlreaderextratest_parseverbose",
+      "category": "io",
+      "tolerance": 0.0,
+      "enabled": true
+    },
+    {
+      "cpp_test": "AvlReaderExtraTest.ParseMomentReference",
+      "rust_test": "parity_088_avlreaderextratest_parsemomentreference",
+      "category": "io",
+      "tolerance": 0.0,
+      "enabled": true
+    },
+    {
+      "cpp_test": "AvlReaderExtraTest.ParseMultipleSurfaces",
+      "rust_test": "parity_089_avlreaderextratest_parsemultiplesurfaces",
+      "category": "io",
+      "tolerance": 0.0,
+      "enabled": true
+    },
+    {
+      "cpp_test": "VortexLatticeTest.EmptyAircraft",
+      "rust_test": "parity_090_vortexlatticetest_emptyaircraft",
+      "category": "solver",
+      "tolerance": 1e-10,
+      "enabled": true
+    },
+    {
+      "cpp_test": "VortexLatticeTest.RectangularWingBasicCounts",
+      "rust_test": "parity_091_vortexlatticetest_rectangularwingbasiccounts",
+      "category": "solver",
+      "tolerance": 1e-10,
+      "enabled": true
+    },
+    {
+      "cpp_test": "VortexLatticeTest.RectangularWingGeometry",
+      "rust_test": "parity_092_vortexlatticetest_rectangularwinggeometry",
+      "category": "solver",
+      "tolerance": 1e-10,
+      "enabled": true
+    },
+    {
+      "cpp_test": "VortexLatticeTest.VortexQuarterChord",
+      "rust_test": "parity_093_vortexlatticetest_vortexquarterchord",
+      "category": "solver",
+      "tolerance": 1e-10,
+      "enabled": true
+    },
+    {
+      "cpp_test": "VortexLatticeTest.ControlPointThreeQuarterChord",
+      "rust_test": "parity_094_vortexlatticetest_controlpointthreequarterchord",
+      "category": "solver",
+      "tolerance": 1e-10,
+      "enabled": true
+    },
+    {
+      "cpp_test": "VortexLatticeTest.NormalVectorsFlatWing",
+      "rust_test": "parity_095_vortexlatticetest_normalvectorsflatwing",
+      "category": "solver",
+      "tolerance": 1e-10,
+      "enabled": true
+    },
+    {
+      "cpp_test": "VortexLatticeTest.TwistedWingNormals",
+      "rust_test": "parity_096_vortexlatticetest_twistedwingnormals",
+      "category": "solver",
+      "tolerance": 1e-10,
+      "enabled": true
+    },
+    {
+      "cpp_test": "VortexLatticeTest.YDuplicateSymmetry",
+      "rust_test": "parity_097_vortexlatticetest_yduplicatesymmetry",
+      "category": "solver",
+      "tolerance": 1e-10,
+      "enabled": true
+    },
+    {
+      "cpp_test": "VortexLatticeTest.TaperedWingChordDistribution",
+      "rust_test": "parity_098_vortexlatticetest_taperedwingchorddistribution",
+      "category": "solver",
+      "tolerance": 1e-10,
+      "enabled": true
+    },
+    {
+      "cpp_test": "VortexLatticeTest.SurfaceInfoConsistency",
+      "rust_test": "parity_099_vortexlatticetest_surfaceinfoconsistency",
+      "category": "solver",
+      "tolerance": 1e-10,
+      "enabled": true
+    },
+    {
+      "cpp_test": "VortexLatticeTest.StripVortexIndicesConsistent",
+      "rust_test": "parity_100_vortexlatticetest_stripvortexindicesconsistent",
+      "category": "solver",
+      "tolerance": 1e-10,
+      "enabled": true
+    },
+    {
+      "cpp_test": "VortexLatticeTest.ClearAndRegenerate",
+      "rust_test": "parity_101_vortexlatticetest_clearandregenerate",
+      "category": "solver",
+      "tolerance": 1e-10,
+      "enabled": true
+    },
+    {
+      "cpp_test": "VortexLatticeTest.CoreRadiusFractions",
+      "rust_test": "parity_102_vortexlatticetest_coreradiusfractions",
+      "category": "solver",
+      "tolerance": 1e-10,
+      "enabled": true
+    },
+    {
+      "cpp_test": "VortexLatticeTest.GetMeshInputNullByDefault",
+      "rust_test": "parity_103_vortexlatticetest_getmeshinputnullbydefault",
+      "category": "solver",
+      "tolerance": 1e-10,
+      "enabled": true
+    },
+    {
+      "cpp_test": "VortexLatticeTest.MutableVortexAccess",
+      "rust_test": "parity_104_vortexlatticetest_mutablevortexaccess",
+      "category": "solver",
+      "tolerance": 1e-10,
+      "enabled": true
+    },
+    {
+      "cpp_test": "VortexLatticeTest.MutableStripAccess",
+      "rust_test": "parity_105_vortexlatticetest_mutablestripaccess",
+      "category": "solver",
+      "tolerance": 1e-10,
+      "enabled": true
+    },
+    {
+      "cpp_test": "VortexLatticeTest.GetVorticesMutable",
+      "rust_test": "parity_106_vortexlatticetest_getvorticesmutable",
+      "category": "solver",
+      "tolerance": 1e-10,
+      "enabled": true
+    },
+    {
+      "cpp_test": "VortexLatticeTest.GetStripsMutable",
+      "rust_test": "parity_107_vortexlatticetest_getstripsmutable",
+      "category": "solver",
+      "tolerance": 1e-10,
+      "enabled": true
+    },
+    {
+      "cpp_test": "VortexLatticeTest.ControlSurfaceNamesEmpty",
+      "rust_test": "parity_108_vortexlatticetest_controlsurfacenamesempty",
+      "category": "solver",
+      "tolerance": 1e-10,
+      "enabled": true
+    },
+    {
+      "cpp_test": "VortexLatticeTest.ControlSurfaceInfluencesSize",
+      "rust_test": "parity_109_vortexlatticetest_controlsurfaceinfluencessize",
+      "category": "solver",
+      "tolerance": 1e-10,
+      "enabled": true
+    },
+    {
+      "cpp_test": "VortexLatticeTest.RecalculateNormals",
+      "rust_test": "parity_110_vortexlatticetest_recalculatenormals",
+      "category": "solver",
+      "tolerance": 1e-10,
+      "enabled": true
+    },
+    {
+      "cpp_test": "VortexLatticeTest.TwistOffsetEquivalentToGeometricTwist",
+      "rust_test": "parity_111_vortexlatticetest_twistoffsetequivalenttogeometrictwist",
+      "category": "solver",
+      "tolerance": 1e-10,
+      "enabled": true
+    },
+    {
+      "cpp_test": "BiotSavartTest.VelocityAboveBoundVortex",
+      "rust_test": "parity_112_biotsavarttest_velocityaboveboundvortex",
+      "category": "gradients",
+      "tolerance": 2e-05,
+      "enabled": true
+    },
+    {
+      "cpp_test": "BiotSavartTest.VelocitySymmetry",
+      "rust_test": "parity_113_biotsavarttest_velocitysymmetry",
+      "category": "gradients",
+      "tolerance": 2e-05,
+      "enabled": true
+    },
+    {
+      "cpp_test": "BiotSavartTest.CoreRegularization",
+      "rust_test": "parity_114_biotsavarttest_coreregularization",
+      "category": "gradients",
+      "tolerance": 2e-05,
+      "enabled": true
+    },
+    {
+      "cpp_test": "BiotSavartTest.PrandtlGlauertCorrection",
+      "rust_test": "parity_115_biotsavarttest_prandtlglauertcorrection",
+      "category": "gradients",
+      "tolerance": 2e-05,
+      "enabled": true
+    },
+    {
+      "cpp_test": "BiotSavartTest.ExcludeBoundVortex",
+      "rust_test": "parity_116_biotsavarttest_excludeboundvortex",
+      "category": "gradients",
+      "tolerance": 2e-05,
+      "enabled": true
+    },
+    {
+      "cpp_test": "BiotSavartTest.TrailingVortexInDownstreamField",
+      "rust_test": "parity_117_biotsavarttest_trailingvortexindownstreamfield",
+      "category": "gradients",
+      "tolerance": 2e-05,
+      "enabled": true
+    },
+    {
+      "cpp_test": "InfluenceMatrixTest.VelocityMatrixDimensions",
+      "rust_test": "parity_118_influencematrixtest_velocitymatrixdimensions",
+      "category": "solver",
+      "tolerance": 1e-10,
+      "enabled": true
+    },
+    {
+      "cpp_test": "InfluenceMatrixTest.AICMatrixDimensions",
+      "rust_test": "parity_119_influencematrixtest_aicmatrixdimensions",
+      "category": "solver",
+      "tolerance": 1e-10,
+      "enabled": true
+    },
+    {
+      "cpp_test": "InfluenceMatrixTest.AICDiagonalDominance",
+      "rust_test": "parity_120_influencematrixtest_aicdiagonaldominance",
+      "category": "solver",
+      "tolerance": 1e-10,
+      "enabled": true
+    },
+    {
+      "cpp_test": "InfluenceMatrixTest.AICMatrixNonsingular",
+      "rust_test": "parity_121_influencematrixtest_aicmatrixnonsingular",
+      "category": "solver",
+      "tolerance": 1e-10,
+      "enabled": true
+    },
+    {
+      "cpp_test": "InfluenceMatrixTest.MachNumberEffect",
+      "rust_test": "parity_122_influencematrixtest_machnumbereffect",
+      "category": "solver",
+      "tolerance": 1e-10,
+      "enabled": true
+    },
+    {
+      "cpp_test": "InfluenceMatrixTest.InducedVelocityFromMatrix",
+      "rust_test": "parity_123_influencematrixtest_inducedvelocityfrommatrix",
+      "category": "solver",
+      "tolerance": 1e-10,
+      "enabled": true
+    },
+    {
+      "cpp_test": "InfluenceMatrixTest.SupersonicMachClamped",
+      "rust_test": "parity_124_influencematrixtest_supersonicmachclamped",
+      "category": "solver",
+      "tolerance": 1e-10,
+      "enabled": true
+    },
+    {
+      "cpp_test": "InfluenceMatrixTest.ComputeInducedVelocity",
+      "rust_test": "parity_125_influencematrixtest_computeinducedvelocity",
+      "category": "solver",
+      "tolerance": 1e-10,
+      "enabled": true
+    },
+    {
+      "cpp_test": "InfluenceMatrixTest.ComputeSingleVortexVelocity",
+      "rust_test": "parity_126_influencematrixtest_computesinglevortexvelocity",
+      "category": "solver",
+      "tolerance": 1e-10,
+      "enabled": true
+    },
+    {
+      "cpp_test": "InfluenceMatrixTest.YSymmetryInfluence",
+      "rust_test": "parity_127_influencematrixtest_ysymmetryinfluence",
+      "category": "solver",
+      "tolerance": 1e-10,
+      "enabled": true
+    },
+    {
+      "cpp_test": "InfluenceMatrixTest.DifferentComponentCoreRadius",
+      "rust_test": "parity_128_influencematrixtest_differentcomponentcoreradius",
+      "category": "solver",
+      "tolerance": 1e-10,
+      "enabled": true
+    },
+    {
+      "cpp_test": "InfluenceMatrixTest.InducedVelocityWithYSymmetry",
+      "rust_test": "parity_129_influencematrixtest_inducedvelocitywithysymmetry",
+      "category": "solver",
+      "tolerance": 1e-10,
+      "enabled": true
+    },
+    {
+      "cpp_test": "VortexLatticeSolverTest.SetAircraftGeneratesMesh",
+      "rust_test": "parity_130_vortexlatticesolvertest_setaircraftgeneratesmesh",
+      "category": "solver",
+      "tolerance": 1e-10,
+      "enabled": true
+    },
+    {
+      "cpp_test": "VortexLatticeSolverTest.RebuildAICCreatesValidMatrix",
+      "rust_test": "parity_131_vortexlatticesolvertest_rebuildaiccreatesvalidmatrix",
+      "category": "solver",
+      "tolerance": 1e-10,
+      "enabled": true
+    },
+    {
+      "cpp_test": "VortexLatticeSolverTest.SolveUnitResponsesComputes6Columns",
+      "rust_test": "parity_132_vortexlatticesolvertest_solveunitresponsescomputes6columns",
+      "category": "solver",
+      "tolerance": 1e-10,
+      "enabled": true
+    },
+    {
+      "cpp_test": "VortexLatticeSolverTest.SolveAtZeroAlphaGivesZeroCirculation",
+      "rust_test": "parity_133_vortexlatticesolvertest_solveatzeroalphagiveszerocirculation",
+      "category": "solver",
+      "tolerance": 1e-10,
+      "enabled": true
+    },
+    {
+      "cpp_test": "VortexLatticeSolverTest.SolveAtPositiveAlphaGivesPositiveCirculation",
+      "rust_test": "parity_134_vortexlatticesolvertest_solveatpositivealphagivespositivecirculation",
+      "category": "solver",
+      "tolerance": 1e-10,
+      "enabled": true
+    },
+    {
+      "cpp_test": "VortexLatticeSolverTest.CirculationLinearWithAlpha",
+      "rust_test": "parity_135_vortexlatticesolvertest_circulationlinearwithalpha",
+      "category": "solver",
+      "tolerance": 1e-10,
+      "enabled": true
+    },
+    {
+      "cpp_test": "VortexLatticeSolverTest.FreestreamDirectionComputation",
+      "rust_test": "parity_136_vortexlatticesolvertest_freestreamdirectioncomputation",
+      "category": "solver",
+      "tolerance": 1e-10,
+      "enabled": true
+    },
+    {
+      "cpp_test": "VortexLatticeSolverTest.MachNumberChangeInvalidatesAIC",
+      "rust_test": "parity_137_vortexlatticesolvertest_machnumberchangeinvalidatesaic",
+      "category": "solver",
+      "tolerance": 1e-10,
+      "enabled": true
+    },
+    {
+      "cpp_test": "VortexLatticeSolverTest.HighAspectRatioWingLiftSlope",
+      "rust_test": "parity_138_vortexlatticesolvertest_highaspectratiowingliftslope",
+      "category": "solver",
+      "tolerance": 1e-10,
+      "enabled": true
+    },
+    {
+      "cpp_test": "VortexLatticeSolverTest.EllipticLiftDistributionShape",
+      "rust_test": "parity_139_vortexlatticesolvertest_ellipticliftdistributionshape",
+      "category": "solver",
+      "tolerance": 1e-10,
+      "enabled": true
+    },
+    {
+      "cpp_test": "VortexLatticeSolverTest.YDuplicateProducesSymmetricCirculation",
+      "rust_test": "parity_140_vortexlatticesolvertest_yduplicateproducessymmetriccirculation",
+      "category": "solver",
+      "tolerance": 1e-10,
+      "enabled": true
+    },
+    {
+      "cpp_test": "VortexLatticeSolverTest.InducedVelocityAtControlPoints",
+      "rust_test": "parity_141_vortexlatticesolvertest_inducedvelocityatcontrolpoints",
+      "category": "solver",
+      "tolerance": 1e-10,
+      "enabled": true
+    },
+    {
+      "cpp_test": "VortexLatticeSolverTest.GetMeshMutable",
+      "rust_test": "parity_142_vortexlatticesolvertest_getmeshmutable",
+      "category": "solver",
+      "tolerance": 1e-10,
+      "enabled": true
+    },
+    {
+      "cpp_test": "VortexLatticeSolverTest.GetReferenceQuantities",
+      "rust_test": "parity_143_vortexlatticesolvertest_getreferencequantities",
+      "category": "solver",
+      "tolerance": 1e-10,
+      "enabled": true
+    },
+    {
+      "cpp_test": "VortexLatticeSolverTest.SetReferencePoint",
+      "rust_test": "parity_144_vortexlatticesolvertest_setreferencepoint",
+      "category": "solver",
+      "tolerance": 1e-10,
+      "enabled": true
+    },
+    {
+      "cpp_test": "VortexLatticeSolverTest.SetSymmetry",
+      "rust_test": "parity_145_vortexlatticesolvertest_setsymmetry",
+      "category": "solver",
+      "tolerance": 1e-10,
+      "enabled": true
+    },
+    {
+      "cpp_test": "VortexLatticeSolverTest.InitialStateInvalid",
+      "rust_test": "parity_146_vortexlatticesolvertest_initialstateinvalid",
+      "category": "solver",
+      "tolerance": 1e-10,
+      "enabled": true
+    },
+    {
+      "cpp_test": "VortexLatticeSolverTest.GetSolution",
+      "rust_test": "parity_147_vortexlatticesolvertest_getsolution",
+      "category": "solver",
+      "tolerance": 1e-10,
+      "enabled": true
+    },
+    {
+      "cpp_test": "VortexLatticeSolverTest.GetMatrices",
+      "rust_test": "parity_148_vortexlatticesolvertest_getmatrices",
+      "category": "solver",
+      "tolerance": 1e-10,
+      "enabled": true
+    },
+    {
+      "cpp_test": "VortexLatticeSolverTest.FreestreamDirectionWithBeta",
+      "rust_test": "parity_149_vortexlatticesolvertest_freestreamdirectionwithbeta",
+      "category": "solver",
+      "tolerance": 1e-10,
+      "enabled": true
+    },
+    {
+      "cpp_test": "ForceCalculatorTest.ZeroAlphaGivesZeroForces",
+      "rust_test": "parity_150_forcecalculatortest_zeroalphagiveszeroforces",
+      "category": "aero",
+      "tolerance": 1e-09,
+      "enabled": true
+    },
+    {
+      "cpp_test": "ForceCalculatorTest.PositiveAlphaGivesPositiveLift",
+      "rust_test": "parity_151_forcecalculatortest_positivealphagivespositivelift",
+      "category": "aero",
+      "tolerance": 1e-09,
+      "enabled": true
+    },
+    {
+      "cpp_test": "ForceCalculatorTest.NegativeAlphaGivesNegativeLift",
+      "rust_test": "parity_152_forcecalculatortest_negativealphagivesnegativelift",
+      "category": "aero",
+      "tolerance": 1e-09,
+      "enabled": true
+    },
+    {
+      "cpp_test": "ForceCalculatorTest.LiftCoefficientMatchesCirculation",
+      "rust_test": "parity_153_forcecalculatortest_liftcoefficientmatchescirculation",
+      "category": "aero",
+      "tolerance": 1e-09,
+      "enabled": true
+    },
+    {
+      "cpp_test": "ForceCalculatorTest.SpanEfficiencyReasonable",
+      "rust_test": "parity_154_forcecalculatortest_spanefficiencyreasonable",
+      "category": "aero",
+      "tolerance": 1e-09,
+      "enabled": true
+    },
+    {
+      "cpp_test": "ForceCalculatorTest.InducedDragQuadraticWithLift",
+      "rust_test": "parity_155_forcecalculatortest_induceddragquadraticwithlift",
+      "category": "aero",
+      "tolerance": 1e-09,
+      "enabled": true
+    },
+    {
+      "cpp_test": "ForceCalculatorTest.SurfaceLoadsAddUpToTotal",
+      "rust_test": "parity_156_forcecalculatortest_surfaceloadsadduptototal",
+      "category": "aero",
+      "tolerance": 1e-09,
+      "enabled": true
+    },
+    {
+      "cpp_test": "ForceCalculatorTest.StripLoadsHaveCorrectCount",
+      "rust_test": "parity_157_forcecalculatortest_striploadshavecorrectcount",
+      "category": "aero",
+      "tolerance": 1e-09,
+      "enabled": true
+    },
+    {
+      "cpp_test": "ForceCalculatorTest.PitchingMomentSign",
+      "rust_test": "parity_158_forcecalculatortest_pitchingmomentsign",
+      "category": "aero",
+      "tolerance": 1e-09,
+      "enabled": true
+    },
+    {
+      "cpp_test": "ForceCalculatorTest.AspectRatioCalculation",
+      "rust_test": "parity_159_forcecalculatortest_aspectratiocalculation",
+      "category": "aero",
+      "tolerance": 1e-09,
+      "enabled": true
+    },
+    {
+      "cpp_test": "ForceCalculatorTest.IdealInducedDragComputation",
+      "rust_test": "parity_160_forcecalculatortest_idealinduceddragcomputation",
+      "category": "aero",
+      "tolerance": 1e-09,
+      "enabled": true
+    },
+    {
+      "cpp_test": "StabilityDerivativesTest.LiftCurveSlopePositive",
+      "rust_test": "parity_161_stabilityderivativestest_liftcurveslopepositive",
+      "category": "aero",
+      "tolerance": 1e-09,
+      "enabled": true
+    },
+    {
+      "cpp_test": "StabilityDerivativesTest.LiftCurveSlopeReasonable",
+      "rust_test": "parity_162_stabilityderivativestest_liftcurveslopereasonable",
+      "category": "aero",
+      "tolerance": 1e-09,
+      "enabled": true
+    },
+    {
+      "cpp_test": "StabilityDerivativesTest.ZeroAlphaSymmetry",
+      "rust_test": "parity_163_stabilityderivativestest_zeroalphasymmetry",
+      "category": "aero",
+      "tolerance": 1e-09,
+      "enabled": true
+    },
+    {
+      "cpp_test": "StabilityDerivativesTest.RollDampingNegative",
+      "rust_test": "parity_164_stabilityderivativestest_rolldampingnegative",
+      "category": "aero",
+      "tolerance": 1e-09,
+      "enabled": true
+    },
+    {
+      "cpp_test": "StabilityDerivativesTest.PitchDampingFinite",
+      "rust_test": "parity_165_stabilityderivativestest_pitchdampingfinite",
+      "category": "aero",
+      "tolerance": 1e-09,
+      "enabled": true
+    },
+    {
+      "cpp_test": "StabilityDerivativesTest.YawDampingNonPositive",
+      "rust_test": "parity_166_stabilityderivativestest_yawdampingnonpositive",
+      "category": "aero",
+      "tolerance": 1e-09,
+      "enabled": true
+    },
+    {
+      "cpp_test": "StabilityDerivativesTest.BodyAxisDerivativesValid",
+      "rust_test": "parity_167_stabilityderivativestest_bodyaxisderivativesvalid",
+      "category": "aero",
+      "tolerance": 1e-09,
+      "enabled": true
+    },
+    {
+      "cpp_test": "StabilityDerivativesTest.DerivativesAtDifferentAlpha",
+      "rust_test": "parity_168_stabilityderivativestest_derivativesatdifferentalpha",
+      "category": "aero",
+      "tolerance": 1e-09,
+      "enabled": true
+    },
+    {
+      "cpp_test": "StabilityDerivativesTest.StaticMarginComputed",
+      "rust_test": "parity_169_stabilityderivativestest_staticmargincomputed",
+      "category": "aero",
+      "tolerance": 1e-09,
+      "enabled": true
+    },
+    {
+      "cpp_test": "StabilityDerivativesTest.ReferenceQuantitiesPreserved",
+      "rust_test": "parity_170_stabilityderivativestest_referencequantitiespreserved",
+      "category": "aero",
+      "tolerance": 1e-09,
+      "enabled": true
+    },
+    {
+      "cpp_test": "StabilityDerivativesTest.HighAspectRatioRollDamping",
+      "rust_test": "parity_171_stabilityderivativestest_highaspectratiorolldamping",
+      "category": "aero",
+      "tolerance": 1e-09,
+      "enabled": true
+    },
+    {
+      "cpp_test": "TrimSolverTest.TrimToTargetCL",
+      "rust_test": "parity_172_trimsolvertest_trimtotargetcl",
+      "category": "trim",
+      "tolerance": 1e-06,
+      "enabled": true
+    },
+    {
+      "cpp_test": "TrimSolverTest.TrimToZeroCL",
+      "rust_test": "parity_173_trimsolvertest_trimtozerocl",
+      "category": "trim",
+      "tolerance": 1e-06,
+      "enabled": true
+    },
+    {
+      "cpp_test": "TrimSolverTest.TrimWithFixedAlpha",
+      "rust_test": "parity_174_trimsolvertest_trimwithfixedalpha",
+      "category": "trim",
+      "tolerance": 1e-06,
+      "enabled": true
+    },
+    {
+      "cpp_test": "TrimSolverTest.TrimWithFixedBeta",
+      "rust_test": "parity_175_trimsolvertest_trimwithfixedbeta",
+      "category": "trim",
+      "tolerance": 1e-06,
+      "enabled": true
+    },
+    {
+      "cpp_test": "TrimSolverTest.ConvergenceInFewIterations",
+      "rust_test": "parity_176_trimsolvertest_convergenceinfewiterations",
+      "category": "trim",
+      "tolerance": 1e-06,
+      "enabled": true
+    },
+    {
+      "cpp_test": "TrimSolverTest.RatesRemainZeroForLevelFlight",
+      "rust_test": "parity_177_trimsolvertest_ratesremainzeroforlevelflight",
+      "category": "trim",
+      "tolerance": 1e-06,
+      "enabled": true
+    },
+    {
+      "cpp_test": "TrimSolverTest.InitialGuessIsUsed",
+      "rust_test": "parity_178_trimsolvertest_initialguessisused",
+      "category": "trim",
+      "tolerance": 1e-06,
+      "enabled": true
+    },
+    {
+      "cpp_test": "TrimSolverTest.ResidualDecreasesMonotonically",
+      "rust_test": "parity_179_trimsolvertest_residualdecreasesmonotonically",
+      "category": "trim",
+      "tolerance": 1e-06,
+      "enabled": true
+    },
+    {
+      "cpp_test": "TrimSolverTest.StabilityDerivativesComputed",
+      "rust_test": "parity_180_trimsolvertest_stabilityderivativescomputed",
+      "category": "trim",
+      "tolerance": 1e-06,
+      "enabled": true
+    },
+    {
+      "cpp_test": "TrimSolverTest.NoConstraintsFails",
+      "rust_test": "parity_181_trimsolvertest_noconstraintsfails",
+      "category": "trim",
+      "tolerance": 1e-06,
+      "enabled": true
+    },
+    {
+      "cpp_test": "TrimSolverTest.UnreachableCLFails",
+      "rust_test": "parity_182_trimsolvertest_unreachableclfails",
+      "category": "trim",
+      "tolerance": 1e-06,
+      "enabled": true
+    },
+    {
+      "cpp_test": "TrimSolverTest.PresetLevelFlight",
+      "rust_test": "parity_183_trimsolvertest_presetlevelflight",
+      "category": "trim",
+      "tolerance": 1e-06,
+      "enabled": true
+    },
+    {
+      "cpp_test": "TrimSolverTest.PresetSteadySideslip",
+      "rust_test": "parity_184_trimsolvertest_presetsteadysideslip",
+      "category": "trim",
+      "tolerance": 1e-06,
+      "enabled": true
+    },
+    {
+      "cpp_test": "TrimSolverTest.TrimWithPitchMomentConstraint",
+      "rust_test": "parity_185_trimsolvertest_trimwithpitchmomentconstraint",
+      "category": "trim",
+      "tolerance": 1e-06,
+      "enabled": true
+    },
+    {
+      "cpp_test": "TrimSolverTest.TrimVerboseOutput",
+      "rust_test": "parity_186_trimsolvertest_trimverboseoutput",
+      "category": "trim",
+      "tolerance": 1e-06,
+      "enabled": true
+    },
+    {
+      "cpp_test": "TrimSolverTest.TrimMaxIterationsReached",
+      "rust_test": "parity_187_trimsolvertest_trimmaxiterationsreached",
+      "category": "trim",
+      "tolerance": 1e-06,
+      "enabled": true
+    },
+    {
+      "cpp_test": "TrimSolverTest.ConstraintCount",
+      "rust_test": "parity_188_trimsolvertest_constraintcount",
+      "category": "trim",
+      "tolerance": 1e-06,
+      "enabled": true
+    },
+    {
+      "cpp_test": "MassPropertiesTest.DefaultIsInvalid",
+      "rust_test": "parity_189_masspropertiestest_defaultisinvalid",
+      "category": "dynamics",
+      "tolerance": 1e-08,
+      "enabled": true
+    },
+    {
+      "cpp_test": "MassPropertiesTest.ValidWithPositiveValues",
+      "rust_test": "parity_190_masspropertiestest_validwithpositivevalues",
+      "category": "dynamics",
+      "tolerance": 1e-08,
+      "enabled": true
+    },
+    {
+      "cpp_test": "MassPropertiesTest.InertiaTensorSymmetric",
+      "rust_test": "parity_191_masspropertiestest_inertiatensorsymmetric",
+      "category": "dynamics",
+      "tolerance": 1e-08,
+      "enabled": true
+    },
+    {
+      "cpp_test": "MassPropertiesTest.InverseInertiaCorrect",
+      "rust_test": "parity_192_masspropertiestest_inverseinertiacorrect",
+      "category": "dynamics",
+      "tolerance": 1e-08,
+      "enabled": true
+    },
+    {
+      "cpp_test": "MassPropertiesTest.SetInertiaTensor",
+      "rust_test": "parity_193_masspropertiestest_setinertiatensor",
+      "category": "dynamics",
+      "tolerance": 1e-08,
+      "enabled": true
+    },
+    {
+      "cpp_test": "FlightStateTest.BodyVelocityAtZeroAngles",
+      "rust_test": "parity_194_flightstatetest_bodyvelocityatzeroangles",
+      "category": "dynamics",
+      "tolerance": 1e-08,
+      "enabled": true
+    },
+    {
+      "cpp_test": "FlightStateTest.BodyVelocityWithAlpha",
+      "rust_test": "parity_195_flightstatetest_bodyvelocitywithalpha",
+      "category": "dynamics",
+      "tolerance": 1e-08,
+      "enabled": true
+    },
+    {
+      "cpp_test": "FlightStateTest.DynamicPressure",
+      "rust_test": "parity_196_flightstatetest_dynamicpressure",
+      "category": "dynamics",
+      "tolerance": 1e-08,
+      "enabled": true
+    },
+    {
+      "cpp_test": "FlightStateTest.BodyVelocityWithBeta",
+      "rust_test": "parity_197_flightstatetest_bodyvelocitywithbeta",
+      "category": "dynamics",
+      "tolerance": 1e-08,
+      "enabled": true
+    },
+    {
+      "cpp_test": "FlightStateTest.DefaultValues",
+      "rust_test": "parity_198_flightstatetest_defaultvalues",
+      "category": "dynamics",
+      "tolerance": 1e-08,
+      "enabled": true
+    },
+    {
+      "cpp_test": "EigenmodeAnalysisTest.LongitudinalAnalysisProducesModes",
+      "rust_test": "parity_199_eigenmodeanalysistest_longitudinalanalysisproducesmodes",
+      "category": "dynamics",
+      "tolerance": 1e-08,
+      "enabled": true
+    },
+    {
+      "cpp_test": "EigenmodeAnalysisTest.LateralDirectionalAnalysisProducesModes",
+      "rust_test": "parity_200_eigenmodeanalysistest_lateraldirectionalanalysisproducesmodes",
+      "category": "dynamics",
+      "tolerance": 1e-08,
+      "enabled": true
+    },
+    {
+      "cpp_test": "EigenmodeAnalysisTest.StableAircraftHasNegativeDamping",
+      "rust_test": "parity_201_eigenmodeanalysistest_stableaircrafthasnegativedamping",
+      "category": "dynamics",
+      "tolerance": 1e-08,
+      "enabled": true
+    },
+    {
+      "cpp_test": "EigenmodeAnalysisTest.ShortPeriodHigherFrequencyThanPhugoid",
+      "rust_test": "parity_202_eigenmodeanalysistest_shortperiodhigherfrequencythanphugoid",
+      "category": "dynamics",
+      "tolerance": 1e-08,
+      "enabled": true
+    },
+    {
+      "cpp_test": "EigenmodeAnalysisTest.EigenmodeGettersWork",
+      "rust_test": "parity_203_eigenmodeanalysistest_eigenmodegetterswork",
+      "category": "dynamics",
+      "tolerance": 1e-08,
+      "enabled": true
+    },
+    {
+      "cpp_test": "EigenmodeAnalysisTest.NonOscillatoryModeHasZeroPeriod",
+      "rust_test": "parity_204_eigenmodeanalysistest_nonoscillatorymodehaszeroperiod",
+      "category": "dynamics",
+      "tolerance": 1e-08,
+      "enabled": true
+    },
+    {
+      "cpp_test": "EigenmodeAnalysisTest.DampingRatioComputation",
+      "rust_test": "parity_205_eigenmodeanalysistest_dampingratiocomputation",
+      "category": "dynamics",
+      "tolerance": 1e-08,
+      "enabled": true
+    },
+    {
+      "cpp_test": "EigenmodeAnalysisTest.InvalidMassPropertiesFails",
+      "rust_test": "parity_206_eigenmodeanalysistest_invalidmasspropertiesfails",
+      "category": "dynamics",
+      "tolerance": 1e-08,
+      "enabled": true
+    },
+    {
+      "cpp_test": "EigenmodeAnalysisTest.InvalidDerivativesFails",
+      "rust_test": "parity_207_eigenmodeanalysistest_invalidderivativesfails",
+      "category": "dynamics",
+      "tolerance": 1e-08,
+      "enabled": true
+    },
+    {
+      "cpp_test": "EigenmodeAnalysisTest.SystemMatrixHasCorrectSize",
+      "rust_test": "parity_208_eigenmodeanalysistest_systemmatrixhascorrectsize",
+      "category": "dynamics",
+      "tolerance": 1e-08,
+      "enabled": true
+    },
+    {
+      "cpp_test": "EigenmodeAnalysisTest.FullAnalysisProducesMoreModes",
+      "rust_test": "parity_209_eigenmodeanalysistest_fullanalysisproducesmoremodes",
+      "category": "dynamics",
+      "tolerance": 1e-08,
+      "enabled": true
+    },
+    {
+      "cpp_test": "EigenmodeAnalysisTest.ModeTypeNames",
+      "rust_test": "parity_210_eigenmodeanalysistest_modetypenames",
+      "category": "dynamics",
+      "tolerance": 1e-08,
+      "enabled": true
+    },
+    {
+      "cpp_test": "EigenmodeAnalysisTest.GetTimeConstant",
+      "rust_test": "parity_211_eigenmodeanalysistest_gettimeconstant",
+      "category": "dynamics",
+      "tolerance": 1e-08,
+      "enabled": true
+    },
+    {
+      "cpp_test": "EigenmodeAnalysisTest.GetTimeConstantZeroDamping",
+      "rust_test": "parity_212_eigenmodeanalysistest_gettimeconstantzerodamping",
+      "category": "dynamics",
+      "tolerance": 1e-08,
+      "enabled": true
+    },
+    {
+      "cpp_test": "EigenmodeAnalysisTest.DampingRatioZeroFrequency",
+      "rust_test": "parity_213_eigenmodeanalysistest_dampingratiozerofrequency",
+      "category": "dynamics",
+      "tolerance": 1e-08,
+      "enabled": true
+    },
+    {
+      "cpp_test": "EigenmodeAnalysisTest.UnstableModeDetected",
+      "rust_test": "parity_214_eigenmodeanalysistest_unstablemodedetected",
+      "category": "dynamics",
+      "tolerance": 1e-08,
+      "enabled": true
+    },
+    {
+      "cpp_test": "EigenmodeAnalysisTest.FindModesByTypeEmpty",
+      "rust_test": "parity_215_eigenmodeanalysistest_findmodesbytypeempty",
+      "category": "dynamics",
+      "tolerance": 1e-08,
+      "enabled": true
+    },
+    {
+      "cpp_test": "EigenmodeAnalysisTest.FindModesByTypeWithMatch",
+      "rust_test": "parity_216_eigenmodeanalysistest_findmodesbytypewithmatch",
+      "category": "dynamics",
+      "tolerance": 1e-08,
+      "enabled": true
+    },
+    {
+      "cpp_test": "EigenmodeAnalysisTest.GetDutchRollNotFound",
+      "rust_test": "parity_217_eigenmodeanalysistest_getdutchrollnotfound",
+      "category": "dynamics",
+      "tolerance": 1e-08,
+      "enabled": true
+    },
+    {
+      "cpp_test": "EigenmodeAnalysisTest.GetPhugoidNotFound",
+      "rust_test": "parity_218_eigenmodeanalysistest_getphugoidnotfound",
+      "category": "dynamics",
+      "tolerance": 1e-08,
+      "enabled": true
+    },
+    {
+      "cpp_test": "EigenmodeAnalysisTest.GetShortPeriodNotFound",
+      "rust_test": "parity_219_eigenmodeanalysistest_getshortperiodnotfound",
+      "category": "dynamics",
+      "tolerance": 1e-08,
+      "enabled": true
+    },
+    {
+      "cpp_test": "EigenmodeAnalysisTest.IsStableAllStable",
+      "rust_test": "parity_220_eigenmodeanalysistest_isstableallstable",
+      "category": "dynamics",
+      "tolerance": 1e-08,
+      "enabled": true
+    },
+    {
+      "cpp_test": "EigenmodeAnalysisTest.IsStableOneUnstable",
+      "rust_test": "parity_221_eigenmodeanalysistest_isstableoneunstable",
+      "category": "dynamics",
+      "tolerance": 1e-08,
+      "enabled": true
+    },
+    {
+      "cpp_test": "EigenmodeAnalysisTest.IsStableEmpty",
+      "rust_test": "parity_222_eigenmodeanalysistest_isstableempty",
+      "category": "dynamics",
+      "tolerance": 1e-08,
+      "enabled": true
+    },
+    {
+      "cpp_test": "EigenmodeAnalysisTest.SetApparentMass",
+      "rust_test": "parity_223_eigenmodeanalysistest_setapparentmass",
+      "category": "dynamics",
+      "tolerance": 1e-08,
+      "enabled": true
+    },
+    {
+      "cpp_test": "ApparentMassTest.DefaultState",
+      "rust_test": "parity_224_apparentmasstest_defaultstate",
+      "category": "dynamics",
+      "tolerance": 1e-08,
+      "enabled": true
+    },
+    {
+      "cpp_test": "MassReaderTest.EmptyContent",
+      "rust_test": "parity_225_massreadertest_emptycontent",
+      "category": "io",
+      "tolerance": 0.0,
+      "enabled": true
+    },
+    {
+      "cpp_test": "MassReaderTest.OnlyComments",
+      "rust_test": "parity_226_massreadertest_onlycomments",
+      "category": "io",
+      "tolerance": 0.0,
+      "enabled": true
+    },
+    {
+      "cpp_test": "MassReaderTest.UnitDefinitions",
+      "rust_test": "parity_227_massreadertest_unitdefinitions",
+      "category": "io",
+      "tolerance": 0.0,
+      "enabled": true
+    },
+    {
+      "cpp_test": "MassReaderTest.ConstantDefinitions",
+      "rust_test": "parity_228_massreadertest_constantdefinitions",
+      "category": "io",
+      "tolerance": 0.0,
+      "enabled": true
+    },
+    {
+      "cpp_test": "MassReaderTest.SingleComponent",
+      "rust_test": "parity_229_massreadertest_singlecomponent",
+      "category": "io",
+      "tolerance": 0.0,
+      "enabled": true
+    },
+    {
+      "cpp_test": "MassReaderTest.ComponentWithProductsOfInertia",
+      "rust_test": "parity_230_massreadertest_componentwithproductsofinertia",
+      "category": "io",
+      "tolerance": 0.0,
+      "enabled": true
+    },
+    {
+      "cpp_test": "MassReaderTest.MultipleComponents",
+      "rust_test": "parity_231_massreadertest_multiplecomponents",
+      "category": "io",
+      "tolerance": 0.0,
+      "enabled": true
+    },
+    {
+      "cpp_test": "MassReaderTest.ScaleFactors",
+      "rust_test": "parity_232_massreadertest_scalefactors",
+      "category": "io",
+      "tolerance": 0.0,
+      "enabled": true
+    },
+    {
+      "cpp_test": "MassReaderTest.OffsetFactors",
+      "rust_test": "parity_233_massreadertest_offsetfactors",
+      "category": "io",
+      "tolerance": 0.0,
+      "enabled": true
+    },
+    {
+      "cpp_test": "MassReaderTest.ScaleAndOffset",
+      "rust_test": "parity_234_massreadertest_scaleandoffset",
+      "category": "io",
+      "tolerance": 0.0,
+      "enabled": true
+    },
+    {
+      "cpp_test": "MassReaderTest.TotalMass",
+      "rust_test": "parity_235_massreadertest_totalmass",
+      "category": "io",
+      "tolerance": 0.0,
+      "enabled": true
+    },
+    {
+      "cpp_test": "MassReaderTest.TotalMassWithUnits",
+      "rust_test": "parity_236_massreadertest_totalmasswithunits",
+      "category": "io",
+      "tolerance": 0.0,
+      "enabled": true
+    },
+    {
+      "cpp_test": "MassReaderTest.CenterOfGravity",
+      "rust_test": "parity_237_massreadertest_centerofgravity",
+      "category": "io",
+      "tolerance": 0.0,
+      "enabled": true
+    },
+    {
+      "cpp_test": "MassReaderTest.CenterOfGravityWeighted",
+      "rust_test": "parity_238_massreadertest_centerofgravityweighted",
+      "category": "io",
+      "tolerance": 0.0,
+      "enabled": true
+    },
+    {
+      "cpp_test": "MassReaderTest.ComputeTotalProperties",
+      "rust_test": "parity_239_massreadertest_computetotalproperties",
+      "category": "io",
+      "tolerance": 0.0,
+      "enabled": true
+    },
+    {
+      "cpp_test": "MassReaderTest.ParallelAxisTheorem",
+      "rust_test": "parity_240_massreadertest_parallelaxistheorem",
+      "category": "io",
+      "tolerance": 0.0,
+      "enabled": true
+    },
+    {
+      "cpp_test": "MassReaderTest.EmptyComponentsGiveZeroMass",
+      "rust_test": "parity_241_massreadertest_emptycomponentsgivezeromass",
+      "category": "io",
+      "tolerance": 0.0,
+      "enabled": true
+    },
+    {
+      "cpp_test": "MassReaderTest.CaseInsensitiveKeywords",
+      "rust_test": "parity_242_massreadertest_caseinsensitivekeywords",
+      "category": "io",
+      "tolerance": 0.0,
+      "enabled": true
+    },
+    {
+      "cpp_test": "MassReaderTest.CompleteAVLStyleFile",
+      "rust_test": "parity_243_massreadertest_completeavlstylefile",
+      "category": "io",
+      "tolerance": 0.0,
+      "enabled": true
+    },
+    {
+      "cpp_test": "VtkExportTest.IsAvailableReturnsConsistentValue",
+      "rust_test": "parity_244_vtkexporttest_isavailablereturnsconsistentvalue",
+      "category": "visualization",
+      "tolerance": 0.0,
+      "enabled": true
+    },
+    {
+      "cpp_test": "VtkExportTest.ExportSurfaceMeshCreatesFile",
+      "rust_test": "parity_245_vtkexporttest_exportsurfacemeshcreatesfile",
+      "category": "visualization",
+      "tolerance": 0.0,
+      "enabled": true
+    },
+    {
+      "cpp_test": "VtkExportTest.ExportSpanwiseDistributionsCreatesFile",
+      "rust_test": "parity_246_vtkexporttest_exportspanwisedistributionscreatesfile",
+      "category": "visualization",
+      "tolerance": 0.0,
+      "enabled": true
+    },
+    {
+      "cpp_test": "VtkExportTest.ExportWakeGeometryCreatesFile",
+      "rust_test": "parity_247_vtkexporttest_exportwakegeometrycreatesfile",
+      "category": "visualization",
+      "tolerance": 0.0,
+      "enabled": true
+    },
+    {
+      "cpp_test": "VtkExportTest.ExportVelocityFieldCreatesFile",
+      "rust_test": "parity_248_vtkexporttest_exportvelocityfieldcreatesfile",
+      "category": "visualization",
+      "tolerance": 0.0,
+      "enabled": true
+    },
+    {
+      "cpp_test": "VtkExportTest.ExportAllCreatesAllFiles",
+      "rust_test": "parity_249_vtkexporttest_exportallcreatesallfiles",
+      "category": "visualization",
+      "tolerance": 0.0,
+      "enabled": true
+    },
+    {
+      "cpp_test": "VtkExportTest.BinaryVsAsciiFormat",
+      "rust_test": "parity_250_vtkexporttest_binaryvsasciiformat",
+      "category": "visualization",
+      "tolerance": 0.0,
+      "enabled": true
+    },
+    {
+      "cpp_test": "VtkExportTest.InvalidSolutionReturnsFalse",
+      "rust_test": "parity_251_vtkexporttest_invalidsolutionreturnsfalse",
+      "category": "visualization",
+      "tolerance": 0.0,
+      "enabled": true
+    },
+    {
+      "cpp_test": "VtkExportTest.ExportOptionsDefaultsAreReasonable",
+      "rust_test": "parity_252_vtkexporttest_exportoptionsdefaultsarereasonable",
+      "category": "visualization",
+      "tolerance": 0.0,
+      "enabled": true
+    },
+    {
+      "cpp_test": "ControlSurfaceDefinitionTest.NameDefaultsToEmpty",
+      "rust_test": "parity_253_controlsurfacedefinitiontest_namedefaultstoempty",
+      "category": "geometry",
+      "tolerance": 1e-12,
+      "enabled": true
+    },
+    {
+      "cpp_test": "ControlSurfaceDefinitionTest.SetValues",
+      "rust_test": "parity_254_controlsurfacedefinitiontest_setvalues",
+      "category": "geometry",
+      "tolerance": 1e-12,
+      "enabled": true
+    },
+    {
+      "cpp_test": "SectionControlSurfaceTest.NoControlSurfacesByDefault",
+      "rust_test": "parity_255_sectioncontrolsurfacetest_nocontrolsurfacesbydefault",
+      "category": "geometry",
+      "tolerance": 1e-12,
+      "enabled": true
+    },
+    {
+      "cpp_test": "SectionControlSurfaceTest.AddSingleControlSurface",
+      "rust_test": "parity_256_sectioncontrolsurfacetest_addsinglecontrolsurface",
+      "category": "geometry",
+      "tolerance": 1e-12,
+      "enabled": true
+    },
+    {
+      "cpp_test": "SectionControlSurfaceTest.AddMultipleControlSurfaces",
+      "rust_test": "parity_257_sectioncontrolsurfacetest_addmultiplecontrolsurfaces",
+      "category": "geometry",
+      "tolerance": 1e-12,
+      "enabled": true
+    },
+    {
+      "cpp_test": "AircraftControlSurfaceTest.GetControlSurfaceNames",
+      "rust_test": "parity_258_aircraftcontrolsurfacetest_getcontrolsurfacenames",
+      "category": "geometry",
+      "tolerance": 1e-12,
+      "enabled": true
+    },
+    {
+      "cpp_test": "AircraftControlSurfaceTest.GetNumControlSurfaces",
+      "rust_test": "parity_259_aircraftcontrolsurfacetest_getnumcontrolsurfaces",
+      "category": "geometry",
+      "tolerance": 1e-12,
+      "enabled": true
+    },
+    {
+      "cpp_test": "AircraftControlSurfaceTest.MultipleControlSurfaces",
+      "rust_test": "parity_260_aircraftcontrolsurfacetest_multiplecontrolsurfaces",
+      "category": "geometry",
+      "tolerance": 1e-12,
+      "enabled": true
+    },
+    {
+      "cpp_test": "MeshControlSurfaceTest.ControlSurfaceNamesInMesh",
+      "rust_test": "parity_261_meshcontrolsurfacetest_controlsurfacenamesinmesh",
+      "category": "geometry",
+      "tolerance": 1e-12,
+      "enabled": true
+    },
+    {
+      "cpp_test": "MeshControlSurfaceTest.ControlInfluencesHaveCorrectSize",
+      "rust_test": "parity_262_meshcontrolsurfacetest_controlinfluenceshavecorrectsize",
+      "category": "geometry",
+      "tolerance": 1e-12,
+      "enabled": true
+    },
+    {
+      "cpp_test": "MeshControlSurfaceTest.TrailingEdgePanelsHaveInfluence",
+      "rust_test": "parity_263_meshcontrolsurfacetest_trailingedgepanelshaveinfluence",
+      "category": "geometry",
+      "tolerance": 1e-12,
+      "enabled": true
+    },
+    {
+      "cpp_test": "MeshControlSurfaceTest.LeadingEdgePanelsNoInfluence",
+      "rust_test": "parity_264_meshcontrolsurfacetest_leadingedgepanelsnoinfluence",
+      "category": "geometry",
+      "tolerance": 1e-12,
+      "enabled": true
+    },
+    {
+      "cpp_test": "MeshControlSurfaceTest.InfluenceHingeAxisCorrect",
+      "rust_test": "parity_265_meshcontrolsurfacetest_influencehingeaxiscorrect",
+      "category": "geometry",
+      "tolerance": 1e-12,
+      "enabled": true
+    },
+    {
+      "cpp_test": "YDuplicateControlSurfaceTest.MirroredSurfaceCreated",
+      "rust_test": "parity_266_yduplicatecontrolsurfacetest_mirroredsurfacecreated",
+      "category": "geometry",
+      "tolerance": 1e-12,
+      "enabled": true
+    },
+    {
+      "cpp_test": "YDuplicateControlSurfaceTest.MirroredInfluencesExist",
+      "rust_test": "parity_267_yduplicatecontrolsurfacetest_mirroredinfluencesexist",
+      "category": "geometry",
+      "tolerance": 1e-12,
+      "enabled": true
+    },
+    {
+      "cpp_test": "YDuplicateControlSurfaceTest.MirroredControlSurfaceInfluences",
+      "rust_test": "parity_268_yduplicatecontrolsurfacetest_mirroredcontrolsurfaceinfluences",
+      "category": "geometry",
+      "tolerance": 1e-12,
+      "enabled": true
+    },
+    {
+      "cpp_test": "AvlControlSurfaceParsingTest.ParseBasicControlSurface",
+      "rust_test": "parity_269_avlcontrolsurfaceparsingtest_parsebasiccontrolsurface",
+      "category": "io",
+      "tolerance": 0.0,
+      "enabled": true
+    },
+    {
+      "cpp_test": "AvlControlSurfaceParsingTest.ParseMultipleControlSurfaces",
+      "rust_test": "parity_270_avlcontrolsurfaceparsingtest_parsemultiplecontrolsurfaces",
+      "category": "io",
+      "tolerance": 0.0,
+      "enabled": true
+    },
+    {
+      "cpp_test": "AvlControlSurfaceParsingTest.ParseControlSurfaceHingeVector",
+      "rust_test": "parity_271_avlcontrolsurfaceparsingtest_parsecontrolsurfacehingevector",
+      "category": "io",
+      "tolerance": 0.0,
+      "enabled": true
+    },
+    {
+      "cpp_test": "AvlControlSurfaceParsingTest.ParseControlSurfaceGain",
+      "rust_test": "parity_272_avlcontrolsurfaceparsingtest_parsecontrolsurfacegain",
+      "category": "io",
+      "tolerance": 0.0,
+      "enabled": true
+    },
+    {
+      "cpp_test": "ControlSurfaceEffectivenessTest.ControlSurfacesPropagateToMesh",
+      "rust_test": "parity_273_controlsurfaceeffectivenesstest_controlsurfacespropagatetomesh",
+      "category": "geometry",
+      "tolerance": 1e-12,
+      "enabled": true
+    },
+    {
+      "cpp_test": "ControlSurfaceEffectivenessTest.InfluenceMatrixBuiltWithControls",
+      "rust_test": "parity_274_controlsurfaceeffectivenesstest_influencematrixbuiltwithcontrols",
+      "category": "geometry",
+      "tolerance": 1e-12,
+      "enabled": true
+    },
+    {
+      "cpp_test": "ControlDerivativesTest.DefaultValues",
+      "rust_test": "parity_275_controlderivativestest_defaultvalues",
+      "category": "aero",
+      "tolerance": 1e-09,
+      "enabled": true
+    },
+    {
+      "cpp_test": "ControlDerivativesTest.SetValues",
+      "rust_test": "parity_276_controlderivativestest_setvalues",
+      "category": "aero",
+      "tolerance": 1e-09,
+      "enabled": true
+    },
+    {
+      "cpp_test": "FlightConditionControlTest.DefaultNoDeflections",
+      "rust_test": "parity_277_flightconditioncontroltest_defaultnodeflections",
+      "category": "geometry",
+      "tolerance": 1e-12,
+      "enabled": true
+    },
+    {
+      "cpp_test": "FlightConditionControlTest.SetControlDeflection",
+      "rust_test": "parity_278_flightconditioncontroltest_setcontroldeflection",
+      "category": "geometry",
+      "tolerance": 1e-12,
+      "enabled": true
+    },
+    {
+      "cpp_test": "StabilityDerivativesControlTest.ControlDerivativesVector",
+      "rust_test": "parity_279_stabilityderivativescontroltest_controlderivativesvector",
+      "category": "aero",
+      "tolerance": 1e-09,
+      "enabled": true
+    },
+    {
+      "cpp_test": "GradientCalculatorTest.AlphaDerivativesMatchStabilityDerivatives",
+      "rust_test": "parity_280_gradientcalculatortest_alphaderivativesmatchstabilityderivatives",
+      "category": "gradients",
+      "tolerance": 2e-05,
+      "enabled": true
+    },
+    {
+      "cpp_test": "GradientCalculatorTest.BetaDerivativesMatchStabilityDerivatives",
+      "rust_test": "parity_281_gradientcalculatortest_betaderivativesmatchstabilityderivatives",
+      "category": "gradients",
+      "tolerance": 2e-05,
+      "enabled": true
+    },
+    {
+      "cpp_test": "GradientCalculatorTest.RollRateDerivativesMatchStabilityDerivatives",
+      "rust_test": "parity_282_gradientcalculatortest_rollratederivativesmatchstabilityderivatives",
+      "category": "gradients",
+      "tolerance": 2e-05,
+      "enabled": true
+    },
+    {
+      "cpp_test": "GradientCalculatorTest.PitchRateDerivativesMatchStabilityDerivatives",
+      "rust_test": "parity_283_gradientcalculatortest_pitchratederivativesmatchstabilityderivatives",
+      "category": "gradients",
+      "tolerance": 2e-05,
+      "enabled": true
+    },
+    {
+      "cpp_test": "GradientCalculatorTest.YawRateDerivativesMatchStabilityDerivatives",
+      "rust_test": "parity_284_gradientcalculatortest_yawratederivativesmatchstabilityderivatives",
+      "category": "gradients",
+      "tolerance": 2e-05,
+      "enabled": true
+    },
+    {
+      "cpp_test": "GradientCalculatorTest.MachDerivativesComputed",
+      "rust_test": "parity_285_gradientcalculatortest_machderivativescomputed",
+      "category": "gradients",
+      "tolerance": 2e-05,
+      "enabled": true
+    },
+    {
+      "cpp_test": "GradientCalculatorTest.MachDerivativesAtLowMach",
+      "rust_test": "parity_286_gradientcalculatortest_machderivativesatlowmach",
+      "category": "gradients",
+      "tolerance": 2e-05,
+      "enabled": true
+    },
+    {
+      "cpp_test": "GradientCalculatorTest.MachDerivativesAtHighMach",
+      "rust_test": "parity_287_gradientcalculatortest_machderivativesathighmach",
+      "category": "gradients",
+      "tolerance": 2e-05,
+      "enabled": true
+    },
+    {
+      "cpp_test": "GradientCalculatorTest.FullGradientsComputation",
+      "rust_test": "parity_288_gradientcalculatortest_fullgradientscomputation",
+      "category": "gradients",
+      "tolerance": 2e-05,
+      "enabled": true
+    },
+    {
+      "cpp_test": "GradientCalculatorTest.DerivativesAtZeroAlpha",
+      "rust_test": "parity_289_gradientcalculatortest_derivativesatzeroalpha",
+      "category": "gradients",
+      "tolerance": 2e-05,
+      "enabled": true
+    },
+    {
+      "cpp_test": "GradientCalculatorTest.OutputSelectionSubsetMatchesFullResults",
+      "rust_test": "parity_290_gradientcalculatortest_outputselectionsubsetmatchesfullresults",
+      "category": "gradients",
+      "tolerance": 2e-05,
+      "enabled": true
+    },
+    {
+      "cpp_test": "GradientCalculatorTest.OutputSelectionSingleOutput",
+      "rust_test": "parity_291_gradientcalculatortest_outputselectionsingleoutput",
+      "category": "gradients",
+      "tolerance": 2e-05,
+      "enabled": true
+    },
+    {
+      "cpp_test": "GradientCalculatorTest.OutputSelectionAllDisabled",
+      "rust_test": "parity_292_gradientcalculatortest_outputselectionalldisabled",
+      "category": "gradients",
+      "tolerance": 2e-05,
+      "enabled": true
+    },
+    {
+      "cpp_test": "GradientCalculatorTest.OutputSelectionBetaDerivatives",
+      "rust_test": "parity_293_gradientcalculatortest_outputselectionbetaderivatives",
+      "category": "gradients",
+      "tolerance": 2e-05,
+      "enabled": true
+    },
+    {
+      "cpp_test": "GradientCalculatorTest.OutputSelectionGeometryGradients",
+      "rust_test": "parity_294_gradientcalculatortest_outputselectiongeometrygradients",
+      "category": "gradients",
+      "tolerance": 2e-05,
+      "enabled": true
+    },
+    {
+      "cpp_test": "GradientCalculatorWithTailTest.CmAlphaIsNegativeWithTail",
+      "rust_test": "parity_295_gradientcalculatorwithtailtest_cmalphaisnegativewithtail",
+      "category": "gradients",
+      "tolerance": 2e-05,
+      "enabled": true
+    },
+    {
+      "cpp_test": "GradientCalculatorWithTailTest.MatchesStabilityDerivatives",
+      "rust_test": "parity_296_gradientcalculatorwithtailtest_matchesstabilityderivatives",
+      "category": "gradients",
+      "tolerance": 2e-05,
+      "enabled": true
+    },
+    {
+      "cpp_test": "GeometryGradientTest.ChordGradientIsNonZero",
+      "rust_test": "parity_297_geometrygradienttest_chordgradientisnonzero",
+      "category": "gradients",
+      "tolerance": 2e-05,
+      "enabled": true
+    },
+    {
+      "cpp_test": "GeometryGradientTest.TwistGradientPhysicallyCorrect",
+      "rust_test": "parity_298_geometrygradienttest_twistgradientphysicallycorrect",
+      "category": "gradients",
+      "tolerance": 2e-05,
+      "enabled": true
+    },
+    {
+      "cpp_test": "GeometryGradientTest.SpanPositionGradientNonZero",
+      "rust_test": "parity_299_geometrygradienttest_spanpositiongradientnonzero",
+      "category": "gradients",
+      "tolerance": 2e-05,
+      "enabled": true
+    },
+    {
+      "cpp_test": "GeometryGradientTest.FullGeometryGradientsReturnsAllSections",
+      "rust_test": "parity_300_geometrygradienttest_fullgeometrygradientsreturnsallsections",
+      "category": "gradients",
+      "tolerance": 2e-05,
+      "enabled": true
+    },
+    {
+      "cpp_test": "GeometryGradientTest.GetChordGradientsForExtraction",
+      "rust_test": "parity_301_geometrygradienttest_getchordgradientsforextraction",
+      "category": "gradients",
+      "tolerance": 2e-05,
+      "enabled": true
+    },
+    {
+      "cpp_test": "GeometryGradientTest.GetTwistGradientsForExtraction",
+      "rust_test": "parity_302_geometrygradienttest_gettwistgradientsforextraction",
+      "category": "gradients",
+      "tolerance": 2e-05,
+      "enabled": true
+    },
+    {
+      "cpp_test": "GeometryGradientTest.DihedralGradientAffectsRollingMoment",
+      "rust_test": "parity_303_geometrygradienttest_dihedralgradientaffectsrollingmoment",
+      "category": "gradients",
+      "tolerance": 2e-05,
+      "enabled": true
+    },
+    {
+      "cpp_test": "GeometryGradientTest.GradientsAreSymmetricForSymmetricSections",
+      "rust_test": "parity_304_geometrygradienttest_gradientsaresymmetricforsymmetricsections",
+      "category": "gradients",
+      "tolerance": 2e-05,
+      "enabled": true
+    },
+    {
+      "cpp_test": "MultiSurfaceGeometryGradientTest.GradientsComputedForAllSurfaces",
+      "rust_test": "parity_305_multisurfacegeometrygradienttest_gradientscomputedforallsurfaces",
+      "category": "gradients",
+      "tolerance": 2e-05,
+      "enabled": true
+    },
+    {
+      "cpp_test": "MultiSurfaceGeometryGradientTest.TailTwistAffectsPitchingMoment",
+      "rust_test": "parity_306_multisurfacegeometrygradienttest_tailtwistaffectspitchingmoment",
+      "category": "gradients",
+      "tolerance": 2e-05,
+      "enabled": true
+    },
+    {
+      "cpp_test": "AdjointSolverTest.ConstructFromSolverBeforeSolve",
+      "rust_test": "parity_307_adjointsolvertest_constructfromsolverbeforesolve",
+      "category": "gradients",
+      "tolerance": 2e-05,
+      "enabled": true
+    },
+    {
+      "cpp_test": "AdjointSolverTest.ConstructFromSolverAfterSolve",
+      "rust_test": "parity_308_adjointsolvertest_constructfromsolveraftersolve",
+      "category": "gradients",
+      "tolerance": 2e-05,
+      "enabled": true
+    },
+    {
+      "cpp_test": "AdjointSolverTest.SolveAdjointReturnsCorrectSize",
+      "rust_test": "parity_309_adjointsolvertest_solveadjointreturnscorrectsize",
+      "category": "gradients",
+      "tolerance": 2e-05,
+      "enabled": true
+    },
+    {
+      "cpp_test": "AdjointSolverTest.AdjointSolveIsCorrect",
+      "rust_test": "parity_310_adjointsolvertest_adjointsolveiscorrect",
+      "category": "gradients",
+      "tolerance": 2e-05,
+      "enabled": true
+    },
+    {
+      "cpp_test": "AdjointSolverTest.SolveMultipleAdjointProblems",
+      "rust_test": "parity_311_adjointsolvertest_solvemultipleadjointproblems",
+      "category": "gradients",
+      "tolerance": 2e-05,
+      "enabled": true
+    },
+    {
+      "cpp_test": "AdjointSolverTest.ForceGradientsHaveCorrectSize",
+      "rust_test": "parity_312_adjointsolvertest_forcegradientshavecorrectsize",
+      "category": "gradients",
+      "tolerance": 2e-05,
+      "enabled": true
+    },
+    {
+      "cpp_test": "AdjointSolverTest.ForceGradientsAreNonZero",
+      "rust_test": "parity_313_adjointsolvertest_forcegradientsarenonzero",
+      "category": "gradients",
+      "tolerance": 2e-05,
+      "enabled": true
+    },
+    {
+      "cpp_test": "AdjointSolverTest.CLGradientIsPositive",
+      "rust_test": "parity_314_adjointsolvertest_clgradientispositive",
+      "category": "gradients",
+      "tolerance": 2e-05,
+      "enabled": true
+    },
+    {
+      "cpp_test": "AdjointSolverTest.AdjointIdentityTest",
+      "rust_test": "parity_315_adjointsolvertest_adjointidentitytest",
+      "category": "gradients",
+      "tolerance": 2e-05,
+      "enabled": true
+    },
+    {
+      "cpp_test": "AdjointValidationTest.AdjointMatchesFiniteDiffForCL",
+      "rust_test": "parity_316_adjointvalidationtest_adjointmatchesfinitediffforcl",
+      "category": "gradients",
+      "tolerance": 2e-05,
+      "enabled": true
+    },
+    {
+      "cpp_test": "OptVLGradientValidationTest.AlphaDerivativesMatchFD",
+      "rust_test": "parity_317_optvlgradientvalidationtest_alphaderivativesmatchfd",
+      "category": "gradients",
+      "tolerance": 2e-05,
+      "enabled": true
+    },
+    {
+      "cpp_test": "OptVLGradientValidationTest.BetaDerivativesMatchFD",
+      "rust_test": "parity_318_optvlgradientvalidationtest_betaderivativesmatchfd",
+      "category": "gradients",
+      "tolerance": 2e-05,
+      "enabled": true
+    },
+    {
+      "cpp_test": "OptVLGradientValidationTest.MachDerivativesMatchFD",
+      "rust_test": "parity_319_optvlgradientvalidationtest_machderivativesmatchfd",
+      "category": "gradients",
+      "tolerance": 2e-05,
+      "enabled": true
+    },
+    {
+      "cpp_test": "OptVLGradientValidationTest.FullGradientsConsistency",
+      "rust_test": "parity_320_optvlgradientvalidationtest_fullgradientsconsistency",
+      "category": "gradients",
+      "tolerance": 2e-05,
+      "enabled": true
+    },
+    {
+      "cpp_test": "OptVLGradientValidationTest.GeometryGradientsVsFiniteDifferences",
+      "rust_test": "parity_321_optvlgradientvalidationtest_geometrygradientsvsfinitedifferences",
+      "category": "gradients",
+      "tolerance": 2e-05,
+      "enabled": true
+    },
+    {
+      "cpp_test": "OptVLGradientValidationTest.AdjointGeometryGradientMatchesFD",
+      "rust_test": "parity_322_optvlgradientvalidationtest_adjointgeometrygradientmatchesfd",
+      "category": "gradients",
+      "tolerance": 2e-05,
+      "enabled": true
+    },
+    {
+      "cpp_test": "OptVLGradientValidationTest.TwistGradientSignIsCorrect",
+      "rust_test": "parity_323_optvlgradientvalidationtest_twistgradientsigniscorrect",
+      "category": "gradients",
+      "tolerance": 2e-05,
+      "enabled": true
+    },
+    {
+      "cpp_test": "OptVLGradientValidationTest.TailTwistGradientAffectsCmStrongly",
+      "rust_test": "parity_324_optvlgradientvalidationtest_tailtwistgradientaffectscmstrongly",
+      "category": "gradients",
+      "tolerance": 2e-05,
+      "enabled": true
+    },
+    {
+      "cpp_test": "OptVLGradientValidationTest.LiftCurveSlopeIsReasonable",
+      "rust_test": "parity_325_optvlgradientvalidationtest_liftcurveslopeisreasonable",
+      "category": "gradients",
+      "tolerance": 2e-05,
+      "enabled": true
+    },
+    {
+      "cpp_test": "OptVLGradientValidationTest.RollDampingIsNegative",
+      "rust_test": "parity_326_optvlgradientvalidationtest_rolldampingisnegative",
+      "category": "gradients",
+      "tolerance": 2e-05,
+      "enabled": true
+    },
+    {
+      "cpp_test": "OptVLGradientValidationTest.PitchRateDerivativesAreComputed",
+      "rust_test": "parity_327_optvlgradientvalidationtest_pitchratederivativesarecomputed",
+      "category": "gradients",
+      "tolerance": 2e-05,
+      "enabled": true
+    },
+    {
+      "cpp_test": "OptVLGradientValidationTest.CompressibilityIncreasesCoefficients",
+      "rust_test": "parity_328_optvlgradientvalidationtest_compressibilityincreasescoefficients",
+      "category": "gradients",
+      "tolerance": 2e-05,
+      "enabled": true
+    },
+    {
+      "cpp_test": "OptVLGradientValidationTest.LateralDerivsAreSmallComparedToLongitudinal",
+      "rust_test": "parity_329_optvlgradientvalidationtest_lateralderivsaresmallcomparedtolongitudinal",
+      "category": "gradients",
+      "tolerance": 2e-05,
+      "enabled": true
+    },
+    {
+      "cpp_test": "OptVLGradientValidationTest.ZeroAlphaGivesMinimumDragSlope",
+      "rust_test": "parity_330_optvlgradientvalidationtest_zeroalphagivesminimumdragslope",
+      "category": "gradients",
+      "tolerance": 2e-05,
+      "enabled": true
+    },
+    {
+      "cpp_test": "MeshInputTest.BasicSolveProducesValidResults",
+      "rust_test": "parity_331_meshinputtest_basicsolveproducesvalidresults",
+      "category": "solver",
+      "tolerance": 1e-10,
+      "enabled": true
+    },
+    {
+      "cpp_test": "MeshInputTest.ConsistencyWithAircraftPath",
+      "rust_test": "parity_332_meshinputtest_consistencywithaircraftpath",
+      "category": "solver",
+      "tolerance": 1e-10,
+      "enabled": true
+    },
+    {
+      "cpp_test": "MeshInputTest.MeshDimensions",
+      "rust_test": "parity_333_meshinputtest_meshdimensions",
+      "category": "solver",
+      "tolerance": 1e-10,
+      "enabled": true
+    },
+    {
+      "cpp_test": "MeshNodeGradientTest.OutputStructure",
+      "rust_test": "parity_334_meshnodegradienttest_outputstructure",
+      "category": "gradients",
+      "tolerance": 2e-05,
+      "enabled": true
+    },
+    {
+      "cpp_test": "MeshNodeGradientTest.CLGradientFiniteDifference",
+      "rust_test": "parity_335_meshnodegradienttest_clgradientfinitedifference",
+      "category": "gradients",
+      "tolerance": 2e-05,
+      "enabled": true
+    },
+    {
+      "cpp_test": "MeshNodeGradientTest.CLGradientYDuplicated",
+      "rust_test": "parity_336_meshnodegradienttest_clgradientyduplicated",
+      "category": "gradients",
+      "tolerance": 2e-05,
+      "enabled": true
+    },
+    {
+      "cpp_test": "MeshNodeGradientTest.FullSpanVsYDuplicated",
+      "rust_test": "parity_337_meshnodegradienttest_fullspanvsyduplicated",
+      "category": "gradients",
+      "tolerance": 2e-05,
+      "enabled": true
+    },
+    {
+      "cpp_test": "MeshNodeGradientTest.NormalGradientKernel",
+      "rust_test": "parity_338_meshnodegradienttest_normalgradientkernel",
+      "category": "gradients",
+      "tolerance": 2e-05,
+      "enabled": true
+    },
+    {
+      "cpp_test": "BodyTest.DefaultConstruction",
+      "rust_test": "parity_339_bodytest_defaultconstruction",
+      "category": "geometry",
+      "tolerance": 1e-12,
+      "enabled": true
+    },
+    {
+      "cpp_test": "BodyTest.NamedConstruction",
+      "rust_test": "parity_340_bodytest_namedconstruction",
+      "category": "geometry",
+      "tolerance": 1e-12,
+      "enabled": true
+    },
+    {
+      "cpp_test": "BodyTest.SetName",
+      "rust_test": "parity_341_bodytest_setname",
+      "category": "geometry",
+      "tolerance": 1e-12,
+      "enabled": true
+    },
+    {
+      "cpp_test": "BodyTest.AddAndGetSections",
+      "rust_test": "parity_342_bodytest_addandgetsections",
+      "category": "geometry",
+      "tolerance": 1e-12,
+      "enabled": true
+    },
+    {
+      "cpp_test": "BodyTest.NodeCount",
+      "rust_test": "parity_343_bodytest_nodecount",
+      "category": "geometry",
+      "tolerance": 1e-12,
+      "enabled": true
+    },
+    {
+      "cpp_test": "BodyTest.NodeSpacing",
+      "rust_test": "parity_344_bodytest_nodespacing",
+      "category": "geometry",
+      "tolerance": 1e-12,
+      "enabled": true
+    },
+    {
+      "cpp_test": "BodyTest.Translation",
+      "rust_test": "parity_345_bodytest_translation",
+      "category": "geometry",
+      "tolerance": 1e-12,
+      "enabled": true
+    },
+    {
+      "cpp_test": "BodyTest.Scale",
+      "rust_test": "parity_346_bodytest_scale",
+      "category": "geometry",
+      "tolerance": 1e-12,
+      "enabled": true
+    },
+    {
+      "cpp_test": "BodyTest.DefaultScale",
+      "rust_test": "parity_347_bodytest_defaultscale",
+      "category": "geometry",
+      "tolerance": 1e-12,
+      "enabled": true
+    },
+    {
+      "cpp_test": "BodyTest.DefaultTranslation",
+      "rust_test": "parity_348_bodytest_defaulttranslation",
+      "category": "geometry",
+      "tolerance": 1e-12,
+      "enabled": true
+    },
+    {
+      "cpp_test": "BodyTest.YDuplicate",
+      "rust_test": "parity_349_bodytest_yduplicate",
+      "category": "geometry",
+      "tolerance": 1e-12,
+      "enabled": true
+    },
+    {
+      "cpp_test": "AICElementGradientTest.GradientsMatchFD",
+      "rust_test": "parity_350_aicelementgradienttest_gradientsmatchfd",
+      "category": "gradients",
+      "tolerance": 2e-05,
+      "enabled": true
+    },
+    {
+      "cpp_test": "AICElementGradientTest.WithoutBound",
+      "rust_test": "parity_351_aicelementgradienttest_withoutbound",
+      "category": "gradients",
+      "tolerance": 2e-05,
+      "enabled": true
+    },
+    {
+      "cpp_test": "AICElementGradientTest.PrandtlGlauert",
+      "rust_test": "parity_352_aicelementgradienttest_prandtlglauert",
+      "category": "gradients",
+      "tolerance": 2e-05,
+      "enabled": true
+    },
+    {
+      "cpp_test": "AICRowColumnTest.RowGradientMatchesFD",
+      "rust_test": "parity_353_aicrowcolumntest_rowgradientmatchesfd",
+      "category": "gradients",
+      "tolerance": 2e-05,
+      "enabled": true
+    },
+    {
+      "cpp_test": "AICRowColumnTest.ColumnGradientFinite",
+      "rust_test": "parity_354_aicrowcolumntest_columngradientfinite",
+      "category": "gradients",
+      "tolerance": 2e-05,
+      "enabled": true
+    },
+    {
+      "cpp_test": "AICRowColumnTest.DifferentComponents",
+      "rust_test": "parity_355_aicrowcolumntest_differentcomponents",
+      "category": "gradients",
+      "tolerance": 2e-05,
+      "enabled": true
+    },
+    {
+      "cpp_test": "AICRowColumnTest.VelocityRowGradientFinite",
+      "rust_test": "parity_356_aicrowcolumntest_velocityrowgradientfinite",
+      "category": "gradients",
+      "tolerance": 2e-05,
+      "enabled": true
+    },
+    {
+      "cpp_test": "AICRowColumnTest.VelocityColumnGradientFinite",
+      "rust_test": "parity_357_aicrowcolumntest_velocitycolumngradientfinite",
+      "category": "gradients",
+      "tolerance": 2e-05,
+      "enabled": true
+    },
+    {
+      "cpp_test": "AICRowColumnTest.VelocityColumnGradientZeroGamma",
+      "rust_test": "parity_358_aicrowcolumntest_velocitycolumngradientzerogamma",
+      "category": "gradients",
+      "tolerance": 2e-05,
+      "enabled": true
+    },
+    {
+      "cpp_test": "BiotSavartVJPTest.PrimalNonZero",
+      "rust_test": "parity_359_biotsavartvjptest_primalnonzero",
+      "category": "gradients",
+      "tolerance": 2e-05,
+      "enabled": true
+    },
+    {
+      "cpp_test": "BiotSavartVJPTest.FieldPointVJPMatchesFD",
+      "rust_test": "parity_360_biotsavartvjptest_fieldpointvjpmatchesfd",
+      "category": "gradients",
+      "tolerance": 2e-05,
+      "enabled": true
+    },
+    {
+      "cpp_test": "BiotSavartVJPTest.BoundLeftVJPMatchesFD",
+      "rust_test": "parity_361_biotsavartvjptest_boundleftvjpmatchesfd",
+      "category": "gradients",
+      "tolerance": 2e-05,
+      "enabled": true
+    },
+    {
+      "cpp_test": "BiotSavartVJPTest.BoundRightVJPMatchesFD",
+      "rust_test": "parity_362_biotsavartvjptest_boundrightvjpmatchesfd",
+      "category": "gradients",
+      "tolerance": 2e-05,
+      "enabled": true
+    },
+    {
+      "cpp_test": "BiotSavartVJPTest.WithoutBoundVortex",
+      "rust_test": "parity_363_biotsavartvjptest_withoutboundvortex",
+      "category": "gradients",
+      "tolerance": 2e-05,
+      "enabled": true
+    },
+    {
+      "cpp_test": "BiotSavartVJPTest.PrandtlGlauertScaling",
+      "rust_test": "parity_364_biotsavartvjptest_prandtlglauertscaling",
+      "category": "gradients",
+      "tolerance": 2e-05,
+      "enabled": true
+    },
+    {
+      "cpp_test": "BiotSavartVJPTest.LargerCoreRadius",
+      "rust_test": "parity_365_biotsavartvjptest_largercoreradius",
+      "category": "gradients",
+      "tolerance": 2e-05,
+      "enabled": true
+    },
+    {
+      "cpp_test": "BiotSavartVJPTest.ArbitrarySeedDirection",
+      "rust_test": "parity_366_biotsavartvjptest_arbitraryseeddirection",
+      "category": "gradients",
+      "tolerance": 2e-05,
+      "enabled": true
+    },
+    {
+      "cpp_test": "BiotSavartAICTest.AICElementKernel",
+      "rust_test": "parity_367_biotsavartaictest_aicelementkernel",
+      "category": "gradients",
+      "tolerance": 2e-05,
+      "enabled": true
+    },
+    {
+      "cpp_test": "BiotSavartAICTest.AICElementKernelWithoutBound",
+      "rust_test": "parity_368_biotsavartaictest_aicelementkernelwithoutbound",
+      "category": "gradients",
+      "tolerance": 2e-05,
+      "enabled": true
+    },
+    {
+      "cpp_test": "ForceGradientTest.PrimalKernelComputesAllOutputs",
+      "rust_test": "parity_369_forcegradienttest_primalkernelcomputesalloutputs",
+      "category": "gradients",
+      "tolerance": 2e-05,
+      "enabled": true
+    },
+    {
+      "cpp_test": "ForceGradientTest.FreestreamDirection",
+      "rust_test": "parity_370_forcegradienttest_freestreamdirection",
+      "category": "gradients",
+      "tolerance": 2e-05,
+      "enabled": true
+    },
+    {
+      "cpp_test": "ForceGradientTest.FreestreamAlphaGradient",
+      "rust_test": "parity_371_forcegradienttest_freestreamalphagradient",
+      "category": "gradients",
+      "tolerance": 2e-05,
+      "enabled": true
+    },
+    {
+      "cpp_test": "ForceGradientTest.FreestreamBetaGradient",
+      "rust_test": "parity_372_forcegradienttest_freestreambetagradient",
+      "category": "gradients",
+      "tolerance": 2e-05,
+      "enabled": true
+    },
+    {
+      "cpp_test": "ForceGradientTest.BodyToStability",
+      "rust_test": "parity_373_forcegradienttest_bodytostability",
+      "category": "gradients",
+      "tolerance": 2e-05,
+      "enabled": true
+    },
+    {
+      "cpp_test": "ForceGradientTest.AlphaGradientMatchesFD",
+      "rust_test": "parity_374_forcegradienttest_alphagradientmatchesfd",
+      "category": "gradients",
+      "tolerance": 2e-05,
+      "enabled": true
+    },
+    {
+      "cpp_test": "ForceGradientTest.BetaGradientMatchesFD",
+      "rust_test": "parity_375_forcegradienttest_betagradientmatchesfd",
+      "category": "gradients",
+      "tolerance": 2e-05,
+      "enabled": true
+    },
+    {
+      "cpp_test": "ForceGradientTest.CirculationGradientMatchesFD",
+      "rust_test": "parity_376_forcegradienttest_circulationgradientmatchesfd",
+      "category": "gradients",
+      "tolerance": 2e-05,
+      "enabled": true
+    },
+    {
+      "cpp_test": "ForceGradientTest.InducedVelocityGradientMatchesFD",
+      "rust_test": "parity_377_forcegradienttest_inducedvelocitygradientmatchesfd",
+      "category": "gradients",
+      "tolerance": 2e-05,
+      "enabled": true
+    },
+    {
+      "cpp_test": "ForceGradientTest.GeometryGradientMatchesFD",
+      "rust_test": "parity_378_forcegradienttest_geometrygradientmatchesfd",
+      "category": "gradients",
+      "tolerance": 2e-05,
+      "enabled": true
+    },
+    {
+      "cpp_test": "ForceGradientTest.ZeroAlpha",
+      "rust_test": "parity_379_forcegradienttest_zeroalpha",
+      "category": "gradients",
+      "tolerance": 2e-05,
+      "enabled": true
+    },
+    {
+      "cpp_test": "TrefftzGradientTest.PrimalKernelComputes",
+      "rust_test": "parity_380_trefftzgradienttest_primalkernelcomputes",
+      "category": "gradients",
+      "tolerance": 2e-05,
+      "enabled": true
+    },
+    {
+      "cpp_test": "TrefftzGradientTest.SpanEfficiency",
+      "rust_test": "parity_381_trefftzgradienttest_spanefficiency",
+      "category": "gradients",
+      "tolerance": 2e-05,
+      "enabled": true
+    },
+    {
+      "cpp_test": "TrefftzGradientTest.SpanEfficiencyZeroDrag",
+      "rust_test": "parity_382_trefftzgradienttest_spanefficiencyzerodrag",
+      "category": "gradients",
+      "tolerance": 2e-05,
+      "enabled": true
+    },
+    {
+      "cpp_test": "TrefftzGradientTest.TrefftzVelocityPoint",
+      "rust_test": "parity_383_trefftzgradienttest_trefftzvelocitypoint",
+      "category": "gradients",
+      "tolerance": 2e-05,
+      "enabled": true
+    },
+    {
+      "cpp_test": "TrefftzGradientTest.CLGradientMatchesFD",
+      "rust_test": "parity_384_trefftzgradienttest_clgradientmatchesfd",
+      "category": "gradients",
+      "tolerance": 2e-05,
+      "enabled": true
+    },
+    {
+      "cpp_test": "TrefftzGradientTest.CYGradientMatchesFD",
+      "rust_test": "parity_385_trefftzgradienttest_cygradientmatchesfd",
+      "category": "gradients",
+      "tolerance": 2e-05,
+      "enabled": true
+    },
+    {
+      "cpp_test": "TrefftzGradientTest.CDiGradientMatchesFD",
+      "rust_test": "parity_386_trefftzgradienttest_cdigradientmatchesfd",
+      "category": "gradients",
+      "tolerance": 2e-05,
+      "enabled": true
+    },
+    {
+      "cpp_test": "TrefftzGradientTest.MultiSurfaceCoreRadius",
+      "rust_test": "parity_387_trefftzgradienttest_multisurfacecoreradius",
+      "category": "gradients",
+      "tolerance": 2e-05,
+      "enabled": true
+    },
+    {
+      "cpp_test": "MeshSensitivityTest.ExtractMeshArrays",
+      "rust_test": "parity_388_meshsensitivitytest_extractmesharrays",
+      "category": "gradients",
+      "tolerance": 2e-05,
+      "enabled": true
+    },
+    {
+      "cpp_test": "MeshSensitivityTest.BuildSectionStripMappingSingleSurface",
+      "rust_test": "parity_389_meshsensitivitytest_buildsectionstripmappingsinglesurface",
+      "category": "gradients",
+      "tolerance": 2e-05,
+      "enabled": true
+    },
+    {
+      "cpp_test": "MeshSensitivityTest.BuildSectionStripMappingYDuplicate",
+      "rust_test": "parity_390_meshsensitivitytest_buildsectionstripmappingyduplicate",
+      "category": "gradients",
+      "tolerance": 2e-05,
+      "enabled": true
+    },
+    {
+      "cpp_test": "MeshSensitivityTest.BuildDefaultChordwiseFractions",
+      "rust_test": "parity_391_meshsensitivitytest_builddefaultchordwisefractions",
+      "category": "gradients",
+      "tolerance": 2e-05,
+      "enabled": true
+    },
+    {
+      "cpp_test": "MeshSensitivityTest.StripInterpolationFraction",
+      "rust_test": "parity_392_meshsensitivitytest_stripinterpolationfraction",
+      "category": "gradients",
+      "tolerance": 2e-05,
+      "enabled": true
+    },
+    {
+      "cpp_test": "MeshSensitivityTest.StripEdgeFractions",
+      "rust_test": "parity_393_meshsensitivitytest_stripedgefractions",
+      "category": "gradients",
+      "tolerance": 2e-05,
+      "enabled": true
+    },
+    {
+      "cpp_test": "MeshSensitivityTest.BuildSpanwiseFractions",
+      "rust_test": "parity_394_meshsensitivitytest_buildspanwisefractions",
+      "category": "gradients",
+      "tolerance": 2e-05,
+      "enabled": true
+    },
+    {
+      "cpp_test": "MeshSensitivityTest.SectionStripMappingGetStripRange",
+      "rust_test": "parity_395_meshsensitivitytest_sectionstripmappinggetstriprange",
+      "category": "gradients",
+      "tolerance": 2e-05,
+      "enabled": true
+    },
+    {
+      "cpp_test": "MeshSensitivityTest.MeshGradientsResizeAndZero",
+      "rust_test": "parity_396_meshsensitivitytest_meshgradientsresizeandzero",
+      "category": "gradients",
+      "tolerance": 2e-05,
+      "enabled": true
+    },
+    {
+      "cpp_test": "MeshSensitivityTest.PropagateLeadingEdgeGradient",
+      "rust_test": "parity_397_meshsensitivitytest_propagateleadingedgegradient",
+      "category": "gradients",
+      "tolerance": 2e-05,
+      "enabled": true
+    },
+    {
+      "cpp_test": "MeshSensitivityTest.PropagateChordGradient",
+      "rust_test": "parity_398_meshsensitivitytest_propagatechordgradient",
+      "category": "gradients",
+      "tolerance": 2e-05,
+      "enabled": true
+    },
+    {
+      "cpp_test": "MeshSensitivityTest.ComputeSectionGradientFromMesh",
+      "rust_test": "parity_399_meshsensitivitytest_computesectiongradientfrommesh",
+      "category": "gradients",
+      "tolerance": 2e-05,
+      "enabled": true
+    },
+    {
+      "cpp_test": "MeshSensitivityTest.PropagateTwistGradient",
+      "rust_test": "parity_400_meshsensitivitytest_propagatetwistgradient",
+      "category": "gradients",
+      "tolerance": 2e-05,
+      "enabled": true
+    },
+    {
+      "cpp_test": "MeshSensitivityMultiSurfaceTest.TwoSurfaces",
+      "rust_test": "parity_401_meshsensitivitymultisurfacetest_twosurfaces",
+      "category": "gradients",
+      "tolerance": 2e-05,
+      "enabled": true
+    },
+    {
+      "cpp_test": "MathUtilitiesTest.PrandtlGlauertZeroMach",
+      "rust_test": "parity_402_mathutilitiestest_prandtlglauertzeromach",
+      "category": "geometry",
+      "tolerance": 1e-12,
+      "enabled": true
+    },
+    {
+      "cpp_test": "MathUtilitiesTest.PrandtlGlauertSubsonic",
+      "rust_test": "parity_403_mathutilitiestest_prandtlglauertsubsonic",
+      "category": "geometry",
+      "tolerance": 1e-12,
+      "enabled": true
+    },
+    {
+      "cpp_test": "MathUtilitiesTest.VortexSegmentAboveCenter",
+      "rust_test": "parity_404_mathutilitiestest_vortexsegmentabovecenter",
+      "category": "geometry",
+      "tolerance": 1e-12,
+      "enabled": true
+    },
+    {
+      "cpp_test": "MathUtilitiesTest.VortexSegmentOnAxis",
+      "rust_test": "parity_405_mathutilitiestest_vortexsegmentonaxis",
+      "category": "geometry",
+      "tolerance": 1e-12,
+      "enabled": true
+    },
+    {
+      "cpp_test": "MathUtilitiesTest.VortexSegmentAtEndpoint",
+      "rust_test": "parity_406_mathutilitiestest_vortexsegmentatendpoint",
+      "category": "geometry",
+      "tolerance": 1e-12,
+      "enabled": true
+    },
+    {
+      "cpp_test": "MathUtilitiesTest.TrailingVortexAbove",
+      "rust_test": "parity_407_mathutilitiestest_trailingvortexabove",
+      "category": "geometry",
+      "tolerance": 1e-12,
+      "enabled": true
+    },
+    {
+      "cpp_test": "MathUtilitiesTest.TrailingVortexAtStart",
+      "rust_test": "parity_408_mathutilitiestest_trailingvortexatstart",
+      "category": "geometry",
+      "tolerance": 1e-12,
+      "enabled": true
+    },
+    {
+      "cpp_test": "MathUtilitiesTest.TrailingVortexDownstream",
+      "rust_test": "parity_409_mathutilitiestest_trailingvortexdownstream",
+      "category": "geometry",
+      "tolerance": 1e-12,
+      "enabled": true
+    },
+    {
+      "cpp_test": "MathUtilitiesTest.CosineSpacingEndpoints",
+      "rust_test": "parity_410_mathutilitiestest_cosinespacingendpoints",
+      "category": "geometry",
+      "tolerance": 1e-12,
+      "enabled": true
+    },
+    {
+      "cpp_test": "MathUtilitiesTest.CosineSpacingConcentration",
+      "rust_test": "parity_411_mathutilitiestest_cosinespacingconcentration",
+      "category": "geometry",
+      "tolerance": 1e-12,
+      "enabled": true
+    },
+    {
+      "cpp_test": "MathUtilitiesTest.UniformSpacing",
+      "rust_test": "parity_412_mathutilitiestest_uniformspacing",
+      "category": "geometry",
+      "tolerance": 1e-12,
+      "enabled": true
+    },
+    {
+      "cpp_test": "MathUtilitiesTest.SineSpacing",
+      "rust_test": "parity_413_mathutilitiestest_sinespacing",
+      "category": "geometry",
+      "tolerance": 1e-12,
+      "enabled": true
+    },
+    {
+      "cpp_test": "MathUtilitiesTest.BlendedSpacingUniform",
+      "rust_test": "parity_414_mathutilitiestest_blendedspacinguniform",
+      "category": "geometry",
+      "tolerance": 1e-12,
+      "enabled": true
+    },
+    {
+      "cpp_test": "MathUtilitiesTest.BlendedSpacingCosine",
+      "rust_test": "parity_415_mathutilitiestest_blendedspacingcosine",
+      "category": "geometry",
+      "tolerance": 1e-12,
+      "enabled": true
+    },
+    {
+      "cpp_test": "MathUtilitiesTest.SpacingDispatcherUniform",
+      "rust_test": "parity_416_mathutilitiestest_spacingdispatcheruniform",
+      "category": "geometry",
+      "tolerance": 1e-12,
+      "enabled": true
+    },
+    {
+      "cpp_test": "MathUtilitiesTest.SpacingDispatcherCosine",
+      "rust_test": "parity_417_mathutilitiestest_spacingdispatchercosine",
+      "category": "geometry",
+      "tolerance": 1e-12,
+      "enabled": true
+    },
+    {
+      "cpp_test": "MathUtilitiesTest.SpacingDispatcherSine",
+      "rust_test": "parity_418_mathutilitiestest_spacingdispatchersine",
+      "category": "geometry",
+      "tolerance": 1e-12,
+      "enabled": true
+    },
+    {
+      "cpp_test": "MathUtilitiesTest.SpacingDispatcherBlend",
+      "rust_test": "parity_419_mathutilitiestest_spacingdispatcherblend",
+      "category": "geometry",
+      "tolerance": 1e-12,
+      "enabled": true
+    },
+    {
+      "cpp_test": "MathUtilitiesTest.SpacingDispatcherNone",
+      "rust_test": "parity_420_mathutilitiestest_spacingdispatchernone",
+      "category": "geometry",
+      "tolerance": 1e-12,
+      "enabled": true
+    },
+    {
+      "cpp_test": "MathUtilitiesTest.RotateAboutXIdentity",
+      "rust_test": "parity_421_mathutilitiestest_rotateaboutxidentity",
+      "category": "geometry",
+      "tolerance": 1e-12,
+      "enabled": true
+    },
+    {
+      "cpp_test": "MathUtilitiesTest.RotateAboutX90",
+      "rust_test": "parity_422_mathutilitiestest_rotateaboutx90",
+      "category": "geometry",
+      "tolerance": 1e-12,
+      "enabled": true
+    },
+    {
+      "cpp_test": "MathUtilitiesTest.RotateAboutYIdentity",
+      "rust_test": "parity_423_mathutilitiestest_rotateaboutyidentity",
+      "category": "geometry",
+      "tolerance": 1e-12,
+      "enabled": true
+    },
+    {
+      "cpp_test": "MathUtilitiesTest.RotateAboutY90",
+      "rust_test": "parity_424_mathutilitiestest_rotateabouty90",
+      "category": "geometry",
+      "tolerance": 1e-12,
+      "enabled": true
+    },
+    {
+      "cpp_test": "MathUtilitiesTest.RotateAboutZIdentity",
+      "rust_test": "parity_425_mathutilitiestest_rotateaboutzidentity",
+      "category": "geometry",
+      "tolerance": 1e-12,
+      "enabled": true
+    },
+    {
+      "cpp_test": "MathUtilitiesTest.RotateAboutZ90",
+      "rust_test": "parity_426_mathutilitiestest_rotateaboutz90",
+      "category": "geometry",
+      "tolerance": 1e-12,
+      "enabled": true
+    },
+    {
+      "cpp_test": "MathUtilitiesTest.WindToBodyIdentity",
+      "rust_test": "parity_427_mathutilitiestest_windtobodyidentity",
+      "category": "geometry",
+      "tolerance": 1e-12,
+      "enabled": true
+    },
+    {
+      "cpp_test": "MathUtilitiesTest.WindToBodyOrthogonality",
+      "rust_test": "parity_428_mathutilitiestest_windtobodyorthogonality",
+      "category": "geometry",
+      "tolerance": 1e-12,
+      "enabled": true
+    },
+    {
+      "cpp_test": "MathUtilitiesTest.WindToBodyAlphaOnly",
+      "rust_test": "parity_429_mathutilitiestest_windtobodyalphaonly",
+      "category": "geometry",
+      "tolerance": 1e-12,
+      "enabled": true
+    },
+    {
+      "cpp_test": "MathUtilitiesTest.BodyToStabilityIdentity",
+      "rust_test": "parity_430_mathutilitiestest_bodytostabilityidentity",
+      "category": "geometry",
+      "tolerance": 1e-12,
+      "enabled": true
+    },
+    {
+      "cpp_test": "MathUtilitiesTest.BodyToStabilityOrthogonality",
+      "rust_test": "parity_431_mathutilitiestest_bodytostabilityorthogonality",
+      "category": "geometry",
+      "tolerance": 1e-12,
+      "enabled": true
+    },
+    {
+      "cpp_test": "MathUtilitiesTest.BodyToStabilityElements",
+      "rust_test": "parity_432_mathutilitiestest_bodytostabilityelements",
+      "category": "geometry",
+      "tolerance": 1e-12,
+      "enabled": true
+    },
+    {
+      "cpp_test": "OperatingVariablesTest.DefaultNumVariables",
+      "rust_test": "parity_433_operatingvariablestest_defaultnumvariables",
+      "category": "trim",
+      "tolerance": 1e-06,
+      "enabled": true
+    },
+    {
+      "cpp_test": "OperatingVariablesTest.NumVariablesWithControls",
+      "rust_test": "parity_434_operatingvariablestest_numvariableswithcontrols",
+      "category": "trim",
+      "tolerance": 1e-06,
+      "enabled": true
+    },
+    {
+      "cpp_test": "OperatingVariablesTest.DefaultValues",
+      "rust_test": "parity_435_operatingvariablestest_defaultvalues",
+      "category": "trim",
+      "tolerance": 1e-06,
+      "enabled": true
+    },
+    {
+      "cpp_test": "TrimConstraintsTest.DefaultAllFree",
+      "rust_test": "parity_436_trimconstraintstest_defaultallfree",
+      "category": "trim",
+      "tolerance": 1e-06,
+      "enabled": true
+    },
+    {
+      "cpp_test": "TrimConstraintsTest.ConstraintCountWithControls",
+      "rust_test": "parity_437_trimconstraintstest_constraintcountwithcontrols",
+      "category": "trim",
+      "tolerance": 1e-06,
+      "enabled": true
+    },
+    {
+      "cpp_test": "TrimConstraintsTest.AllConstraintTypesCount",
+      "rust_test": "parity_438_trimconstraintstest_allconstrainttypescount",
+      "category": "trim",
+      "tolerance": 1e-06,
+      "enabled": true
+    },
+    {
+      "cpp_test": "TrimPresetsTest.LevelFlightRatesFixed",
+      "rust_test": "parity_439_trimpresetstest_levelflightratesfixed",
+      "category": "trim",
+      "tolerance": 1e-06,
+      "enabled": true
+    },
+    {
+      "cpp_test": "TrimPresetsTest.LevelTrimmedFlight",
+      "rust_test": "parity_440_trimpresetstest_leveltrimmedflight",
+      "category": "trim",
+      "tolerance": 1e-06,
+      "enabled": true
+    },
+    {
+      "cpp_test": "TrimPresetsTest.SteadyTurn",
+      "rust_test": "parity_441_trimpresetstest_steadyturn",
+      "category": "trim",
+      "tolerance": 1e-06,
+      "enabled": true
+    },
+    {
+      "cpp_test": "TrimPresetsTest.SteadySideslipAllFields",
+      "rust_test": "parity_442_trimpresetstest_steadysideslipallfields",
+      "category": "trim",
+      "tolerance": 1e-06,
+      "enabled": true
+    },
+    {
+      "cpp_test": "VariableConstraintTest.DefaultState",
+      "rust_test": "parity_443_variableconstrainttest_defaultstate",
+      "category": "trim",
+      "tolerance": 1e-06,
+      "enabled": true
+    },
+    {
+      "cpp_test": "SectionUnitTest.DefaultConstructor",
+      "rust_test": "parity_444_sectionunittest_defaultconstructor",
+      "category": "geometry",
+      "tolerance": 1e-12,
+      "enabled": true
+    },
+    {
+      "cpp_test": "SectionUnitTest.ParameterizedConstructor",
+      "rust_test": "parity_445_sectionunittest_parameterizedconstructor",
+      "category": "geometry",
+      "tolerance": 1e-12,
+      "enabled": true
+    },
+    {
+      "cpp_test": "SectionUnitTest.ConstructorWithAirfoil",
+      "rust_test": "parity_446_sectionunittest_constructorwithairfoil",
+      "category": "geometry",
+      "tolerance": 1e-12,
+      "enabled": true
+    },
+    {
+      "cpp_test": "SectionUnitTest.GetAirfoilWithoutCustomReturnsFlat",
+      "rust_test": "parity_447_sectionunittest_getairfoilwithoutcustomreturnsflat",
+      "category": "geometry",
+      "tolerance": 1e-12,
+      "enabled": true
+    },
+    {
+      "cpp_test": "SectionUnitTest.GetAirfoilMutableCreatesFlat",
+      "rust_test": "parity_448_sectionunittest_getairfoilmutablecreatesflat",
+      "category": "geometry",
+      "tolerance": 1e-12,
+      "enabled": true
+    },
+    {
+      "cpp_test": "SectionUnitTest.GetAirfoilWithCustomReturnsCustom",
+      "rust_test": "parity_449_sectionunittest_getairfoilwithcustomreturnscustom",
+      "category": "geometry",
+      "tolerance": 1e-12,
+      "enabled": true
+    },
+    {
+      "cpp_test": "SectionUnitTest.SetAirfoil",
+      "rust_test": "parity_450_sectionunittest_setairfoil",
+      "category": "geometry",
+      "tolerance": 1e-12,
+      "enabled": true
+    },
+    {
+      "cpp_test": "SectionUnitTest.SetLeadingEdgePosition",
+      "rust_test": "parity_451_sectionunittest_setleadingedgeposition",
+      "category": "geometry",
+      "tolerance": 1e-12,
+      "enabled": true
+    },
+    {
+      "cpp_test": "SectionUnitTest.SetChord",
+      "rust_test": "parity_452_sectionunittest_setchord",
+      "category": "geometry",
+      "tolerance": 1e-12,
+      "enabled": true
+    },
+    {
+      "cpp_test": "SectionUnitTest.SetTwistAngle",
+      "rust_test": "parity_453_sectionunittest_settwistangle",
+      "category": "geometry",
+      "tolerance": 1e-12,
+      "enabled": true
+    },
+    {
+      "cpp_test": "SectionUnitTest.TwistAngleRadians",
+      "rust_test": "parity_454_sectionunittest_twistangleradians",
+      "category": "geometry",
+      "tolerance": 1e-12,
+      "enabled": true
+    },
+    {
+      "cpp_test": "SectionUnitTest.ClAlphaFactor",
+      "rust_test": "parity_455_sectionunittest_clalphafactor",
+      "category": "geometry",
+      "tolerance": 1e-12,
+      "enabled": true
+    },
+    {
+      "cpp_test": "SectionUnitTest.TwistOffsetDefaultsToZero",
+      "rust_test": "parity_456_sectionunittest_twistoffsetdefaultstozero",
+      "category": "geometry",
+      "tolerance": 1e-12,
+      "enabled": true
+    },
+    {
+      "cpp_test": "SectionUnitTest.TwistOffsetAddsToGeometricTwist",
+      "rust_test": "parity_457_sectionunittest_twistoffsetaddstogeometrictwist",
+      "category": "geometry",
+      "tolerance": 1e-12,
+      "enabled": true
+    },
+    {
+      "cpp_test": "SectionUnitTest.AddControlSurface",
+      "rust_test": "parity_458_sectionunittest_addcontrolsurface",
+      "category": "geometry",
+      "tolerance": 1e-12,
+      "enabled": true
+    },
+    {
+      "cpp_test": "SectionUnitTest.AddDesignVariable",
+      "rust_test": "parity_459_sectionunittest_adddesignvariable",
+      "category": "geometry",
+      "tolerance": 1e-12,
+      "enabled": true
+    },
+    {
+      "cpp_test": "SectionUnitTest.SpanwisePanelCount",
+      "rust_test": "parity_460_sectionunittest_spanwisepanelcount",
+      "category": "geometry",
+      "tolerance": 1e-12,
+      "enabled": true
+    },
+    {
+      "cpp_test": "SectionUnitTest.SpanwiseSpacingEnum",
+      "rust_test": "parity_461_sectionunittest_spanwisespacingenum",
+      "category": "geometry",
+      "tolerance": 1e-12,
+      "enabled": true
+    },
+    {
+      "cpp_test": "SectionUnitTest.SpanwiseSpacingNumericUniform",
+      "rust_test": "parity_462_sectionunittest_spanwisespacingnumericuniform",
+      "category": "geometry",
+      "tolerance": 1e-12,
+      "enabled": true
+    },
+    {
+      "cpp_test": "SectionUnitTest.SpanwiseSpacingNumericCosine",
+      "rust_test": "parity_463_sectionunittest_spanwisespacingnumericcosine",
+      "category": "geometry",
+      "tolerance": 1e-12,
+      "enabled": true
+    },
+    {
+      "cpp_test": "SectionUnitTest.SpanwiseSpacingNumericSine",
+      "rust_test": "parity_464_sectionunittest_spanwisespacingnumericsine",
+      "category": "geometry",
+      "tolerance": 1e-12,
+      "enabled": true
+    },
+    {
+      "cpp_test": "SectionUnitTest.ViscousPolar",
+      "rust_test": "parity_465_sectionunittest_viscouspolar",
+      "category": "geometry",
+      "tolerance": 1e-12,
+      "enabled": true
+    },
+    {
+      "cpp_test": "AerodynamicResultsTest.DefaultState",
+      "rust_test": "parity_466_aerodynamicresultstest_defaultstate",
+      "category": "aero",
+      "tolerance": 1e-09,
+      "enabled": true
+    },
+    {
+      "cpp_test": "AerodynamicResultsTest.GetAspectRatio",
+      "rust_test": "parity_467_aerodynamicresultstest_getaspectratio",
+      "category": "aero",
+      "tolerance": 1e-09,
+      "enabled": true
+    },
+    {
+      "cpp_test": "AerodynamicResultsTest.GetAspectRatioSquareWing",
+      "rust_test": "parity_468_aerodynamicresultstest_getaspectratiosquarewing",
+      "category": "aero",
+      "tolerance": 1e-09,
+      "enabled": true
+    },
+    {
+      "cpp_test": "AerodynamicResultsTest.GetIdealInducedDrag",
+      "rust_test": "parity_469_aerodynamicresultstest_getidealinduceddrag",
+      "category": "aero",
+      "tolerance": 1e-09,
+      "enabled": true
+    },
+    {
+      "cpp_test": "AerodynamicResultsTest.GetIdealInducedDragZeroCL",
+      "rust_test": "parity_470_aerodynamicresultstest_getidealinduceddragzerocl",
+      "category": "aero",
+      "tolerance": 1e-09,
+      "enabled": true
+    },
+    {
+      "cpp_test": "AerodynamicResultsTest.Clear",
+      "rust_test": "parity_471_aerodynamicresultstest_clear",
+      "category": "aero",
+      "tolerance": 1e-09,
+      "enabled": true
+    },
+    {
+      "cpp_test": "StripLoadsTest.DefaultState",
+      "rust_test": "parity_472_striploadstest_defaultstate",
+      "category": "aero",
+      "tolerance": 1e-09,
+      "enabled": true
+    },
+    {
+      "cpp_test": "SurfaceLoadsTest.DefaultState",
+      "rust_test": "parity_473_surfaceloadstest_defaultstate",
+      "category": "aero",
+      "tolerance": 1e-09,
+      "enabled": true
+    },
+    {
+      "cpp_test": "ForwardJvpBatchTest.BatchMatchesPerDirectionJVPs",
+      "rust_test": "parity_474_forwardjvpbatchtest_batchmatchesperdirectionjvps",
+      "category": "gradients",
+      "tolerance": 2e-05,
+      "enabled": true
+    },
+    {
+      "cpp_test": "ForwardJvpBatchTest.GeometryVJPsAreExactTransposes",
+      "rust_test": "parity_475_forwardjvpbatchtest_geometryvjpsareexacttransposes",
+      "category": "gradients",
+      "tolerance": 2e-05,
+      "enabled": true
+    },
+    {
+      "cpp_test": "ForwardJvpBatchTest.MeshPerturbationJVPMatchesResolve",
+      "rust_test": "parity_476_forwardjvpbatchtest_meshperturbationjvpmatchesresolve",
+      "category": "gradients",
+      "tolerance": 2e-05,
+      "enabled": true
+    },
+    {
+      "cpp_test": "RectangularWingTest.LiftCurveSlopeMatchesTheory",
+      "rust_test": "parity_477_rectangularwingtest_liftcurveslopematchestheory",
+      "category": "solver",
+      "tolerance": 1e-10,
+      "enabled": true
+    },
+    {
+      "cpp_test": "RectangularWingTest.InducedDragNonZero",
+      "rust_test": "parity_478_rectangularwingtest_induceddragnonzero",
+      "category": "solver",
+      "tolerance": 1e-10,
+      "enabled": true
+    },
+    {
+      "cpp_test": "RectangularWingTest.ZeroLiftAtZeroAlpha",
+      "rust_test": "parity_479_rectangularwingtest_zeroliftatzeroalpha",
+      "category": "solver",
+      "tolerance": 1e-10,
+      "enabled": true
+    },
+    {
+      "cpp_test": "RectangularWingTest.LiftLinearWithAlpha",
+      "rust_test": "parity_480_rectangularwingtest_liftlinearwithalpha",
+      "category": "solver",
+      "tolerance": 1e-10,
+      "enabled": true
+    },
+    {
+      "cpp_test": "RectangularWingTest.StabilityDerivativesPhysicallyReasonable",
+      "rust_test": "parity_481_rectangularwingtest_stabilityderivativesphysicallyreasonable",
+      "category": "solver",
+      "tolerance": 1e-10,
+      "enabled": true
+    },
+    {
+      "cpp_test": "AvlFileTest.ParseRectangularWing",
+      "rust_test": "parity_482_avlfiletest_parserectangularwing",
+      "category": "io",
+      "tolerance": 0.0,
+      "enabled": true
+    },
+    {
+      "cpp_test": "AvlFileTest.SolveFromParsedGeometry",
+      "rust_test": "parity_483_avlfiletest_solvefromparsedgeometry",
+      "category": "io",
+      "tolerance": 0.0,
+      "enabled": true
+    },
+    {
+      "cpp_test": "AspectRatioSweep/HighAspectRatioTest.LiftSlopeApproaches2Pi/6",
+      "rust_test": "parity_484_aspectratiosweep_highaspectratiotest_liftslopeapproaches2pi_6",
+      "category": "solver",
+      "tolerance": 1e-10,
+      "enabled": true
+    },
+    {
+      "cpp_test": "AspectRatioSweep/HighAspectRatioTest.LiftSlopeApproaches2Pi/7",
+      "rust_test": "parity_485_aspectratiosweep_highaspectratiotest_liftslopeapproaches2pi_7",
+      "category": "solver",
+      "tolerance": 1e-10,
+      "enabled": true
+    },
+    {
+      "cpp_test": "AspectRatioSweep/HighAspectRatioTest.LiftSlopeApproaches2Pi/8",
+      "rust_test": "parity_486_aspectratiosweep_highaspectratiotest_liftslopeapproaches2pi_8",
+      "category": "solver",
+      "tolerance": 1e-10,
+      "enabled": true
+    },
+    {
+      "cpp_test": "AspectRatioSweep/HighAspectRatioTest.LiftSlopeApproaches2Pi/10",
+      "rust_test": "parity_487_aspectratiosweep_highaspectratiotest_liftslopeapproaches2pi_10",
+      "category": "solver",
+      "tolerance": 1e-10,
+      "enabled": true
+    }
+  ]
+}
