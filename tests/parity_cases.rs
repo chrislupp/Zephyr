@@ -130,6 +130,21 @@ const PORTED: &[&str] = &[
     "MeshInputTest.BasicSolveProducesValidResults",
     "MeshInputTest.ConsistencyWithAircraftPath",
     "MeshInputTest.MeshDimensions",
+    // mesh_sensitivity_test.cpp -> tests/mesh_sensitivity.rs
+    "MeshSensitivityTest.ExtractMeshArrays",
+    "MeshSensitivityTest.BuildSectionStripMappingSingleSurface",
+    "MeshSensitivityTest.BuildSectionStripMappingYDuplicate",
+    "MeshSensitivityTest.BuildDefaultChordwiseFractions",
+    "MeshSensitivityTest.StripInterpolationFraction",
+    "MeshSensitivityTest.StripEdgeFractions",
+    "MeshSensitivityTest.BuildSpanwiseFractions",
+    "MeshSensitivityTest.SectionStripMappingGetStripRange",
+    "MeshSensitivityTest.MeshGradientsResizeAndZero",
+    "MeshSensitivityTest.PropagateLeadingEdgeGradient",
+    "MeshSensitivityTest.PropagateChordGradient",
+    "MeshSensitivityTest.ComputeSectionGradientFromMesh",
+    "MeshSensitivityTest.PropagateTwistGradient",
+    "MeshSensitivityMultiSurfaceTest.TwoSurfaces",
     // mesh_node_gradient_test.cpp -> tests/mesh_node_gradient.rs
     "MeshNodeGradientTest.OutputStructure",
     "MeshNodeGradientTest.CLGradientFiniteDifference",
@@ -631,7 +646,7 @@ fn ported_case_count_is_recorded() {
     let unportable = UNPORTABLE.len();
     let total = manifest.cases.len();
     assert_eq!(
-        ported, 426,
+        ported, 440,
         "{ported} of {total} frozen C++ cases are individually ported; \
          update this count when that changes"
     );
@@ -642,7 +657,7 @@ fn ported_case_count_is_recorded() {
     );
     assert_eq!(
         total - ported - unportable,
-        58,
+        44,
         "the remaining porting backlog changed; update this count deliberately"
     );
 }
