@@ -130,6 +130,28 @@ const PORTED: &[&str] = &[
     "MeshInputTest.BasicSolveProducesValidResults",
     "MeshInputTest.ConsistencyWithAircraftPath",
     "MeshInputTest.MeshDimensions",
+    // vtk_export_test.cpp -> tests/vtk_export.rs
+    "VtkExportTest.IsAvailableReturnsConsistentValue",
+    "VtkExportTest.ExportSurfaceMeshCreatesFile",
+    "VtkExportTest.ExportSpanwiseDistributionsCreatesFile",
+    "VtkExportTest.ExportWakeGeometryCreatesFile",
+    "VtkExportTest.ExportVelocityFieldCreatesFile",
+    "VtkExportTest.ExportAllCreatesAllFiles",
+    "VtkExportTest.BinaryVsAsciiFormat",
+    "VtkExportTest.InvalidSolutionReturnsFalse",
+    "VtkExportTest.ExportOptionsDefaultsAreReasonable",
+    // rectangular_wing_test.cpp -> tests/rectangular_wing.rs
+    "RectangularWingTest.LiftCurveSlopeMatchesTheory",
+    "RectangularWingTest.InducedDragNonZero",
+    "RectangularWingTest.ZeroLiftAtZeroAlpha",
+    "RectangularWingTest.LiftLinearWithAlpha",
+    "RectangularWingTest.StabilityDerivativesPhysicallyReasonable",
+    "AvlFileTest.ParseRectangularWing",
+    "AvlFileTest.SolveFromParsedGeometry",
+    "AspectRatioSweep/HighAspectRatioTest.LiftSlopeApproaches2Pi/6",
+    "AspectRatioSweep/HighAspectRatioTest.LiftSlopeApproaches2Pi/7",
+    "AspectRatioSweep/HighAspectRatioTest.LiftSlopeApproaches2Pi/8",
+    "AspectRatioSweep/HighAspectRatioTest.LiftSlopeApproaches2Pi/10",
     // trim_solver_test.cpp -> tests/trim_solver.rs
     "TrimSolverTest.TrimToTargetCL",
     "TrimSolverTest.TrimToZeroCL",
@@ -550,7 +572,7 @@ fn ported_case_count_is_recorded() {
     let unportable = UNPORTABLE.len();
     let total = manifest.cases.len();
     assert_eq!(
-        ported, 353,
+        ported, 373,
         "{ported} of {total} frozen C++ cases are individually ported; \
          update this count when that changes"
     );
@@ -561,7 +583,7 @@ fn ported_case_count_is_recorded() {
     );
     assert_eq!(
         total - ported - unportable,
-        131,
+        111,
         "the remaining porting backlog changed; update this count deliberately"
     );
 }
