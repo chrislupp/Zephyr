@@ -130,6 +130,30 @@ const PORTED: &[&str] = &[
     "MeshInputTest.BasicSolveProducesValidResults",
     "MeshInputTest.ConsistencyWithAircraftPath",
     "MeshInputTest.MeshDimensions",
+    // force_calculator_test.cpp -> tests/force_calculator.rs
+    "ForceCalculatorTest.ZeroAlphaGivesZeroForces",
+    "ForceCalculatorTest.PositiveAlphaGivesPositiveLift",
+    "ForceCalculatorTest.NegativeAlphaGivesNegativeLift",
+    "ForceCalculatorTest.LiftCoefficientMatchesCirculation",
+    "ForceCalculatorTest.SpanEfficiencyReasonable",
+    "ForceCalculatorTest.InducedDragQuadraticWithLift",
+    "ForceCalculatorTest.SurfaceLoadsAddUpToTotal",
+    "ForceCalculatorTest.StripLoadsHaveCorrectCount",
+    "ForceCalculatorTest.PitchingMomentSign",
+    "ForceCalculatorTest.AspectRatioCalculation",
+    "ForceCalculatorTest.IdealInducedDragComputation",
+    // stability_derivatives_test.cpp -> tests/force_calculator.rs
+    "StabilityDerivativesTest.LiftCurveSlopePositive",
+    "StabilityDerivativesTest.LiftCurveSlopeReasonable",
+    "StabilityDerivativesTest.ZeroAlphaSymmetry",
+    "StabilityDerivativesTest.RollDampingNegative",
+    "StabilityDerivativesTest.PitchDampingFinite",
+    "StabilityDerivativesTest.YawDampingNonPositive",
+    "StabilityDerivativesTest.BodyAxisDerivativesValid",
+    "StabilityDerivativesTest.DerivativesAtDifferentAlpha",
+    "StabilityDerivativesTest.StaticMarginComputed",
+    "StabilityDerivativesTest.ReferenceQuantitiesPreserved",
+    "StabilityDerivativesTest.HighAspectRatioRollDamping",
     // section_test.cpp -> tests/section.rs
     "SectionUnitTest.DefaultConstructor",
     "SectionUnitTest.ParameterizedConstructor",
@@ -278,7 +302,7 @@ fn ported_case_count_is_recorded() {
     let unportable = UNPORTABLE.len();
     let total = manifest.cases.len();
     assert_eq!(
-        ported, 98,
+        ported, 120,
         "{ported} of {total} frozen C++ cases are individually ported; \
          update this count when that changes"
     );
@@ -289,7 +313,7 @@ fn ported_case_count_is_recorded() {
     );
     assert_eq!(
         total - ported - unportable,
-        388,
+        366,
         "the remaining porting backlog changed; update this count deliberately"
     );
 }
