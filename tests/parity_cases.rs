@@ -130,6 +130,21 @@ const PORTED: &[&str] = &[
     "MeshInputTest.BasicSolveProducesValidResults",
     "MeshInputTest.ConsistencyWithAircraftPath",
     "MeshInputTest.MeshDimensions",
+    // optvl_gradient_validation_test.cpp -> tests/optvl_gradient_validation.rs
+    "OptVLGradientValidationTest.AlphaDerivativesMatchFD",
+    "OptVLGradientValidationTest.BetaDerivativesMatchFD",
+    "OptVLGradientValidationTest.MachDerivativesMatchFD",
+    "OptVLGradientValidationTest.FullGradientsConsistency",
+    "OptVLGradientValidationTest.GeometryGradientsVsFiniteDifferences",
+    "OptVLGradientValidationTest.AdjointGeometryGradientMatchesFD",
+    "OptVLGradientValidationTest.TwistGradientSignIsCorrect",
+    "OptVLGradientValidationTest.TailTwistGradientAffectsCmStrongly",
+    "OptVLGradientValidationTest.LiftCurveSlopeIsReasonable",
+    "OptVLGradientValidationTest.RollDampingIsNegative",
+    "OptVLGradientValidationTest.PitchRateDerivativesAreComputed",
+    "OptVLGradientValidationTest.CompressibilityIncreasesCoefficients",
+    "OptVLGradientValidationTest.LateralDerivsAreSmallComparedToLongitudinal",
+    "OptVLGradientValidationTest.ZeroAlphaGivesMinimumDragSlope",
     // gradient_calculator_test.cpp -> tests/gradient_calculator.rs
     "GradientCalculatorTest.AlphaDerivativesMatchStabilityDerivatives",
     "GradientCalculatorTest.BetaDerivativesMatchStabilityDerivatives",
@@ -705,7 +720,7 @@ fn ported_case_count_is_recorded() {
     let unportable = UNPORTABLE.len();
     let total = manifest.cases.len();
     assert_eq!(
-        ported, 464,
+        ported, 478,
         "{ported} of {total} frozen C++ cases are individually ported; \
          update this count when that changes"
     );
@@ -721,7 +736,7 @@ fn ported_case_count_is_recorded() {
     );
     assert_eq!(
         total - ported - unportable - NOT_IN_ORACLE.len(),
-        14,
+        0,
         "the remaining porting backlog changed; update this count deliberately"
     );
 }

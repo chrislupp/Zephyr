@@ -78,13 +78,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `PegasusError::Parse` carries a structured `ParseLocation { path, line }`
   instead of a pre-formatted string, so callers can recover the line number and
   file programmatically. `PegasusError` is now `#[non_exhaustive]`.
-- 464 of the 488 frozen C++ cases now have their real assertions reproduced in
-  Rust, up from none. Twenty-seven C++ files are complete, including
-  `gradient_calculator_test` (27) and `mesh_sensitivity_test` (14); only
-  `optvl_gradient_validation_test` (14) remains. `parity_cases.rs` tracks four
-  disjoint counts and asserts all of them: 464 ported, 4 unportable because the
-  behaviour was deliberately removed, 6 with no v0.2.0 counterpart at all, and
-  14 outstanding.
+- All 488 frozen C++ cases are now accounted for, with 478 of them having their
+  real assertions reproduced in Rust — up from none. Every one of the 28 C++
+  test files has been ported. `parity_cases.rs` tracks four disjoint categories
+  and asserts each: 478 ported, 4 unportable because the behaviour was
+  deliberately removed, 6 with no v0.2.0 counterpart at all, and 0 outstanding.
 - Six manifest entries are recorded as having no corresponding test in the
   v0.2.0 C++ tree. The manifest claims provenance from commit `556b0ea`, but
   `ForwardJvpBatchTest.{BatchMatchesPerDirectionJVPs,
