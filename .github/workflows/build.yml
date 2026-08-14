@@ -11,7 +11,11 @@ env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
 
 jobs:
-  quality:
+  # `format` and `build` are the two contexts `develop`'s branch protection
+  # requires. The names are inherited from the C++ workflow and are kept
+  # verbatim so the required checks keep reporting; `build` runs the test
+  # suite despite the name.
+  format:
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
@@ -25,14 +29,8 @@ jobs:
         env:
           RUSTDOCFLAGS: -D warnings
 
-  test:
-    strategy:
-      fail-fast: false
-      matrix:
-        # Kept as a matrix with a single entry so the job stays named
-        # `test (ubuntu-24.04)`, which is what branch protection requires.
-        os: [ubuntu-24.04]
-    runs-on: ${{ matrix.os }}
+  build:
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@master
