@@ -130,6 +130,27 @@ const PORTED: &[&str] = &[
     "MeshInputTest.BasicSolveProducesValidResults",
     "MeshInputTest.ConsistencyWithAircraftPath",
     "MeshInputTest.MeshDimensions",
+    // solver_test.cpp -> tests/solver_parity.rs
+    "VortexLatticeSolverTest.SetAircraftGeneratesMesh",
+    "VortexLatticeSolverTest.RebuildAICCreatesValidMatrix",
+    "VortexLatticeSolverTest.SolveUnitResponsesComputes6Columns",
+    "VortexLatticeSolverTest.SolveAtZeroAlphaGivesZeroCirculation",
+    "VortexLatticeSolverTest.SolveAtPositiveAlphaGivesPositiveCirculation",
+    "VortexLatticeSolverTest.CirculationLinearWithAlpha",
+    "VortexLatticeSolverTest.FreestreamDirectionComputation",
+    "VortexLatticeSolverTest.MachNumberChangeInvalidatesAIC",
+    "VortexLatticeSolverTest.HighAspectRatioWingLiftSlope",
+    "VortexLatticeSolverTest.EllipticLiftDistributionShape",
+    "VortexLatticeSolverTest.YDuplicateProducesSymmetricCirculation",
+    "VortexLatticeSolverTest.InducedVelocityAtControlPoints",
+    "VortexLatticeSolverTest.GetMeshMutable",
+    "VortexLatticeSolverTest.GetReferenceQuantities",
+    "VortexLatticeSolverTest.SetReferencePoint",
+    "VortexLatticeSolverTest.SetSymmetry",
+    "VortexLatticeSolverTest.InitialStateInvalid",
+    "VortexLatticeSolverTest.GetSolution",
+    "VortexLatticeSolverTest.GetMatrices",
+    "VortexLatticeSolverTest.FreestreamDirectionWithBeta",
     // vortex_lattice_test.cpp -> tests/vortex_lattice.rs
     "VortexLatticeTest.EmptyAircraft",
     "VortexLatticeTest.RectangularWingBasicCounts",
@@ -472,7 +493,7 @@ fn ported_case_count_is_recorded() {
     let unportable = UNPORTABLE.len();
     let total = manifest.cases.len();
     assert_eq!(
-        ported, 279,
+        ported, 299,
         "{ported} of {total} frozen C++ cases are individually ported; \
          update this count when that changes"
     );
@@ -483,7 +504,7 @@ fn ported_case_count_is_recorded() {
     );
     assert_eq!(
         total - ported - unportable,
-        205,
+        185,
         "the remaining porting backlog changed; update this count deliberately"
     );
 }
