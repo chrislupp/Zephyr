@@ -130,6 +130,25 @@ const PORTED: &[&str] = &[
     "MeshInputTest.BasicSolveProducesValidResults",
     "MeshInputTest.ConsistencyWithAircraftPath",
     "MeshInputTest.MeshDimensions",
+    // influence_matrix_test.cpp -> tests/influence_matrix.rs
+    "BiotSavartTest.VelocityAboveBoundVortex",
+    "BiotSavartTest.VelocitySymmetry",
+    "BiotSavartTest.CoreRegularization",
+    "BiotSavartTest.PrandtlGlauertCorrection",
+    "BiotSavartTest.ExcludeBoundVortex",
+    "BiotSavartTest.TrailingVortexInDownstreamField",
+    "InfluenceMatrixTest.VelocityMatrixDimensions",
+    "InfluenceMatrixTest.AICMatrixDimensions",
+    "InfluenceMatrixTest.AICDiagonalDominance",
+    "InfluenceMatrixTest.AICMatrixNonsingular",
+    "InfluenceMatrixTest.MachNumberEffect",
+    "InfluenceMatrixTest.InducedVelocityFromMatrix",
+    "InfluenceMatrixTest.SupersonicMachClamped",
+    "InfluenceMatrixTest.ComputeInducedVelocity",
+    "InfluenceMatrixTest.ComputeSingleVortexVelocity",
+    "InfluenceMatrixTest.YSymmetryInfluence",
+    "InfluenceMatrixTest.DifferentComponentCoreRadius",
+    "InfluenceMatrixTest.InducedVelocityWithYSymmetry",
     // mass_reader_test.cpp -> tests/mass_reader.rs
     "MassReaderTest.EmptyContent",
     "MassReaderTest.OnlyComments",
@@ -513,7 +532,7 @@ fn ported_case_count_is_recorded() {
     let unportable = UNPORTABLE.len();
     let total = manifest.cases.len();
     assert_eq!(
-        ported, 318,
+        ported, 336,
         "{ported} of {total} frozen C++ cases are individually ported; \
          update this count when that changes"
     );
@@ -524,7 +543,7 @@ fn ported_case_count_is_recorded() {
     );
     assert_eq!(
         total - ported - unportable,
-        166,
+        148,
         "the remaining porting backlog changed; update this count deliberately"
     );
 }
