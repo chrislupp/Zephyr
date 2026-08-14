@@ -133,24 +133,3 @@ impl FlightState {
         0.5 * self.density * self.velocity * self.velocity
     }
 }
-
-/// Optional added-mass terms.
-#[derive(Clone, Debug)]
-pub struct ApparentMass {
-    /// Added translational inertia.
-    pub mass_matrix: Mat3,
-    /// Added rotational inertia.
-    pub inertia_matrix: Mat3,
-    /// Whether to include these terms.
-    pub include_effects: bool,
-}
-
-impl Default for ApparentMass {
-    fn default() -> Self {
-        Self {
-            mass_matrix: Mat3::zeros(),
-            inertia_matrix: Mat3::zeros(),
-            include_effects: false,
-        }
-    }
-}

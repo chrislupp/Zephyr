@@ -61,6 +61,23 @@ struct Case {
 /// case that never existed upstream is a hard error.
 const PORTED: &[&str] = &[];
 
+/// Frozen cases that cannot be ported because the feature they cover no longer
+/// exists, deliberately.
+///
+/// These are not a porting backlog. `ApparentMass` was carried by v0.2.0 but
+/// never read by `eigenmode_analysis.cpp`, so there was no behaviour to
+/// reproduce — the struct and its setter have been removed rather than kept as
+/// dead API. The two cases matched that dead surface: `DefaultState` asserted
+/// the zero defaults of a struct that fed nothing, and `SetApparentMass`
+/// asserted only, in its own words, that the setter "doesn't crash".
+///
+/// Membership is verified against the manifest, and a name may not appear in
+/// both this list and [`PORTED`].
+const UNPORTABLE: &[&str] = &[
+    "ApparentMassTest.DefaultState",
+    "EigenmodeAnalysisTest.SetApparentMass",
+];
+
 const CATEGORIES: &[&str] = &[
     "aero",
     "dynamics",
@@ -128,27 +145,45 @@ fn manifest_case_inventory_is_well_formed() {
 fn ported_cases_exist_in_the_manifest() {
     let manifest = manifest();
     let known: HashSet<&str> = manifest.cases.iter().map(|c| c.cpp_test.as_str()).collect();
-    for name in PORTED {
+    for name in PORTED.iter().chain(UNPORTABLE) {
         assert!(
             known.contains(name),
-            "PORTED names a case that is not in the frozen manifest: {name}"
+            "PORTED/UNPORTABLE names a case that is not in the frozen manifest: {name}"
+        );
+    }
+    let ported: HashSet<&str> = PORTED.iter().copied().collect();
+    for name in UNPORTABLE {
+        assert!(
+            !ported.contains(name),
+            "{name} is listed as both ported and unportable"
         );
     }
 }
 
 /// Guards the porting gap so it cannot be misreported in either direction.
 ///
-/// This test failing means the number of ported C++ cases changed. That is
-/// expected when work lands — update the count deliberately and say so in
-/// `CHANGELOG.md`.
+/// This test failing means the number of ported or unportable C++ cases
+/// changed. That is expected when work lands — update the counts deliberately
+/// and say so in `CHANGELOG.md`.
 #[test]
 fn ported_case_count_is_recorded() {
     let manifest = manifest();
     let ported = PORTED.len();
+    let unportable = UNPORTABLE.len();
     let total = manifest.cases.len();
     assert_eq!(
         ported, 0,
         "{ported} of {total} frozen C++ cases are individually ported; \
          update this count when that changes"
+    );
+    assert_eq!(
+        unportable, 2,
+        "{unportable} of {total} frozen C++ cases cover removed behaviour; \
+         update this count when that changes"
+    );
+    assert_eq!(
+        total - ported - unportable,
+        486,
+        "the remaining porting backlog changed; update this count deliberately"
     );
 }

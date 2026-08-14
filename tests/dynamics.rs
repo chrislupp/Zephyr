@@ -4,9 +4,7 @@ use approx::assert_abs_diff_eq;
 use num_complex::Complex64;
 use pegasus_vlm::aero::{Coefficients, StabilityDerivatives};
 use pegasus_vlm::core::{Mat3, Vec3};
-use pegasus_vlm::dynamics::{
-    ApparentMass, Eigenmode, EigenmodeAnalysis, FlightState, MassProperties, ModeType,
-};
+use pegasus_vlm::dynamics::{Eigenmode, EigenmodeAnalysis, FlightState, MassProperties, ModeType};
 
 use common::rectangular_wing;
 
@@ -231,24 +229,31 @@ fn eigensolver_rejects_invalid_mass_derivatives_and_flight_state() {
     );
 }
 
+/// The longitudinal state matrix scales with the mass properties it is handed.
+///
+/// This replaces `apparent_mass_changes_system_matrices`, which asserted that
+/// an added-mass term perturbed the matrix. That term is gone: v0.2.0 stored an
+/// `ApparentMass` and never read it, so there was no oracle formula to
+/// reproduce and the Rust one was invented. The real mass still has to reach
+/// the matrix, which is what this asserts instead.
 #[test]
-fn apparent_mass_changes_system_matrices() {
+fn longitudinal_matrix_scales_with_the_real_mass() {
     let aircraft = rectangular_wing(2, 4);
-    let base = EigenmodeAnalysis::new().longitudinal_matrix(
-        &aircraft,
-        &mass_properties(),
-        &derivatives(),
-        &flight(),
-    );
-    let mut analysis = EigenmodeAnalysis::new();
-    analysis.set_apparent_mass(ApparentMass {
-        mass_matrix: Mat3::from_diagonal_element(100.0),
-        inertia_matrix: Mat3::from_diagonal_element(50.0),
-        include_effects: true,
-    });
-    let adjusted =
+    let analysis = EigenmodeAnalysis::new();
+    let base =
         analysis.longitudinal_matrix(&aircraft, &mass_properties(), &derivatives(), &flight());
-    assert!((&base - adjusted).norm() > 1.0e-8);
+    let mut heavier = mass_properties();
+    heavier.mass *= 2.0;
+    heavier.i_yy *= 2.0;
+    let adjusted = analysis.longitudinal_matrix(&aircraft, &heavier, &derivatives(), &flight());
+    assert!((&base - &adjusted).norm() > 1.0e-8);
+    // Both the force and moment factors carry 1/mass, so doubling mass and
+    // pitch inertia halves every aerodynamic entry. Gravity and the kinematic
+    // `theta` row do not depend on mass and must be untouched.
+    assert_abs_diff_eq!(adjusted[(0, 0)], base[(0, 0)] / 2.0, epsilon = 1.0e-12);
+    assert_abs_diff_eq!(adjusted[(2, 2)], base[(2, 2)] / 2.0, epsilon = 1.0e-12);
+    assert_abs_diff_eq!(adjusted[(0, 3)], base[(0, 3)], epsilon = 1.0e-12);
+    assert_abs_diff_eq!(adjusted[(3, 2)], base[(3, 2)], epsilon = 1.0e-12);
 }
 
 #[test]

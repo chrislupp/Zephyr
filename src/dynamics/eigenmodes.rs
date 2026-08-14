@@ -8,7 +8,7 @@ use crate::core::{EPSILON, MatX, PI, Scalar};
 use crate::error::{PegasusError, Result};
 use crate::geometry::Aircraft;
 
-use super::{ApparentMass, FlightState, MassProperties};
+use super::{FlightState, MassProperties};
 
 /// Conventional dynamic-mode classification.
 #[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
@@ -148,18 +148,12 @@ impl EigenmodeResults {
 
 /// Builds longitudinal, lateral, and full rigid-body systems.
 #[derive(Clone, Debug, Default)]
-pub struct EigenmodeAnalysis {
-    apparent_mass: ApparentMass,
-}
+pub struct EigenmodeAnalysis;
 
 impl EigenmodeAnalysis {
     #[must_use]
     pub fn new() -> Self {
-        Self::default()
-    }
-
-    pub fn set_apparent_mass(&mut self, value: ApparentMass) {
-        self.apparent_mass = value;
+        Self
     }
 
     pub fn analyze_longitudinal(
@@ -207,8 +201,8 @@ impl EigenmodeAnalysis {
         flight: &FlightState,
     ) -> MatX {
         let velocity = flight.velocity;
-        let effective_mass = self.effective_mass(mass);
-        let pitch_inertia = self.effective_inertia(mass, 1);
+        let effective_mass = mass.mass;
+        let pitch_inertia = mass.i_yy;
         let qs = flight.dynamic_pressure() * aircraft.reference_area();
         let force_factor = qs / (effective_mass * velocity);
         let moment_factor = qs * aircraft.reference_chord() / pitch_inertia;
@@ -236,9 +230,9 @@ impl EigenmodeAnalysis {
         flight: &FlightState,
     ) -> MatX {
         let velocity = flight.velocity;
-        let effective_mass = self.effective_mass(mass);
-        let roll_inertia = self.effective_inertia(mass, 0);
-        let yaw_inertia = self.effective_inertia(mass, 2);
+        let effective_mass = mass.mass;
+        let roll_inertia = mass.i_xx;
+        let yaw_inertia = mass.i_zz;
         let span = aircraft.reference_span();
         let qs = flight.dynamic_pressure() * aircraft.reference_area();
         let force_factor = qs / (effective_mass * velocity);
@@ -296,23 +290,6 @@ impl EigenmodeAnalysis {
             }
         }
         matrix
-    }
-
-    fn effective_mass(&self, mass: &MassProperties) -> Scalar {
-        if self.apparent_mass.include_effects {
-            mass.mass + self.apparent_mass.mass_matrix.trace() / 3.0
-        } else {
-            mass.mass
-        }
-    }
-
-    fn effective_inertia(&self, mass: &MassProperties, axis: usize) -> Scalar {
-        let base = [mass.i_xx, mass.i_yy, mass.i_zz][axis];
-        if self.apparent_mass.include_effects {
-            base + self.apparent_mass.inertia_matrix[(axis, axis)]
-        } else {
-            base
-        }
     }
 
     fn analyze_matrix(

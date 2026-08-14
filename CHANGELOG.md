@@ -141,14 +141,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   the strip body force, so drag, roll, pitch and yaw now respond to a `CDCL`
   block that the oracle silently ignored. Lift and side are unchanged, since
   the added vector is parallel to the stability drag axis.
-- `ApparentMass` now affects the eigenmode state matrices. v0.2.0 exposed
-  `SetApparentMass` and stored the value, but `eigenmode_analysis.cpp` never
-  read it, so the setter was inert. The effective mass is
-  `m + tr(M_apparent) / 3` and the effective inertia adds the matching diagonal
-  entry. **The averaging convention is this implementation's own** — the oracle
-  defined no formula to reproduce, so there is nothing to be at parity with
-  here. `include_effects` still defaults to `false`, so a default build is
-  unaffected; enabling it produces eigenvalues v0.2.0 would not have produced.
 
 ### Removed
 
@@ -174,6 +166,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   plain paired scalars through hand-written closed forms. With this and the
   Biot-Savart change, no operator-overloaded differentiation scalar of any kind
   remains in `src/`.
+- `ApparentMass`, `EigenmodeAnalysis::set_apparent_mass`, and the added-mass
+  terms in the state matrices. v0.2.0 exposed `SetApparentMass` and stored the
+  value, but `eigenmode_analysis.cpp` never read it back, so the setter was
+  inert and the struct was carried purely to be assigned to. The Rust had
+  revived it with an invented convention — effective mass `m + tr(M) / 3` and a
+  matching inertia diagonal — that no oracle behaviour corresponds to. The
+  state matrices now use the real mass and inertia directly. The two frozen
+  C++ cases covering this, `ApparentMassTest.DefaultState` and
+  `EigenmodeAnalysisTest.SetApparentMass`, are correspondingly unportable: the
+  first asserted the struct's zero defaults and the second only that the setter
+  did not crash.
 - The internal forward-mode dual-number scalar that the Biot-Savart VJPs were
   built on. `v0.2.0` had already deleted `gradients/dual_number.h` and
   `gradients/autodiff_tape.h` in favour of hand-derived closed forms, so
