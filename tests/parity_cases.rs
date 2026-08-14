@@ -130,6 +130,41 @@ const PORTED: &[&str] = &[
     "MeshInputTest.BasicSolveProducesValidResults",
     "MeshInputTest.ConsistencyWithAircraftPath",
     "MeshInputTest.MeshDimensions",
+    // eigenmode_test.cpp -> tests/eigenmode.rs
+    "MassPropertiesTest.DefaultIsInvalid",
+    "MassPropertiesTest.ValidWithPositiveValues",
+    "MassPropertiesTest.InertiaTensorSymmetric",
+    "MassPropertiesTest.InverseInertiaCorrect",
+    "MassPropertiesTest.SetInertiaTensor",
+    "FlightStateTest.BodyVelocityAtZeroAngles",
+    "FlightStateTest.BodyVelocityWithAlpha",
+    "FlightStateTest.DynamicPressure",
+    "FlightStateTest.BodyVelocityWithBeta",
+    "FlightStateTest.DefaultValues",
+    "EigenmodeAnalysisTest.LongitudinalAnalysisProducesModes",
+    "EigenmodeAnalysisTest.LateralDirectionalAnalysisProducesModes",
+    "EigenmodeAnalysisTest.StableAircraftHasNegativeDamping",
+    "EigenmodeAnalysisTest.ShortPeriodHigherFrequencyThanPhugoid",
+    "EigenmodeAnalysisTest.EigenmodeGettersWork",
+    "EigenmodeAnalysisTest.NonOscillatoryModeHasZeroPeriod",
+    "EigenmodeAnalysisTest.DampingRatioComputation",
+    "EigenmodeAnalysisTest.InvalidMassPropertiesFails",
+    "EigenmodeAnalysisTest.InvalidDerivativesFails",
+    "EigenmodeAnalysisTest.SystemMatrixHasCorrectSize",
+    "EigenmodeAnalysisTest.FullAnalysisProducesMoreModes",
+    "EigenmodeAnalysisTest.ModeTypeNames",
+    "EigenmodeAnalysisTest.GetTimeConstant",
+    "EigenmodeAnalysisTest.GetTimeConstantZeroDamping",
+    "EigenmodeAnalysisTest.DampingRatioZeroFrequency",
+    "EigenmodeAnalysisTest.UnstableModeDetected",
+    "EigenmodeAnalysisTest.FindModesByTypeEmpty",
+    "EigenmodeAnalysisTest.FindModesByTypeWithMatch",
+    "EigenmodeAnalysisTest.GetDutchRollNotFound",
+    "EigenmodeAnalysisTest.GetPhugoidNotFound",
+    "EigenmodeAnalysisTest.GetShortPeriodNotFound",
+    "EigenmodeAnalysisTest.IsStableAllStable",
+    "EigenmodeAnalysisTest.IsStableOneUnstable",
+    "EigenmodeAnalysisTest.IsStableEmpty",
     // geometry_test.cpp -> tests/geometry_parity.rs
     "AirfoilTest.FlatPlateCreation",
     "AirfoilTest.Naca0012Creation",
@@ -381,7 +416,7 @@ fn ported_case_count_is_recorded() {
     let unportable = UNPORTABLE.len();
     let total = manifest.cases.len();
     assert_eq!(
-        ported, 198,
+        ported, 232,
         "{ported} of {total} frozen C++ cases are individually ported; \
          update this count when that changes"
     );
@@ -392,7 +427,7 @@ fn ported_case_count_is_recorded() {
     );
     assert_eq!(
         total - ported - unportable,
-        288,
+        254,
         "the remaining porting backlog changed; update this count deliberately"
     );
 }
