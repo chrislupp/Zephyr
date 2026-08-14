@@ -59,7 +59,62 @@ struct Case {
 /// Add an entry only when a Rust test reproduces that case's actual
 /// assertions. Membership is verified against the manifest, so a typo or a
 /// case that never existed upstream is a hard error.
-const PORTED: &[&str] = &[];
+const PORTED: &[&str] = &[
+    // aerodynamic_results_test.cpp -> tests/aero.rs
+    "AerodynamicResultsTest.DefaultState",
+    "AerodynamicResultsTest.GetAspectRatio",
+    "AerodynamicResultsTest.GetAspectRatioSquareWing",
+    "AerodynamicResultsTest.GetIdealInducedDrag",
+    "AerodynamicResultsTest.GetIdealInducedDragZeroCL",
+    "AerodynamicResultsTest.Clear",
+    "StripLoadsTest.DefaultState",
+    "SurfaceLoadsTest.DefaultState",
+    // math_utilities_test.cpp -> tests/math_utilities.rs
+    "MathUtilitiesTest.PrandtlGlauertZeroMach",
+    "MathUtilitiesTest.PrandtlGlauertSubsonic",
+    "MathUtilitiesTest.VortexSegmentAboveCenter",
+    "MathUtilitiesTest.VortexSegmentOnAxis",
+    "MathUtilitiesTest.VortexSegmentAtEndpoint",
+    "MathUtilitiesTest.TrailingVortexAbove",
+    "MathUtilitiesTest.TrailingVortexAtStart",
+    "MathUtilitiesTest.TrailingVortexDownstream",
+    "MathUtilitiesTest.CosineSpacingEndpoints",
+    "MathUtilitiesTest.CosineSpacingConcentration",
+    "MathUtilitiesTest.UniformSpacing",
+    "MathUtilitiesTest.SineSpacing",
+    "MathUtilitiesTest.BlendedSpacingUniform",
+    "MathUtilitiesTest.BlendedSpacingCosine",
+    "MathUtilitiesTest.SpacingDispatcherUniform",
+    "MathUtilitiesTest.SpacingDispatcherCosine",
+    "MathUtilitiesTest.SpacingDispatcherSine",
+    "MathUtilitiesTest.SpacingDispatcherBlend",
+    "MathUtilitiesTest.SpacingDispatcherNone",
+    "MathUtilitiesTest.RotateAboutXIdentity",
+    "MathUtilitiesTest.RotateAboutX90",
+    "MathUtilitiesTest.RotateAboutYIdentity",
+    "MathUtilitiesTest.RotateAboutY90",
+    "MathUtilitiesTest.RotateAboutZIdentity",
+    "MathUtilitiesTest.RotateAboutZ90",
+    "MathUtilitiesTest.WindToBodyIdentity",
+    "MathUtilitiesTest.WindToBodyOrthogonality",
+    "MathUtilitiesTest.WindToBodyAlphaOnly",
+    "MathUtilitiesTest.BodyToStabilityIdentity",
+    "MathUtilitiesTest.BodyToStabilityOrthogonality",
+    "MathUtilitiesTest.BodyToStabilityElements",
+    // cubic_spline_test.cpp -> tests/cubic_spline.rs
+    "CubicSplineTest.LinearDataInterpolation",
+    "CubicSplineTest.QuadraticDataWithMatchingBoundaryConditions",
+    "CubicSplineTest.SinusoidalData",
+    "CubicSplineTest.EvaluateAllConsistency",
+    "CubicSplineTest.EndpointInterpolation",
+    "CubicSplineTest.SpecifiedSlopeBoundaryCondition",
+    "CubicSplineTest.TwoPointSpline",
+    "CubicSplineTest.NonUniformSpacing",
+    "CubicSplineTest.ExtrapolationBehavior",
+    "CubicSplineTest.InvalidInputThrows",
+    "CubicSplineTest.EvaluateBeforeBuildThrows",
+    "CubicSplineTest.ValidityAndSizeQueries",
+];
 
 /// Frozen cases that cannot be ported because the feature they cover no longer
 /// exists, deliberately.
@@ -172,7 +227,7 @@ fn ported_case_count_is_recorded() {
     let unportable = UNPORTABLE.len();
     let total = manifest.cases.len();
     assert_eq!(
-        ported, 0,
+        ported, 51,
         "{ported} of {total} frozen C++ cases are individually ported; \
          update this count when that changes"
     );
@@ -183,7 +238,7 @@ fn ported_case_count_is_recorded() {
     );
     assert_eq!(
         total - ported - unportable,
-        486,
+        435,
         "the remaining porting backlog changed; update this count deliberately"
     );
 }
