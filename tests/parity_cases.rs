@@ -130,6 +130,34 @@ const PORTED: &[&str] = &[
     "MeshInputTest.BasicSolveProducesValidResults",
     "MeshInputTest.ConsistencyWithAircraftPath",
     "MeshInputTest.MeshDimensions",
+    // control_surface_test.cpp -> tests/control_surface.rs
+    "ControlSurfaceDefinitionTest.NameDefaultsToEmpty",
+    "ControlSurfaceDefinitionTest.SetValues",
+    "SectionControlSurfaceTest.NoControlSurfacesByDefault",
+    "SectionControlSurfaceTest.AddSingleControlSurface",
+    "SectionControlSurfaceTest.AddMultipleControlSurfaces",
+    "AircraftControlSurfaceTest.GetControlSurfaceNames",
+    "AircraftControlSurfaceTest.GetNumControlSurfaces",
+    "AircraftControlSurfaceTest.MultipleControlSurfaces",
+    "MeshControlSurfaceTest.ControlSurfaceNamesInMesh",
+    "MeshControlSurfaceTest.ControlInfluencesHaveCorrectSize",
+    "MeshControlSurfaceTest.TrailingEdgePanelsHaveInfluence",
+    "MeshControlSurfaceTest.LeadingEdgePanelsNoInfluence",
+    "MeshControlSurfaceTest.InfluenceHingeAxisCorrect",
+    "YDuplicateControlSurfaceTest.MirroredSurfaceCreated",
+    "YDuplicateControlSurfaceTest.MirroredInfluencesExist",
+    "YDuplicateControlSurfaceTest.MirroredControlSurfaceInfluences",
+    "AvlControlSurfaceParsingTest.ParseBasicControlSurface",
+    "AvlControlSurfaceParsingTest.ParseMultipleControlSurfaces",
+    "AvlControlSurfaceParsingTest.ParseControlSurfaceHingeVector",
+    "AvlControlSurfaceParsingTest.ParseControlSurfaceGain",
+    "ControlSurfaceEffectivenessTest.ControlSurfacesPropagateToMesh",
+    "ControlSurfaceEffectivenessTest.InfluenceMatrixBuiltWithControls",
+    "ControlDerivativesTest.DefaultValues",
+    "ControlDerivativesTest.SetValues",
+    "FlightConditionControlTest.DefaultNoDeflections",
+    "FlightConditionControlTest.SetControlDeflection",
+    "StabilityDerivativesControlTest.ControlDerivativesVector",
     // eigenmode_test.cpp -> tests/eigenmode.rs
     "MassPropertiesTest.DefaultIsInvalid",
     "MassPropertiesTest.ValidWithPositiveValues",
@@ -416,7 +444,7 @@ fn ported_case_count_is_recorded() {
     let unportable = UNPORTABLE.len();
     let total = manifest.cases.len();
     assert_eq!(
-        ported, 232,
+        ported, 259,
         "{ported} of {total} frozen C++ cases are individually ported; \
          update this count when that changes"
     );
@@ -427,7 +455,7 @@ fn ported_case_count_is_recorded() {
     );
     assert_eq!(
         total - ported - unportable,
-        254,
+        227,
         "the remaining porting backlog changed; update this count deliberately"
     );
 }

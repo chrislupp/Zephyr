@@ -78,15 +78,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `PegasusError::Parse` carries a structured `ParseLocation { path, line }`
   instead of a pre-formatted string, so callers can recover the line number and
   file programmatically. `PegasusError` is now `#[non_exhaustive]`.
-- 232 of the 488 frozen C++ cases now have their real assertions reproduced in
-  Rust, up from none. Eleven C++ files are complete: `geometry_test` (78),
+- 259 of the 488 frozen C++ cases now have their real assertions reproduced in
+  Rust, up from none. Twelve C++ files are complete: `geometry_test` (78),
   `eigenmode_test` (34 of 36, the other two covering removed behaviour),
-  `math_utilities_test` (31), `section_test` (22), `cubic_spline_test` (12),
-  `body_test` (11), `flight_constraints_test` (11), `force_calculator_test`
-  (11), `stability_derivatives_test` (11), `aerodynamic_results_test` (8) and
-  `mesh_input_test` (3). `parity_cases.rs` tracks ported, unportable and
-  backlog counts separately and asserts all three, so the remaining 254 cannot
-  be misreported.
+  `math_utilities_test` (31), `control_surface_test` (27), `section_test` (22),
+  `cubic_spline_test` (12), `body_test` (11), `flight_constraints_test` (11),
+  `force_calculator_test` (11), `stability_derivatives_test` (11),
+  `aerodynamic_results_test` (8) and `mesh_input_test` (3). `parity_cases.rs`
+  tracks ported, unportable and backlog counts separately and asserts all
+  three, so the remaining 227 cannot be misreported.
 - `tests/parity_cases.rs` no longer generates one test per frozen CTest case.
   The 488 generated tests all dispatched to one of eight category-level smoke
   checks, so every case within a category ran byte-identical assertions
@@ -197,6 +197,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- `ControlDerivatives::default()` reports a unit gain again. v0.2.0 declared
+  `Scalar gain{1.0}` and asserted it; the Rust used a derived `Default`, which
+  gave zero. Gain is a multiplier, so the neutral element is one — a
+  default-constructed value scaled every derivative it touched to nothing.
+  `StabilityDerivativeCalculator` always set the field explicitly, so no
+  computed result was affected; the defect was reachable only through the
+  public struct literal.
 - The Trefftz circulation gradients now skip exactly the strips the primal
   far-field loop skips. `ForceCalculator` drops a strip when its trailing-edge
   width is `< EPSILON` and `trefftz_circulation_gradients` used `<=`, so a strip

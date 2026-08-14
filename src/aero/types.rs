@@ -127,14 +127,31 @@ impl AerodynamicResults {
 }
 
 /// Derivatives with respect to one named control.
-#[derive(Clone, Debug, Default)]
+#[derive(Clone, Debug)]
 pub struct ControlDerivatives {
     pub name: String,
     pub deflection: Scalar,
+    /// Linkage gain. Unity is the neutral element, so it is what an
+    /// unconfigured control must default to.
     pub gain: Scalar,
     pub coefficients: Coefficients,
     pub body_force: Vec3,
     pub hinge_moment: Scalar,
+}
+
+impl Default for ControlDerivatives {
+    fn default() -> Self {
+        Self {
+            name: String::new(),
+            deflection: 0.0,
+            // Not `derive(Default)`: that would give a zero gain, which scales
+            // every derivative to nothing rather than leaving it alone.
+            gain: 1.0,
+            coefficients: Coefficients::default(),
+            body_force: Vec3::zeros(),
+            hinge_moment: 0.0,
+        }
+    }
 }
 
 /// Stability-axis derivatives grouped by perturbation input.
