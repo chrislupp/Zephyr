@@ -41,109 +41,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `faer/rayon` is deliberately not enabled, since gemm's cache blocking differs
   between its sequential and parallel paths and would perturb the LU's last ULP.
 
-### Fixed
-
-- Flight-condition gradients now include the section drag polar. `strip_loads`
-  folds a polar-interpolated viscous term into the strip's body force, which
-  flows into the totals and, through `arm x force`, into the moments — but the
-  gradient module contained no reference to it at all, so loading any AVL file
-  with a `CDCL` block produced derivatives that were wrong by the polar slope on
-  drag, roll, pitch and yaw. Lift and side were unaffected, because the added
-  vector is parallel to the stability drag axis and cancels exactly; that
-  asymmetry is now asserted. The chain is non-local: a strip's viscous drag
-  depends on its lift coefficient and hence, through the induced velocity, on
-  every circulation in the mesh.
-- `interpolate_drag_polar` and its slope are produced by one function,
-  `drag_polar_value_and_slope`, so the gradient kernels cannot drift from the
-  primal. The `max(0.0)` clamp and the coincident-breakpoint fallback both
-  report a zero slope, matching the flat primal there.
-- Degenerate section geometry is rejected at solver entry instead of meshing
-  into NaN. Zero or negative chord, coincident spanwise stations, sections that
-  reverse spanwise direction, and non-finite coordinates all previously
-  generated a lattice "successfully": repeating a station — a standard AVL
-  spacing-break idiom — produced 2 non-finite control points out of 18, which
-  then poisoned every entry of the AIC. The station-separation test is relative
-  to the longest interval, so it means the same thing at any model scale.
-- `Aircraft::total_vortex_count` and `total_strip_count` now agree with the
-  lattice the mesher builds. They multiplied the surface-level panel count by
-  the duplicate factor, ignoring per-section overrides and the per-interval
-  rounding, so they reported 20 strips where the mesher produced 19, and 20
-  where a section-level override produced 7.
-- Influence assembly is now invariant under a uniform rescaling of the
-  geometry. The bound-leg guard compared a length⁴ quantity, and the trailing
-  legs a length, against an absolute `EPSILON`, so below roughly millimetre
-  scale the bound contribution was silently dropped from every panel: `‖AIC‖`
-  moved 3.3% at 1e-3 scale and 4.2% at 1e-4, with no error reported. The tests
-  are the dimensionless ratios that were intended, and agree with the previous
-  thresholds at unit scale.
-- `solve` now rejects non-finite body rates and a NaN dynamic pressure. Only
-  `alpha`, `beta`, `mach` and the control deflections were validated, so a NaN
-  roll rate returned an all-NaN circulation flagged as a valid solution; NaN
-  also defeated the `dynamic_pressure < 0.0` test, since every ordered
-  comparison against NaN is false.
-- `solve` now rejects Mach numbers at or above 1 instead of clamping the
-  Prandtl-Glauert factor to 1 and returning the incompressible answer, which
-  produced finite, plausible-looking results for a regime the method cannot
-  represent while `mach_number()` still reported the supersonic value.
-- `InfluenceMatrixBuilder::induced_velocity` now includes the doubly-reflected
-  yz image. Assembly adds it whenever both symmetry planes are active, so the
-  sampled velocity field disagreed with the influence matrix by roughly 3%,
-  including a sign flip in the y component.
-- A failed `rebuild_aic` no longer publishes non-finite matrices. The fields
-  were written before the finiteness check, so `aic()`, `velocity_matrix()`,
-  `linearized_aic()` and `solution_aic()` handed out NaN-laden matrices paired
-  with a stale factorization.
-- `SurfaceMeshInfo::original_surface_index` is now always a `surface_info`
-  slot. The aircraft generator stored an `Aircraft::surfaces()` index and the
-  direct-mesh generator left it at the `Default` of 0, so for
-  `[wing(duplicated), tail]` the tail's value pointed at the wing's mirror.
-- Reflection reuse now verifies that its mirror blocks tile the column space
-  contiguously and in order. That held only because both generators happen to
-  append each duplicate immediately after its original, and the check was a
-  `debug_assert` that vanished in release, where a violation would have written
-  columns into the wrong block.
-- The AVL reader no longer panics on out-of-range panel counts. `value as usize`
-  saturates, so a paneling field of `1e30` became `usize::MAX` and overflowed
-  the mesher's panel arithmetic; counts are now range-checked at parse time and
-  rejected with a typed error.
-- `CubicSpline::evaluate` no longer panics on a NaN parameter. NaN satisfies
-  neither interval comparison, so the interval search returned 0 and the
-  caller's `i - 1` underflowed. NaN now propagates through as a NaN result, as
-  the legacy binary search did. Reachable from `Airfoil::camber`.
-- The mass reader no longer discards a line because of its comment. Comments
-  are stripped before the line is classified, so an `=` inside a comment such
-  as `! main gear (x = 1.2 m)` no longer captures the line as a unit
-  assignment and silently drops the component's mass, centre of gravity and
-  inertia.
-- Mass `*` scale and `+` offset lines no longer read numbers out of their own
-  comments, and leave the previous value untouched when fewer than three
-  numeric fields are present.
-- Mass component fields stop at the first token that does not parse, matching
-  the legacy stream extraction, instead of skipping it and promoting later
-  numbers into earlier slots.
-- A `CONTROL` line without the optional trailing `SgnDup` field is accepted
-  with a default sign of 1.0. Requiring it rejected the entire aircraft over an
-  omission the legacy reader tolerated.
-- A failed `AFILE` load is now a parse error carrying the line number instead
-  of being silently swallowed, which left the section on its default flat plate
-  and let the solve report success against the wrong camber. The filename is
-  comment-stripped.
-
-### Removed
-
-- `GradientCalculator::set_finite_difference_step`, a deprecated no-op, along
-  with the internal finite-difference machinery it documented. No finite
-  difference remains anywhere in `src/`.
-- `VortexLattice::{vortex_core_radius_chord_fraction,
-  set_vortex_core_radius_chord_fraction, vortex_core_radius_width_fraction,
-  set_vortex_core_radius_width_fraction}`. These were a second, independent
-  pair of core-radius fractions with different defaults (0.75/0.25 against the
-  builder's 0.0001/0.0001) that were never passed to assembly, so setting them
-  left the AIC bit-identical while appearing to tune the regularization. The
-  live knobs are `InfluenceMatrixBuilder::{set_core_radius_chord_fraction,
-  set_core_radius_width_fraction}`, which apply between panels on different
-  components.
-
 ### Changed
 
 - Section-geometry gradients are now fully analytical. `compute_geometry_gradients`
@@ -244,6 +141,106 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   discovery, GoogleTest, and C++ examples.
 - Philote servers, `MeshDiscipline`, `VlmDiscipline`, and Philote-dependent
   OpenMDAO workflows. These integrations are deferred to a later release.
+- `GradientCalculator::set_finite_difference_step`, a deprecated no-op, along
+  with the internal finite-difference machinery it documented. No finite
+  difference remains anywhere in `src/`.
+- `VortexLattice::{vortex_core_radius_chord_fraction,
+  set_vortex_core_radius_chord_fraction, vortex_core_radius_width_fraction,
+  set_vortex_core_radius_width_fraction}`. These were a second, independent
+  pair of core-radius fractions with different defaults (0.75/0.25 against the
+  builder's 0.0001/0.0001) that were never passed to assembly, so setting them
+  left the AIC bit-identical while appearing to tune the regularization. The
+  live knobs are `InfluenceMatrixBuilder::{set_core_radius_chord_fraction,
+  set_core_radius_width_fraction}`, which apply between panels on different
+  components.
+
+### Fixed
+
+- Flight-condition gradients now include the section drag polar. `strip_loads`
+  folds a polar-interpolated viscous term into the strip's body force, which
+  flows into the totals and, through `arm x force`, into the moments — but the
+  gradient module contained no reference to it at all, so loading any AVL file
+  with a `CDCL` block produced derivatives that were wrong by the polar slope on
+  drag, roll, pitch and yaw. Lift and side were unaffected, because the added
+  vector is parallel to the stability drag axis and cancels exactly; that
+  asymmetry is now asserted. The chain is non-local: a strip's viscous drag
+  depends on its lift coefficient and hence, through the induced velocity, on
+  every circulation in the mesh.
+- `interpolate_drag_polar` and its slope are produced by one function,
+  `drag_polar_value_and_slope`, so the gradient kernels cannot drift from the
+  primal. The `max(0.0)` clamp and the coincident-breakpoint fallback both
+  report a zero slope, matching the flat primal there.
+- Degenerate section geometry is rejected at solver entry instead of meshing
+  into NaN. Zero or negative chord, coincident spanwise stations, sections that
+  reverse spanwise direction, and non-finite coordinates all previously
+  generated a lattice "successfully": repeating a station — a standard AVL
+  spacing-break idiom — produced 2 non-finite control points out of 18, which
+  then poisoned every entry of the AIC. The station-separation test is relative
+  to the longest interval, so it means the same thing at any model scale.
+- `Aircraft::total_vortex_count` and `total_strip_count` now agree with the
+  lattice the mesher builds. They multiplied the surface-level panel count by
+  the duplicate factor, ignoring per-section overrides and the per-interval
+  rounding, so they reported 20 strips where the mesher produced 19, and 20
+  where a section-level override produced 7.
+- Influence assembly is now invariant under a uniform rescaling of the
+  geometry. The bound-leg guard compared a length⁴ quantity, and the trailing
+  legs a length, against an absolute `EPSILON`, so below roughly millimetre
+  scale the bound contribution was silently dropped from every panel: `‖AIC‖`
+  moved 3.3% at 1e-3 scale and 4.2% at 1e-4, with no error reported. The tests
+  are the dimensionless ratios that were intended, and agree with the previous
+  thresholds at unit scale.
+- `solve` now rejects non-finite body rates and a NaN dynamic pressure. Only
+  `alpha`, `beta`, `mach` and the control deflections were validated, so a NaN
+  roll rate returned an all-NaN circulation flagged as a valid solution; NaN
+  also defeated the `dynamic_pressure < 0.0` test, since every ordered
+  comparison against NaN is false.
+- `solve` now rejects Mach numbers at or above 1 instead of clamping the
+  Prandtl-Glauert factor to 1 and returning the incompressible answer, which
+  produced finite, plausible-looking results for a regime the method cannot
+  represent while `mach_number()` still reported the supersonic value.
+- `InfluenceMatrixBuilder::induced_velocity` now includes the doubly-reflected
+  yz image. Assembly adds it whenever both symmetry planes are active, so the
+  sampled velocity field disagreed with the influence matrix by roughly 3%,
+  including a sign flip in the y component.
+- A failed `rebuild_aic` no longer publishes non-finite matrices. The fields
+  were written before the finiteness check, so `aic()`, `velocity_matrix()`,
+  `linearized_aic()` and `solution_aic()` handed out NaN-laden matrices paired
+  with a stale factorization.
+- `SurfaceMeshInfo::original_surface_index` is now always a `surface_info`
+  slot. The aircraft generator stored an `Aircraft::surfaces()` index and the
+  direct-mesh generator left it at the `Default` of 0, so for
+  `[wing(duplicated), tail]` the tail's value pointed at the wing's mirror.
+- Reflection reuse now verifies that its mirror blocks tile the column space
+  contiguously and in order. That held only because both generators happen to
+  append each duplicate immediately after its original, and the check was a
+  `debug_assert` that vanished in release, where a violation would have written
+  columns into the wrong block.
+- The AVL reader no longer panics on out-of-range panel counts. `value as usize`
+  saturates, so a paneling field of `1e30` became `usize::MAX` and overflowed
+  the mesher's panel arithmetic; counts are now range-checked at parse time and
+  rejected with a typed error.
+- `CubicSpline::evaluate` no longer panics on a NaN parameter. NaN satisfies
+  neither interval comparison, so the interval search returned 0 and the
+  caller's `i - 1` underflowed. NaN now propagates through as a NaN result, as
+  the legacy binary search did. Reachable from `Airfoil::camber`.
+- The mass reader no longer discards a line because of its comment. Comments
+  are stripped before the line is classified, so an `=` inside a comment such
+  as `! main gear (x = 1.2 m)` no longer captures the line as a unit
+  assignment and silently drops the component's mass, centre of gravity and
+  inertia.
+- Mass `*` scale and `+` offset lines no longer read numbers out of their own
+  comments, and leave the previous value untouched when fewer than three
+  numeric fields are present.
+- Mass component fields stop at the first token that does not parse, matching
+  the legacy stream extraction, instead of skipping it and promoting later
+  numbers into earlier slots.
+- A `CONTROL` line without the optional trailing `SgnDup` field is accepted
+  with a default sign of 1.0. Requiring it rejected the entire aircraft over an
+  omission the legacy reader tolerated.
+- A failed `AFILE` load is now a parse error carrying the line number instead
+  of being silently swallowed, which left the section on its default flat plate
+  and let the solve report success against the wrong camber. The filename is
+  comment-stripped.
 
 ## [0.2.0] - 2026-05-04
 
