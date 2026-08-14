@@ -130,6 +130,24 @@ const PORTED: &[&str] = &[
     "MeshInputTest.BasicSolveProducesValidResults",
     "MeshInputTest.ConsistencyWithAircraftPath",
     "MeshInputTest.MeshDimensions",
+    // trim_solver_test.cpp -> tests/trim_solver.rs
+    "TrimSolverTest.TrimToTargetCL",
+    "TrimSolverTest.TrimToZeroCL",
+    "TrimSolverTest.TrimWithFixedAlpha",
+    "TrimSolverTest.TrimWithFixedBeta",
+    "TrimSolverTest.ConvergenceInFewIterations",
+    "TrimSolverTest.RatesRemainZeroForLevelFlight",
+    "TrimSolverTest.InitialGuessIsUsed",
+    "TrimSolverTest.ResidualDecreasesMonotonically",
+    "TrimSolverTest.StabilityDerivativesComputed",
+    "TrimSolverTest.NoConstraintsFails",
+    "TrimSolverTest.UnreachableCLFails",
+    "TrimSolverTest.PresetLevelFlight",
+    "TrimSolverTest.PresetSteadySideslip",
+    "TrimSolverTest.TrimWithPitchMomentConstraint",
+    "TrimSolverTest.TrimVerboseOutput",
+    "TrimSolverTest.TrimMaxIterationsReached",
+    "TrimSolverTest.ConstraintCount",
     // influence_matrix_test.cpp -> tests/influence_matrix.rs
     "BiotSavartTest.VelocityAboveBoundVortex",
     "BiotSavartTest.VelocitySymmetry",
@@ -532,7 +550,7 @@ fn ported_case_count_is_recorded() {
     let unportable = UNPORTABLE.len();
     let total = manifest.cases.len();
     assert_eq!(
-        ported, 336,
+        ported, 353,
         "{ported} of {total} frozen C++ cases are individually ported; \
          update this count when that changes"
     );
@@ -543,7 +561,7 @@ fn ported_case_count_is_recorded() {
     );
     assert_eq!(
         total - ported - unportable,
-        148,
+        131,
         "the remaining porting backlog changed; update this count deliberately"
     );
 }
