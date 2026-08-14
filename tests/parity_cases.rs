@@ -130,6 +130,17 @@ const PORTED: &[&str] = &[
     "MeshInputTest.BasicSolveProducesValidResults",
     "MeshInputTest.ConsistencyWithAircraftPath",
     "MeshInputTest.MeshDimensions",
+    // adjoint_solver_test.cpp -> tests/adjoint_solver.rs
+    "AdjointSolverTest.ConstructFromSolverBeforeSolve",
+    "AdjointSolverTest.ConstructFromSolverAfterSolve",
+    "AdjointSolverTest.SolveAdjointReturnsCorrectSize",
+    "AdjointSolverTest.AdjointSolveIsCorrect",
+    "AdjointSolverTest.SolveMultipleAdjointProblems",
+    "AdjointSolverTest.ForceGradientsHaveCorrectSize",
+    "AdjointSolverTest.ForceGradientsAreNonZero",
+    "AdjointSolverTest.CLGradientIsPositive",
+    "AdjointSolverTest.AdjointIdentityTest",
+    "AdjointValidationTest.AdjointMatchesFiniteDiffForCL",
     // analytical_forces_test.cpp -> tests/analytical_forces.rs
     "ForceGradientTest.PrimalKernelComputesAllOutputs",
     "ForceGradientTest.FreestreamDirection",
@@ -614,7 +625,7 @@ fn ported_case_count_is_recorded() {
     let unportable = UNPORTABLE.len();
     let total = manifest.cases.len();
     assert_eq!(
-        ported, 411,
+        ported, 421,
         "{ported} of {total} frozen C++ cases are individually ported; \
          update this count when that changes"
     );
@@ -625,7 +636,7 @@ fn ported_case_count_is_recorded() {
     );
     assert_eq!(
         total - ported - unportable,
-        73,
+        63,
         "the remaining porting backlog changed; update this count deliberately"
     );
 }
