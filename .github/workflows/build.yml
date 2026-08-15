@@ -19,6 +19,19 @@ env:
   # only ever builds once, so it buys nothing and costs both compile time and
   # room in the artifact cache these jobs restore from.
   CARGO_INCREMENTAL: 0
+  # The release profile's fat LTO and single codegen unit exist so the influence
+  # kernel inlines into the assembly loop that calls it N^2 times. That is a
+  # benchmark concern, and `benches/analysis_scaling` is not run here — CI only
+  # needs the release *semantics*: optimizations on, debug assertions off.
+  # Whole-program LTO over nalgebra, faer, vtkio and the gRPC stack was more
+  # than half the CPU time of every release job. Measured on the release test
+  # build: 685s of CPU with the profile as written, 317s with LTO off. Thin LTO
+  # is not the middle ground it looks like — it measured 825s, worse than fat.
+  # Verified not to disturb the bit-identical thread-invariance check below;
+  # nothing here changes floating-point semantics.
+  CARGO_PROFILE_RELEASE_LTO: "false"
+  CARGO_PROFILE_RELEASE_CODEGEN_UNITS: "16"
+  CARGO_PROFILE_RELEASE_DEBUG: "0"
 
 jobs:
   # `format` and `build` are the two contexts `develop`'s branch protection
