@@ -6,9 +6,32 @@ on:
   pull_request:
     branches: [main, develop]
 
+# A second push to the same branch makes the first one's answer irrelevant.
+# Cancelling it frees the runner for the push that superseded it.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 env:
   CARGO_TERM_COLOR: always
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+  # Incremental compilation exists to make a *second* local build fast. A CI job
+  # only ever builds once, so it buys nothing and costs both compile time and
+  # room in the artifact cache these jobs restore from.
+  CARGO_INCREMENTAL: 0
+  # The release profile's fat LTO and single codegen unit exist so the influence
+  # kernel inlines into the assembly loop that calls it N^2 times. That is a
+  # benchmark concern, and `benches/analysis_scaling` is not run here — CI only
+  # needs the release *semantics*: optimizations on, debug assertions off.
+  # Whole-program LTO over nalgebra, faer, vtkio and the gRPC stack was more
+  # than half the CPU time of every release job. Measured on the release test
+  # build: 685s of CPU with the profile as written, 317s with LTO off. Thin LTO
+  # is not the middle ground it looks like — it measured 825s, worse than fat.
+  # Verified not to disturb the bit-identical thread-invariance check below;
+  # nothing here changes floating-point semantics.
+  CARGO_PROFILE_RELEASE_LTO: "false"
+  CARGO_PROFILE_RELEASE_CODEGEN_UNITS: "16"
+  CARGO_PROFILE_RELEASE_DEBUG: "0"
 
 jobs:
   # `format` and `build` are the two contexts `develop`'s branch protection
@@ -23,6 +46,7 @@ jobs:
         with:
           toolchain: 1.93.1
           components: rustfmt, clippy
+      - uses: Swatinem/rust-cache@v2
       - run: cargo fmt --check
       - run: cargo clippy --all-targets --all-features -- -D warnings
       - run: cargo doc --all-features --no-deps
@@ -36,6 +60,7 @@ jobs:
       - uses: dtolnay/rust-toolchain@master
         with:
           toolchain: 1.93.1
+      - uses: Swatinem/rust-cache@v2
       - run: cargo test --all-features
 
   parallel-feature:
@@ -46,10 +71,12 @@ jobs:
         with:
           toolchain: 1.93.1
           components: clippy
+      - uses: Swatinem/rust-cache@v2
       - run: cargo clippy --all-targets --features parallel -- -D warnings
       - run: cargo test --features parallel
       # Influence assembly must produce identical results however the source
-      # columns are distributed across threads.
+      # columns are distributed across threads. Only the first iteration
+      # compiles; the rest re-run the same binaries.
       - name: Verify thread-count invariance
         run: |
           for threads in 1 2 4; do
@@ -63,16 +90,23 @@ jobs:
       - uses: dtolnay/rust-toolchain@master
         with:
           toolchain: 1.93.1
+      - uses: Swatinem/rust-cache@v2
       - run: cargo test --release --all-features
       - run: cargo test --no-default-features
       - run: cargo package
+      # Built against the same profile and feature set as the test run above,
+      # so only the example itself compiles — 0.3s against the 29s a cold debug
+      # build of the dependency tree costs locally. At the defaults these ran
+      # debug with default features, which matches neither the release run
+      # above nor the no-default-features run, so they forced a third full
+      # build of the tree.
       - name: Smoke-test native examples
         run: |
-          cargo run --example basic_analysis
-          cargo run --example trim_flight
-          cargo run --example stability_analysis
+          cargo run --release --all-features --example basic_analysis
+          cargo run --release --all-features --example trim_flight
+          cargo run --release --all-features --example stability_analysis
           output_dir="$(mktemp -d)"
-          cargo run --example vtk_visualization -- "$output_dir"
+          cargo run --release --all-features --example vtk_visualization -- "$output_dir"
           test -f "$output_dir/surface_mesh.vtu"
           test -f "$output_dir/spanwise_loads.vtp"
           test -f "$output_dir/wake.vtp"
@@ -86,6 +120,7 @@ jobs:
         with:
           toolchain: 1.93.1
           components: llvm-tools-preview
+      - uses: Swatinem/rust-cache@v2
       - uses: taiki-e/install-action@cargo-llvm-cov
       - name: Enforce 92% line coverage
         run: cargo llvm-cov --all-features --workspace --fail-under-lines 92 --lcov --output-path lcov.info

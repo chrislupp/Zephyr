@@ -7,6 +7,44 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- `gradients::StripLoadAdjoint`, the reverse-mode sensitivity of a lattice's
+  *per-strip* resultant force and moment to the surface mesh nodes. The
+  aerodynamic adjoints already covered aircraft-level coefficients; an
+  aeroelastic coupling needs the strip resultants, because those are what a
+  structure feels. A caller supplies one `StripLoadCotangent` per functional —
+  a coupled Jacobian supplies one per structural degree of freedom — and gets
+  back a `MeshNodeCotangent` per functional. Every functional shares one
+  batched transpose solve and one sweep over vortex pairs, so the cost per
+  extra column is a contraction rather than another kernel evaluation. The
+  path is reverse mode throughout: no tangent solve and no forward geometry
+  JVP. Deflected control normals, symmetry planes and section drag polars are
+  rejected, matching `GeometryAdjointContext`.
+- `gradients::horseshoe_velocity_jacobians`, the dense 3x3 geometry blocks of
+  the horseshoe-vortex kernel, and the `HorseshoeVelocityJacobians` they come
+  in. The existing VJPs are the right shape for a single seed per field point;
+  a reverse sweep carrying many seeds at once would otherwise re-derive the
+  same geometry once per seed. Built from the same bound and trailing-leg
+  derivatives the VJPs use, and pinned against `aic_element_gradient` by test.
+
+### Fixed
+
+- The release workflow's final step, which merges the release commit back to
+  `develop`, no longer aborts on a shell syntax error. Its `if git merge main`
+  block lost its closing `fi`, so bash rejected the script at parse time and
+  the step failed after the tag and GitHub release had already been published
+  — leaving `develop` without the version bump, the finalized changelog, or
+  the versioned docs snapshot. The `fi` present through v0.2.0 is restored.
+- The release workflow's changelog step now writes real newlines into the link
+  footer. Its `printf` format escaped the backslashes, so v0.3.0 appended the
+  literal text `\n[Unreleased]: ...\n[0.3.0]: ...\n` as a single line: the
+  comparison links did not render, and the file lost its trailing newline.
+  The mangled line also defeated the `/^\[Unreleased\]:/d` delete that the
+  next release relies on to retire the previous link, which would have
+  accumulated a stale `[Unreleased]` entry every release from here on. The
+  v0.3.0 footer is repaired in place.
+
 ## [0.3.0] - 2026-08-15
 
 ### Added
@@ -405,4 +443,5 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 [0.1.0]: https://github.com/chrislupp/Pegasus/releases/tag/v0.1.0
 [0.2.0]: https://github.com/chrislupp/Pegasus/releases/tag/v0.2.0
-\n[Unreleased]: https://github.com/chrislupp/Pegasus/compare/v0.3.0...HEAD\n[0.3.0]: https://github.com/chrislupp/Pegasus/releases/tag/v0.3.0\n
+[Unreleased]: https://github.com/chrislupp/Pegasus/compare/v0.3.0...HEAD
+[0.3.0]: https://github.com/chrislupp/Pegasus/releases/tag/v0.3.0

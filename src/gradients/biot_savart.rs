@@ -30,10 +30,81 @@
 //! describing the function it differentiates. These branches must therefore
 //! track the primal's exactly.
 
-use crate::core::{EPSILON, PI, Scalar, Vec3};
+use crate::core::{EPSILON, Mat3, PI, Scalar, Vec3};
 use crate::solver::horseshoe_vortex_velocity;
 
 const INV_4_PI: Scalar = 1.0 / (4.0 * PI);
+
+/// The horseshoe velocity's three geometry Jacobians.
+///
+/// Each block is `d(velocity)/d(point)`, so entry `(m, k)` is the derivative of
+/// velocity component `m` with respect to component `k` of that point. Left
+/// multiplying by a seed's transpose recovers the matching VJP, which is why
+/// `Mat3::tr_mul` is how callers contract these.
+#[derive(Clone, Copy, Debug, Default)]
+pub struct HorseshoeVelocityJacobians {
+    /// Derivative with respect to the velocity evaluation point.
+    pub field_point: Mat3,
+    /// Derivative with respect to the bound-vortex left endpoint.
+    pub bound_left: Mat3,
+    /// Derivative with respect to the bound-vortex right endpoint.
+    pub bound_right: Mat3,
+}
+
+/// All three geometry Jacobians of the horseshoe velocity in one pass.
+///
+/// The VJP kernels are the right shape when a caller has one seed per field
+/// point, which is the case for a single output. A reverse sweep carrying `k`
+/// simultaneous seeds — one per column of a coupled Jacobian — would otherwise
+/// evaluate the kernel `k` times per vortex pair for the same geometry. This
+/// builds the dense blocks once, from the same bound and trailing-leg
+/// derivatives the VJPs use, so the cost per pair stops growing with the number
+/// of seeds.
+#[must_use]
+pub fn horseshoe_velocity_jacobians(
+    field_point: &Vec3,
+    bound_left: &Vec3,
+    bound_right: &Vec3,
+    prandtl_glauert_factor: Scalar,
+    core_radius: Scalar,
+    include_bound: bool,
+) -> HorseshoeVelocityJacobians {
+    let geometry = Geometry::new(field_point, bound_left, bound_right, prandtl_glauert_factor);
+    let core_4 = core_four(core_radius);
+    let bound_active = include_bound && geometry.bound_is_active();
+
+    let mut result = HorseshoeVelocityJacobians::default();
+    for component in 0..3 {
+        let mut basis = Vec3::zeros();
+        basis[component] = 1.0;
+        let seed = effective_seed(&basis, prandtl_glauert_factor);
+
+        let (mut left, mut right) = (Vec3::zeros(), Vec3::zeros());
+        if bound_active {
+            let (vjp_a, vjp_b) = geometry.bound_vjp(core_4, &seed);
+            left += scale_x(vjp_a, prandtl_glauert_factor);
+            right += scale_x(vjp_b, prandtl_glauert_factor);
+        }
+        if geometry.a_sq > 0.0 {
+            let vjp = trailing_leg_vjp(&geometry.a, geometry.a_mag, core_4, -1.0, &seed);
+            left += scale_x(vjp, prandtl_glauert_factor);
+        }
+        if geometry.b_sq > 0.0 {
+            let vjp = trailing_leg_vjp(&geometry.b, geometry.b_mag, core_4, 1.0, &seed);
+            right += scale_x(vjp, prandtl_glauert_factor);
+        }
+
+        // `a` and `b` are both measured from the field point, so the field-point
+        // row is minus the sum of the two endpoint rows, exactly as
+        // `horseshoe_velocity_vjp_field_point` assembles it.
+        result.bound_left.set_row(component, &left.transpose());
+        result.bound_right.set_row(component, &right.transpose());
+        result
+            .field_point
+            .set_row(component, &(-(left + right)).transpose());
+    }
+    result
+}
 
 /// VJP with respect to the velocity evaluation point.
 #[must_use]
