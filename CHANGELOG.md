@@ -7,6 +7,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- `gradients::StripLoadAdjoint`, the reverse-mode sensitivity of a lattice's
+  *per-strip* resultant force and moment to the surface mesh nodes. The
+  aerodynamic adjoints already covered aircraft-level coefficients; an
+  aeroelastic coupling needs the strip resultants, because those are what a
+  structure feels. A caller supplies one `StripLoadCotangent` per functional —
+  a coupled Jacobian supplies one per structural degree of freedom — and gets
+  back a `MeshNodeCotangent` per functional. Every functional shares one
+  batched transpose solve and one sweep over vortex pairs, so the cost per
+  extra column is a contraction rather than another kernel evaluation. The
+  path is reverse mode throughout: no tangent solve and no forward geometry
+  JVP. Deflected control normals, symmetry planes and section drag polars are
+  rejected, matching `GeometryAdjointContext`.
+- `gradients::horseshoe_velocity_jacobians`, the dense 3x3 geometry blocks of
+  the horseshoe-vortex kernel, and the `HorseshoeVelocityJacobians` they come
+  in. The existing VJPs are the right shape for a single seed per field point;
+  a reverse sweep carrying many seeds at once would otherwise re-derive the
+  same geometry once per seed. Built from the same bound and trailing-leg
+  derivatives the VJPs use, and pinned against `aic_element_gradient` by test.
+
 ### Fixed
 
 - The release workflow's final step, which merges the release commit back to

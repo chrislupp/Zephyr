@@ -4,6 +4,7 @@ mod adjoint;
 mod aic;
 mod biot_savart;
 mod calculator;
+mod coupled;
 mod forces;
 mod geometry_adjoint;
 mod mach;
@@ -17,13 +18,15 @@ pub use aic::{
     velocity_column_gradient, velocity_row_gradient,
 };
 pub use biot_savart::{
-    horseshoe_velocity_pg_derivative, horseshoe_velocity_vjp_bound_left,
-    horseshoe_velocity_vjp_bound_right, horseshoe_velocity_vjp_field_point,
+    HorseshoeVelocityJacobians, horseshoe_velocity_jacobians, horseshoe_velocity_pg_derivative,
+    horseshoe_velocity_vjp_bound_left, horseshoe_velocity_vjp_bound_right,
+    horseshoe_velocity_vjp_field_point,
 };
 pub use calculator::{
     AeroGradients, FullGradients, GeometryGradients, GeometryVariable, GradientCalculator,
     MeshNodeGradients, SectionGeometryGradients, SurfaceMeshNodeGradients,
 };
+pub use coupled::{MeshNodeCotangent, StripLoadAdjoint, StripLoadCotangent};
 pub use forces::{
     ForceCoefficientGradients, force_alpha_gradient, force_beta_gradient,
     force_circulation_gradient, force_geometry_jvp, force_induced_velocity_gradient,
