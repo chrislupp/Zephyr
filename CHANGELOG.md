@@ -36,6 +36,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   the step failed after the tag and GitHub release had already been published
   — leaving `develop` without the version bump, the finalized changelog, or
   the versioned docs snapshot. The `fi` present through v0.2.0 is restored.
+- The release workflow's changelog step now writes real newlines into the link
+  footer. Its `printf` format escaped the backslashes, so v0.3.0 appended the
+  literal text `\n[Unreleased]: ...\n[0.3.0]: ...\n` as a single line: the
+  comparison links did not render, and the file lost its trailing newline.
+  The mangled line also defeated the `/^\[Unreleased\]:/d` delete that the
+  next release relies on to retire the previous link, which would have
+  accumulated a stale `[Unreleased]` entry every release from here on. The
+  v0.3.0 footer is repaired in place.
 
 ## [0.3.0] - 2026-08-15
 
@@ -435,4 +443,5 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 [0.1.0]: https://github.com/chrislupp/Pegasus/releases/tag/v0.1.0
 [0.2.0]: https://github.com/chrislupp/Pegasus/releases/tag/v0.2.0
-\n[Unreleased]: https://github.com/chrislupp/Pegasus/compare/v0.3.0...HEAD\n[0.3.0]: https://github.com/chrislupp/Pegasus/releases/tag/v0.3.0\n
+[Unreleased]: https://github.com/chrislupp/Pegasus/compare/v0.3.0...HEAD
+[0.3.0]: https://github.com/chrislupp/Pegasus/releases/tag/v0.3.0
