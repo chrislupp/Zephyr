@@ -231,3 +231,4 @@ jobs:
               --head main \
               --title "chore: merge release ${{ steps.version.outputs.tag_version }} back to develop" \
               --body "The automatic release merge conflicted. Please resolve it manually."
+          fi

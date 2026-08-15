@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- The release workflow's final step, which merges the release commit back to
+  `develop`, no longer aborts on a shell syntax error. Its `if git merge main`
+  block lost its closing `fi`, so bash rejected the script at parse time and
+  the step failed after the tag and GitHub release had already been published
+  — leaving `develop` without the version bump, the finalized changelog, or
+  the versioned docs snapshot. The `fi` present through v0.2.0 is restored.
+
 ## [0.3.0] - 2026-08-15
 
 ### Added
