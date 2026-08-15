@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-08-15
+
 ### Added
 
 - `FullGradients::by_moment_reference`, the analytical derivative of every
@@ -402,5 +404,5 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Docs homepage redirect to use relative path instead of absolute (avoiding baseUrl bypass)
 
 [0.1.0]: https://github.com/chrislupp/Pegasus/releases/tag/v0.1.0
-[Unreleased]: https://github.com/chrislupp/Pegasus/compare/v0.2.0...HEAD
 [0.2.0]: https://github.com/chrislupp/Pegasus/releases/tag/v0.2.0
+\n[Unreleased]: https://github.com/chrislupp/Pegasus/compare/v0.3.0...HEAD\n[0.3.0]: https://github.com/chrislupp/Pegasus/releases/tag/v0.3.0\n
