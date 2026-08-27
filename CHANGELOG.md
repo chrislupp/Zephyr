@@ -7,6 +7,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- `StripLoadAdjoint::flight_condition_cotangents`, giving the angle-of-attack and sideslip derivatives of the same per-strip functionals `mesh_node_cotangents` answers for on the geometry. `GradientCalculator::compute_alpha_gradients` reports these for integrated coefficients, which is not what an aeroelastic coupling needs: the structure feels each strip's resultant, so the derivative has to be taken per strip. Both paths are carried — the freestream in the total velocity the Kutta-Joukowski force reads, explicit at frozen circulation, and the flow-tangency right-hand side that moves the circulation itself. The second is the adjoint's, and it reuses the same batched transpose solve with no sweep over vortex pairs after it, so the flight condition costs a fraction of what the mesh does. Differenced against the whole functional in `tests/coupled_strip_adjoint.rs`
+
 ## [0.4.0] - 2026-08-15
 
 ### Added

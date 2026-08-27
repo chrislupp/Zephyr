@@ -28,7 +28,7 @@ use crate::solver::{
 };
 
 use super::geometry_adjoint::{normalized_direction, reflected_direction};
-use super::{AdjointSolver, horseshoe_velocity_jacobians};
+use super::{AdjointSolver, TotalDerivative, horseshoe_velocity_jacobians};
 
 /// One linear functional of a lattice's strip loads.
 ///
@@ -258,6 +258,93 @@ impl<'a> StripLoadAdjoint<'a> {
         self.accumulate_explicit(columns, &panel_seed, &mut cotangents);
         self.accumulate_pairwise(&velocity_seed, &adjoints, &mut cotangents);
         self.to_mesh_nodes(input, &cotangents)
+    }
+
+    /// Derivatives of the same functionals with respect to the flight
+    /// condition, one [`TotalDerivative`] per input functional.
+    ///
+    /// [`mesh_node_cotangents`](Self::mesh_node_cotangents) answers for the
+    /// geometry; this answers for the angles. An aeroelastic coupling needs
+    /// both, because the trim state is a design variable alongside the shape,
+    /// and it needs them per *strip* rather than per coefficient — which is
+    /// what [`GradientCalculator::compute_alpha_gradients`] gives and what a
+    /// structure cannot use.
+    ///
+    /// The angles reach a strip's load twice, and both are here. The freestream
+    /// is part of the total velocity the Kutta–Joukowski force is built from,
+    /// which is explicit at frozen circulation. And it is the flow-tangency
+    /// right-hand side, which moves the circulation itself; that term is the
+    /// adjoint's, and it costs the same batched transpose solve
+    /// `mesh_node_cotangents` already pays, with no sweep over vortex pairs
+    /// after it.
+    ///
+    /// # Arguments
+    ///
+    /// * `columns` — One strip-load cotangent per functional.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`PegasusError::InvalidGeometry`] if a cotangent's length does
+    /// not match the strip count, and propagates adjoint solve failures.
+    ///
+    /// [`GradientCalculator::compute_alpha_gradients`]:
+    ///     super::GradientCalculator::compute_alpha_gradients
+    pub fn flight_condition_cotangents(
+        &self,
+        columns: &[StripLoadCotangent],
+    ) -> Result<Vec<TotalDerivative>> {
+        let mesh = self.mesh();
+        for column in columns {
+            if column.force.len() != mesh.strip_count() || column.moment.len() != mesh.strip_count()
+            {
+                return Err(PegasusError::InvalidGeometry(
+                    "strip load cotangent length does not match the solved lattice".into(),
+                ));
+            }
+        }
+        if columns.is_empty() {
+            return Ok(Vec::new());
+        }
+
+        let (panel_seed, velocity_seed) = self.panel_cotangents(columns);
+        let circulation_gradients = self.circulation_gradients(&panel_seed, &velocity_seed);
+        let adjoints = AdjointSolver::new(self.solver)?.solve_batched(&circulation_gradients)?;
+
+        // The freestream is a unit direction; the dynamic pressure that
+        // redimensionalizes it is the caller's, exactly as it is for the loads.
+        let (sin_alpha, cos_alpha) = self.condition.alpha.sin_cos();
+        let (sin_beta, cos_beta) = self.condition.beta.sin_cos();
+        let by_alpha = Vec3::new(-sin_alpha * cos_beta, 0.0, cos_alpha * cos_beta);
+        let by_beta = Vec3::new(-cos_alpha * sin_beta, cos_beta, -sin_alpha * sin_beta);
+
+        let mut out = vec![TotalDerivative::default(); columns.len()];
+        for (index, (vortex, normal)) in mesh
+            .vortices()
+            .iter()
+            .zip(self.solver.linearized_normals())
+            .enumerate()
+        {
+            for (column, total) in out.iter_mut().enumerate() {
+                let seed = Vec3::new(
+                    velocity_seed[(3 * index, column)],
+                    velocity_seed[(3 * index + 1, column)],
+                    velocity_seed[(3 * index + 2, column)],
+                );
+                // Explicit: the force reads the total velocity directly.
+                total.by_alpha += seed.dot(&by_alpha);
+                total.by_beta += seed.dot(&by_beta);
+
+                // Implicit: `rhs = -n . V`, so the residual's own freestream
+                // derivative carries the circulation's change with it. A panel
+                // the freestream does not reach contributes nothing.
+                if vortex.affected_by_freestream {
+                    let lambda = adjoints[(index, column)];
+                    total.by_alpha -= lambda * normal.dot(&by_alpha);
+                    total.by_beta -= lambda * normal.dot(&by_beta);
+                }
+            }
+        }
+        Ok(out)
     }
 
     // ========================================================================
