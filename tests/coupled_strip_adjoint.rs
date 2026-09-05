@@ -93,14 +93,24 @@ fn cotangents(strip_count: usize) -> Vec<StripLoadCotangent> {
 /// flips, so they are redimensionalized, unflipped, and transported to the
 /// functional's moment point.
 fn functionals(input: &MeshInput, points: &[Vec3], columns: &[StripLoadCotangent]) -> Vec<f64> {
+    functionals_at(input, points, columns, &condition())
+}
+
+/// The same, at a flight condition the caller chooses.
+fn functionals_at(
+    input: &MeshInput,
+    points: &[Vec3],
+    columns: &[StripLoadCotangent],
+    condition: &FlightCondition,
+) -> Vec<f64> {
     let mut solver = VortexLatticeSolver::new();
     solver.set_mesh(input).unwrap();
-    let solution = solver.solve(&condition()).unwrap();
+    let solution = solver.solve(condition).unwrap();
     let results = ForceCalculator::new().compute_with_references(
         &input.reference,
         solver.mesh(),
         &solution,
-        &condition(),
+        condition,
     );
 
     let mut values = vec![0.0; columns.len()];
@@ -206,4 +216,73 @@ fn a_moment_point_count_mismatch_is_an_error() {
 
     let condition = condition();
     assert!(StripLoadAdjoint::new(&solver, &condition, &[Vec3::zeros()]).is_err());
+}
+
+/// The flight-condition half of the same adjoint, against central differences.
+///
+/// The angles reach a strip's load explicitly, through the total velocity the
+/// Kutta-Joukowski force is built from, and implicitly, through the
+/// flow-tangency right-hand side that sets the circulation. A check on only one
+/// of them would pass with the other missing, so this differences the whole
+/// functional and both angles.
+#[test]
+fn flight_condition_cotangents_match_finite_differences() {
+    let input = mesh_input(false);
+    let mut solver = VortexLatticeSolver::new();
+    solver.set_mesh(&input).unwrap();
+    solver.solve(&condition()).unwrap();
+
+    let strip_count = solver.mesh().strip_count();
+    let points = moment_points(strip_count);
+    let columns = cotangents(strip_count);
+
+    let flight = condition();
+    let adjoint = StripLoadAdjoint::new(&solver, &flight, &points).unwrap();
+    let derivatives = adjoint.flight_condition_cotangents(&columns).unwrap();
+    assert_eq!(derivatives.len(), columns.len());
+
+    let step = 1e-6;
+    for (name, is_alpha) in [("alpha", true), ("beta", false)] {
+        let mut evaluated = Vec::with_capacity(2);
+        for sign in [1.0, -1.0] {
+            let mut perturbed = condition();
+            if is_alpha {
+                perturbed.alpha += sign * step;
+            } else {
+                perturbed.beta += sign * step;
+            }
+            evaluated.push(functionals_at(&input, &points, &columns, &perturbed));
+        }
+
+        for (column, total) in derivatives.iter().enumerate() {
+            let fd = (evaluated[0][column] - evaluated[1][column]) / (2.0 * step);
+            let analytical = if is_alpha {
+                total.by_alpha
+            } else {
+                total.by_beta
+            };
+            let scale = 1.0_f64.max(analytical.abs()).max(fd.abs());
+            assert!(
+                (analytical - fd).abs() / scale < 1e-6,
+                "d(functional {column})/d({name}): {analytical:e} vs {fd:e}"
+            );
+        }
+    }
+}
+
+/// A cotangent that does not describe this lattice is an error, not a wrong
+/// answer.
+#[test]
+fn a_flight_condition_cotangent_of_the_wrong_length_is_an_error() {
+    let input = mesh_input(false);
+    let mut solver = VortexLatticeSolver::new();
+    solver.set_mesh(&input).unwrap();
+    solver.solve(&condition()).unwrap();
+    let points = moment_points(solver.mesh().strip_count());
+    let flight = condition();
+    let adjoint = StripLoadAdjoint::new(&solver, &flight, &points).unwrap();
+
+    let short = vec![StripLoadCotangent::zeros(solver.mesh().strip_count() - 1)];
+    assert!(adjoint.flight_condition_cotangents(&short).is_err());
+    assert!(adjoint.flight_condition_cotangents(&[]).unwrap().is_empty());
 }
