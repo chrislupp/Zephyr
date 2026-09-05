@@ -1,0 +1,76 @@
+{
+  "docsSidebar": [
+    {
+      "type": "category",
+      "label": "Getting Started",
+      "items": [
+        "getting-started/installation",
+        "getting-started/quickstart"
+      ]
+    },
+    {
+      "type": "category",
+      "label": "Guide",
+      "items": [
+        "guide/vlm-theory",
+        "guide/solver-workflow",
+        "guide/stability-analysis",
+        "guide/automatic-differentiation",
+        "guide/mdo-integration"
+      ]
+    },
+    {
+      "type": "category",
+      "label": "Examples",
+      "items": [
+        "examples/basic-analysis",
+        "examples/trim-flight",
+        "examples/stability-modes",
+        "examples/vtk-visualization"
+      ]
+    }
+  ],
+  "apiSidebar": [
+    "api/index",
+    {
+      "type": "category",
+      "label": "Geometry",
+      "items": [
+        "api/aircraft",
+        "api/surface",
+        "api/section"
+      ]
+    },
+    {
+      "type": "category",
+      "label": "Solver",
+      "items": [
+        "api/vortex-lattice-solver",
+        "api/force-calculator"
+      ]
+    },
+    {
+      "type": "category",
+      "label": "Analysis",
+      "items": [
+        "api/stability-derivatives",
+        "api/trim-solver",
+        "api/eigenmode-analysis"
+      ]
+    },
+    {
+      "type": "category",
+      "label": "I/O",
+      "items": [
+        "api/avl-reader"
+      ]
+    },
+    {
+      "type": "category",
+      "label": "Gradients",
+      "items": [
+        "api/gradient-calculator"
+      ]
+    }
+  ]
+}
