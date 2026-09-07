@@ -178,7 +178,7 @@ fn requests_skip_work_and_extend_caches() {
     assert_eq!(far.work.velocity_products, 0);
     assert_eq!(far.work.trefftz_interactions, 0);
     assert_eq!(far.work.influence_evaluations, 2 * 18 * 18);
-    assert_eq!(far.work.operator_bytes, 8 * 18 * 18);
+    assert_eq!(far.work.operator_bytes, 8 * 4 * 18 * 18);
     assert!(far.circulation.is_none());
     assert!(far.surface_loads.is_none());
     r.outputs = vec![Output::Lift];
@@ -187,7 +187,7 @@ fn requests_skip_work_and_extend_caches() {
     assert_eq!(near.work.factorizations, 0);
     assert_eq!(near.work.primal_solves, 0);
     assert_eq!(near.work.velocity_products, 1);
-    assert_eq!(near.work.operator_bytes, 8 * 4 * 18 * 18);
+    assert_eq!(near.work.operator_bytes, 8 * 7 * 18 * 18);
     assert_eq!(near.work.moment_panels, 0);
     assert_eq!(near.work.trefftz_interactions, 0);
     let hit = a.evaluate(&c, &r).unwrap();
@@ -333,7 +333,7 @@ fn geometry_gradients_fold_mirrored_inputs() {
         // Perturb interior and tip nodes; y=0 root positions stay on the plane.
         let mut pm = m.clone();
         let mut mm = m.clone();
-        let step = 1e-5;
+        let step = 1e-7;
         let mut analytic = 0.0;
         for (i, node) in m.surfaces[0].nodes.iter().enumerate() {
             let direction = Vec3::new(
@@ -879,7 +879,7 @@ fn half_wing_mesh_gradient_above_parallel_threshold_matches_difference() {
         panic!()
     };
     let index = 3 * 25 + 12;
-    let step = 1e-6;
+    let step = 1e-7;
     m.surfaces[0].nodes[index].z += step;
     let plus = value(&m, &c, SolverMode::HalfWing, output);
     m.surfaces[0].nodes[index].z -= 2.0 * step;

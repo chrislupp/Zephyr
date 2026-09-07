@@ -9,7 +9,8 @@ pub(crate) fn reflect(v: Vec3) -> Vec3 {
 
 pub(crate) fn core(mesh: &VortexLattice, row: usize, column: usize) -> Scalar {
     let source = &mesh.vortices()[column];
-    let width = (source.bound_vortex_right - source.bound_vortex_left).norm();
+    let width = (source.bound_vortex_right.y - source.bound_vortex_left.y)
+        .hypot(source.bound_vortex_right.z - source.bound_vortex_left.z);
     if mesh.vortices()[row].component_index == source.component_index {
         0.0001 * width
     } else {
@@ -26,7 +27,7 @@ pub(crate) fn assemble(
     aic: bool,
     velocity: bool,
     work: &mut Work,
-) -> (MatX, MatX) {
+) -> (MatX, MatX, MatX) {
     let n = mesh.vortex_count();
     let pg = (1.0 - mach * mach).sqrt();
     let mut matrix = if aic {
@@ -39,23 +40,31 @@ pub(crate) fn assemble(
     } else {
         MatX::zeros(0, 0)
     };
-    let fill = |j: usize, column: &mut [Scalar], velocity_column: &mut [Scalar]| {
+    let mut control = if aic {
+        MatX::zeros(3 * n, n)
+    } else {
+        MatX::zeros(0, 0)
+    };
+    let fill = |at_bound: bool, j: usize, column: &mut [Scalar], velocity_column: &mut [Scalar]| {
         let source = &mesh.vortices()[j];
         for (i, target) in mesh.vortices().iter().enumerate() {
+            let point = if at_bound {
+                target.bound_vortex_center
+            } else {
+                target.control_point
+            };
             let radius = core(mesh, i, j);
             let mut v = horseshoe_vortex_velocity(
-                &target.control_point,
+                &point,
                 &source.bound_vortex_left,
                 &source.bound_vortex_right,
                 pg,
                 radius,
-                i != j,
+                !at_bound || i != j,
             );
             if half {
-                // This is an explicit duplicate's influence: its bound leg is
-                // included even for a coincident image midpoint, as in full mode.
                 v += horseshoe_vortex_velocity(
-                    &target.control_point,
+                    &point,
                     &reflect(source.bound_vortex_right),
                     &reflect(source.bound_vortex_left),
                     pg,
@@ -63,21 +72,32 @@ pub(crate) fn assemble(
                     true,
                 );
             }
-            if aic {
+            if !column.is_empty() {
                 column[i] = v.x * normals[i].x + v.y * normals[i].y + v.z * normals[i].z;
             }
-            if velocity {
-                for k in 0..3 {
-                    velocity_column[3 * i + k] = v[k];
-                }
+            for k in 0..3 {
+                velocity_column[3 * i + k] = v[k];
             }
         }
     };
     if n > 0 {
-        drive_columns(matrix.as_mut_slice(), velocities.as_mut_slice(), n, &fill);
+        if aic {
+            drive_columns(
+                matrix.as_mut_slice(),
+                control.as_mut_slice(),
+                n,
+                &|j, a, v| fill(false, j, a, v),
+            );
+        }
+        if velocity {
+            drive_columns(&mut [], velocities.as_mut_slice(), n, &|j, a, v| {
+                fill(true, j, a, v)
+            });
+        }
     }
-    work.influence_evaluations += n * n * if half { 2 } else { 1 };
-    (matrix, velocities)
+    work.influence_evaluations +=
+        (usize::from(aic) + usize::from(velocity)) * n * n * if half { 2 } else { 1 };
+    (matrix, control, velocities)
 }
 
 // Match the legacy assembly threshold; small systems stay on one thread.

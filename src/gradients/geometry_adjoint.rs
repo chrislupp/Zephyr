@@ -29,6 +29,7 @@ pub(crate) struct LatticeDirections {
     pub bound_left: Vec<Vec3>,
     pub bound_right: Vec<Vec3>,
     pub control_point: Vec<Vec3>,
+    pub bound_center: Vec<Vec3>,
     pub normal: Vec<Vec3>,
     pub local_chord: Vec<Scalar>,
     pub strip_chord: Vec<Scalar>,
@@ -40,6 +41,7 @@ impl LatticeDirections {
             bound_left: vec![Vec3::zeros(); mesh.vortex_count()],
             bound_right: vec![Vec3::zeros(); mesh.vortex_count()],
             control_point: vec![Vec3::zeros(); mesh.vortex_count()],
+            bound_center: vec![Vec3::zeros(); mesh.vortex_count()],
             normal: vec![Vec3::zeros(); mesh.vortex_count()],
             local_chord: vec![0.0; mesh.vortex_count()],
             strip_chord: vec![0.0; mesh.strip_count()],
@@ -56,6 +58,7 @@ pub(crate) struct LatticeCotangents {
     pub bound_left: Vec<Vec3>,
     pub bound_right: Vec<Vec3>,
     pub control_point: Vec<Vec3>,
+    pub bound_center: Vec<Vec3>,
     pub normal: Vec<Vec3>,
     pub local_chord: Vec<Scalar>,
     pub strip_chord: Vec<Scalar>,
@@ -67,6 +70,7 @@ impl LatticeCotangents {
             bound_left: vec![Vec3::zeros(); mesh.vortex_count()],
             bound_right: vec![Vec3::zeros(); mesh.vortex_count()],
             control_point: vec![Vec3::zeros(); mesh.vortex_count()],
+            bound_center: vec![Vec3::zeros(); mesh.vortex_count()],
             normal: vec![Vec3::zeros(); mesh.vortex_count()],
             local_chord: vec![0.0; mesh.vortex_count()],
             strip_chord: vec![0.0; mesh.strip_count()],
@@ -81,6 +85,7 @@ impl LatticeCotangents {
             .zip(&direction.bound_left)
             .chain(self.bound_right.iter().zip(&direction.bound_right))
             .chain(self.control_point.iter().zip(&direction.control_point))
+            .chain(self.bound_center.iter().zip(&direction.bound_center))
             .chain(self.normal.iter().zip(&direction.normal))
             .map(|(cotangent, tangent)| cotangent.dot(tangent))
             .sum::<Scalar>();
@@ -207,6 +212,7 @@ impl<'a> GeometryAdjointContext<'a> {
         let mesh = self.solver.mesh();
         if direction.bound_left.len() != mesh.vortex_count()
             || direction.bound_right.len() != mesh.vortex_count()
+            || direction.bound_center.len() != mesh.vortex_count()
             || direction.control_point.len() != mesh.vortex_count()
             || direction.normal.len() != mesh.vortex_count()
             || direction.local_chord.len() != mesh.vortex_count()
@@ -243,7 +249,7 @@ fn geometry_cotangents(
     }
 
     // Seeds for the near-field force path: how each output responds to the
-    // induced velocity at a control point. Identically zero for far-field drag,
+    // induced velocity at a bound-force point. Identically zero for far-field drag,
     // which takes its geometry sensitivity from the Trefftz sweep instead.
     let velocity_seeds: Vec<Vec<Vec3>> = outputs
         .iter()
@@ -252,7 +258,7 @@ fn geometry_cotangents(
         })
         .collect();
 
-    let velocity_influence = solver.velocity_matrix();
+    let velocity_influence = solver.control_velocity_matrix();
     let pg = prandtl_glauert_factor(solver.current_mach());
     let freestream = VortexLatticeSolver::freestream_direction(condition);
     let omega = Vec3::new(
@@ -344,6 +350,7 @@ struct SweepInputs<'a> {
 struct SweepChunk {
     first_row: usize,
     control_point: Vec<Vec<Vec3>>,
+    bound_center: Vec<Vec<Vec3>>,
     normal: Vec<Vec<Vec3>>,
     bound_left: Vec<Vec<Vec3>>,
     bound_right: Vec<Vec<Vec3>>,
@@ -354,6 +361,9 @@ impl SweepChunk {
         for (index, cotangent) in result.iter_mut().enumerate() {
             for (offset, value) in self.control_point[index].iter().enumerate() {
                 cotangent.control_point[self.first_row + offset] += value;
+            }
+            for (offset, value) in self.bound_center[index].iter().enumerate() {
+                cotangent.bound_center[self.first_row + offset] += value;
             }
             for (offset, value) in self.normal[index].iter().enumerate() {
                 cotangent.normal[self.first_row + offset] += value;
@@ -377,6 +387,7 @@ fn sweep_row_range(range: (usize, usize), sweep: &SweepInputs<'_>) -> SweepChunk
     let mut chunk = SweepChunk {
         first_row,
         control_point: vec![vec![Vec3::zeros(); rows]; sweep.outputs],
+        bound_center: vec![vec![Vec3::zeros(); rows]; sweep.outputs],
         normal: vec![vec![Vec3::zeros(); rows]; sweep.outputs],
         bound_left: vec![vec![Vec3::zeros(); count]; sweep.outputs],
         bound_right: vec![vec![Vec3::zeros(); count]; sweep.outputs],
@@ -404,21 +415,17 @@ fn sweep_row_range(range: (usize, usize), sweep: &SweepInputs<'_>) -> SweepChunk
         let normal = target.normal_at_control_point;
         for (column, source) in sweep.mesh.vortices().iter().enumerate() {
             let core = core_radius(sweep.mesh, column, target.component_index);
-            let include_bound = row != column;
             let gamma = sweep.solution.circulation[column];
 
-            // One kernel evaluation serves both geometry terms. The influence
-            // coefficient is `normal . velocity`, so its gradient is these same
-            // Jacobians contracted with the target normal -- evaluating
-            // `aic_element_gradient` as well would rebuild the horseshoe
-            // geometry three more times for an answer already in hand.
+            // Residual geometry uses the control-point kernel. Contract its
+            // Jacobians with the normal once, then reuse them across outputs.
             let jacobians = horseshoe_velocity_jacobians(
                 &target.control_point,
                 &source.bound_vortex_left,
                 &source.bound_vortex_right,
                 sweep.pg,
                 core,
-                include_bound,
+                true,
             );
 
             // Influence-matrix term: psi^T (dA/dX) Gamma. The normal derivative
@@ -445,6 +452,15 @@ fn sweep_row_range(range: (usize, usize), sweep: &SweepInputs<'_>) -> SweepChunk
                 }
             }
 
+            let jacobians = horseshoe_velocity_jacobians(
+                &target.bound_vortex_center,
+                &source.bound_vortex_left,
+                &source.bound_vortex_right,
+                sweep.pg,
+                core,
+                row != column,
+            );
+
             // Near-field term: the induced velocity that sets each panel force
             // moves with the same geometry. Contracting the shared Jacobians
             // with each output's seed keeps the kernel count independent of the
@@ -458,7 +474,7 @@ fn sweep_row_range(range: (usize, usize), sweep: &SweepInputs<'_>) -> SweepChunk
                     continue;
                 }
                 let scaled = gamma * seed;
-                chunk.control_point[index][local] += jacobians.field_point.tr_mul(&scaled);
+                chunk.bound_center[index][local] += jacobians.field_point.tr_mul(&scaled);
                 chunk.bound_left[index][column] += jacobians.bound_left.tr_mul(&scaled);
                 chunk.bound_right[index][column] += jacobians.bound_right.tr_mul(&scaled);
             }
@@ -499,7 +515,7 @@ fn drive_row_chunks(ranges: &[(usize, usize)], sweep: &SweepInputs<'_>) -> Vec<S
 /// Reverse of the fixed-circulation near-field force sweep.
 ///
 /// Panel force depends on geometry through the bound-vortex line, and the
-/// moment additionally through the control point that carries the moment arm.
+/// moment additionally through the bound-force point that carries the moment arm.
 fn force_geometry_cotangents(
     mesh: &VortexLattice,
     solution: &SolutionState,
@@ -525,11 +541,11 @@ fn force_geometry_cotangents(
         };
         let velocity = freestream + induced;
         let line = vortex.bound_vortex_right - vortex.bound_vortex_left;
-        let arm = vortex.control_point - reference.moment_reference_point;
+        let arm = vortex.bound_vortex_center - reference.moment_reference_point;
         let panel_force = 2.0 * solution.circulation[index] * velocity.cross(&line);
 
-        // Moving the control point swings the moment arm.
-        cotangent.control_point[index] +=
+        // Moving the bound-force point swings the moment arm.
+        cotangent.bound_center[index] +=
             panel_force.cross(&moment_seed) / (reference.area * reference.chord);
 
         // Moving either endpoint changes the bound-vortex line. `combined` is
@@ -794,7 +810,8 @@ fn prandtl_glauert_factor(mach: Scalar) -> Scalar {
 
 fn core_radius(mesh: &VortexLattice, source_index: usize, target_component: usize) -> Scalar {
     let source = &mesh.vortices()[source_index];
-    let width = (source.bound_vortex_right - source.bound_vortex_left).norm();
+    let width = (source.bound_vortex_right.y - source.bound_vortex_left.y)
+        .hypot(source.bound_vortex_right.z - source.bound_vortex_left.z);
     if source.component_index == target_component {
         0.0001 * width
     } else {
@@ -846,6 +863,10 @@ pub(crate) fn scatter_mesh_node_cotangents(
     // right, so the two swap on the way back.
     let mut bound_left = cotangent.bound_left.clone();
     let mut bound_right = cotangent.bound_right.clone();
+    for i in 0..bound_left.len() {
+        bound_left[i] += 0.5 * cotangent.bound_center[i];
+        bound_right[i] += 0.5 * cotangent.bound_center[i];
+    }
     let mut control_point = cotangent.control_point.clone();
     let mut normal = cotangent.normal.clone();
     let mut local_chord = cotangent.local_chord.clone();

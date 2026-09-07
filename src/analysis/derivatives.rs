@@ -154,11 +154,11 @@ fn near_seeds(
         let gamma = s.solution().circulation[i];
         let force = 2.0 * gamma * velocity.cross(&line);
         let mut combined = fs / r.area
-            + ms.cross(&(v.control_point - r.moment_reference_point)) / (r.area * r.chord);
+            + ms.cross(&(v.bound_vortex_center - r.moment_reference_point)) / (r.area * r.chord);
         if half {
             combined += reflect(
                 fs / r.area
-                    + ms.cross(&(reflect(v.control_point) - r.moment_reference_point))
+                    + ms.cross(&(reflect(v.bound_vortex_center) - r.moment_reference_point))
                         / (r.area * r.chord),
             );
         }
@@ -184,11 +184,11 @@ fn near_seeds(
             let line_seed = 2.0 * gamma * combined.cross(&velocity);
             out.geometry.bound_right[i] += line_seed;
             out.geometry.bound_left[i] -= line_seed;
-            out.geometry.control_point[i] += force.cross(&ms) / (r.area * r.chord);
+            let mut arm = force.cross(&ms) / (r.area * r.chord);
             if half {
-                out.geometry.control_point[i] +=
-                    reflect(reflect(force).cross(&ms)) / (r.area * r.chord);
+                arm += reflect(reflect(force).cross(&ms)) / (r.area * r.chord);
             }
+            out.geometry.bound_center[i] += arm;
         }
     }
     // Profile polar derivatives follow the strip lift and include both the
@@ -469,10 +469,11 @@ fn evaluate_implicit(
             }
             Input::Beta => GradientValue::Scalar(seed.beta + implicit(freestream_derivatives(c).1)),
             Input::Mach => {
-                let v = mach_velocity.as_ref().unwrap();
+                let (control, bound) = mach_velocity.as_ref().unwrap();
                 let mut value = 0.0;
                 for i in 0..n {
-                    value += (seed.velocity[i] - lambda[i] * s.linearized_normals()[i]).dot(&v[i]);
+                    value += seed.velocity[i].dot(&bound[i])
+                        - lambda[i] * s.linearized_normals()[i].dot(&control[i]);
                 }
                 GradientValue::Scalar(value)
             }
@@ -513,7 +514,10 @@ fn evaluate_implicit(
                     } else {
                         Vec3::zeros()
                     };
-                    value -= lambda[i] * dn[i].dot(&(onset + super::loads::induced(s, i)));
+                    let velocity =
+                        s.control_velocity_matrix().rows(3 * i, 3) * &s.solution().circulation;
+                    value -= lambda[i]
+                        * dn[i].dot(&(onset + Vec3::new(velocity[0], velocity[1], velocity[2])));
                 }
                 let _ = normals;
                 GradientValue::Scalar(value)
@@ -556,10 +560,10 @@ fn mach_velocity(
     c: &FlightCondition,
     half: bool,
     work: &mut Work,
-) -> Vec<Vec3> {
+) -> (Vec<Vec3>, Vec<Vec3>) {
     let n = s.mesh().vortex_count();
     let pg = (1.0 - c.mach * c.mach).sqrt();
-    let mut result = vec![Vec3::zeros(); n];
+    let mut result = (vec![Vec3::zeros(); n], vec![Vec3::zeros(); n]);
     if c.mach == 0.0 {
         return result;
     }
@@ -576,16 +580,25 @@ fn mach_velocity(
                 } else {
                     reflect(source.bound_vortex_left)
                 };
-                let derivative = horseshoe_velocity_pg_derivative(
+                let control = horseshoe_velocity_pg_derivative(
                     &target.control_point,
+                    &left,
+                    &right,
+                    pg,
+                    core(s.mesh(), i, j),
+                    true,
+                );
+                let derivative = horseshoe_velocity_pg_derivative(
+                    &target.bound_vortex_center,
                     &left,
                     &right,
                     pg,
                     core(s.mesh(), i, j),
                     image == 1 || i != j,
                 );
-                result[i] += (-c.mach / pg) * s.solution().circulation[j] * derivative;
-                work.mach_interactions += 1;
+                result.0[i] += (-c.mach / pg) * s.solution().circulation[j] * control;
+                result.1[i] += (-c.mach / pg) * s.solution().circulation[j] * derivative;
+                work.mach_interactions += 2;
             }
         }
     }
@@ -648,10 +661,18 @@ fn geometry_reverse(
                         &right,
                         pg,
                         radius,
-                        bound,
+                        true,
                     );
                     let velocity = horseshoe_vortex_velocity(
                         &target.control_point,
+                        &left,
+                        &right,
+                        pg,
+                        radius,
+                        true,
+                    );
+                    let load_jac = horseshoe_velocity_jacobians(
+                        &target.bound_vortex_center,
                         &left,
                         &right,
                         pg,
@@ -660,9 +681,13 @@ fn geometry_reverse(
                     );
                     let gamma = s.solution().circulation[j];
                     for (local, &k) in columns.iter().enumerate() {
-                        let seed = gamma * (seeds[k].velocity[i] - adjoints[(i, k)] * normal);
-                        let l = jac.bound_left.tr_mul(&seed);
-                        let r = jac.bound_right.tr_mul(&seed);
+                        let seed = -gamma * adjoints[(i, k)] * normal;
+                        let load_seed = gamma * seeds[k].velocity[i];
+                        let l =
+                            jac.bound_left.tr_mul(&seed) + load_jac.bound_left.tr_mul(&load_seed);
+                        let r =
+                            jac.bound_right.tr_mul(&seed) + load_jac.bound_right.tr_mul(&load_seed);
+                        geometry[local].bound_center[i] += load_jac.field_point.tr_mul(&load_seed);
                         if image == 0 {
                             geometry[local].bound_left[j] += l;
                             geometry[local].bound_right[j] += r;
@@ -696,9 +721,10 @@ fn geometry_reverse(
                 target.bound_left[i] += part.bound_left[i];
                 target.bound_right[i] += part.bound_right[i];
                 target.control_point[i] += part.control_point[i];
+                target.bound_center[i] += part.bound_center[i];
                 target.normal[i] += part.normal[i];
             }
         }
     }
-    work.geometry_interactions += n * n * if half { 2 } else { 1 };
+    work.geometry_interactions += 2 * n * n * if half { 2 } else { 1 };
 }

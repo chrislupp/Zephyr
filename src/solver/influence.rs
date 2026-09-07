@@ -135,7 +135,7 @@ pub fn horseshoe_vortex_velocity(
 /// Assembly sweeps all N targets once per source column, so narrowing the
 /// stride keeps that swept working set within L1.
 struct Target {
-    control_point: Vec3,
+    field_point: Vec3,
     normal: Vec3,
     component_index: usize,
 }
@@ -634,7 +634,8 @@ impl<'a> InfluenceMatrixBuilder<'a> {
 
     fn core_radius(&self, vortex_index: usize, same_component: bool) -> Scalar {
         let vortex = &self.mesh.vortices()[vortex_index];
-        let panel_width = (vortex.bound_vortex_right - vortex.bound_vortex_left).norm();
+        let panel_width = (vortex.bound_vortex_right.y - vortex.bound_vortex_left.y)
+            .hypot(vortex.bound_vortex_right.z - vortex.bound_vortex_left.z);
         let mut core = 0.0001 * panel_width;
         if !same_component {
             core = (self.core_radius_chord_fraction * vortex.local_chord)
@@ -757,10 +758,8 @@ impl<'a> InfluenceMatrixBuilder<'a> {
     /// `WITH_AIC` is a const generic so the normalwash half compiles out
     /// entirely for callers that only want the velocity matrix.
     ///
-    /// Bit-exactness: every output element is produced by the same operations
-    /// on the same operands in the same order as the two-pass version. Only
-    /// the traversal order over mutually independent elements changes, plus
-    /// hoisting of values that depend solely on the source panel.
+    /// Control points include every bound leg. The separate force-velocity
+    /// pass targets bound centers and excludes each target's own bound leg.
     fn assemble<const WITH_AIC: bool>(&self) -> Assembly {
         let vortices = self.mesh.vortices();
         let n = vortices.len();
@@ -775,7 +774,11 @@ impl<'a> InfluenceMatrixBuilder<'a> {
         let targets: Vec<Target> = vortices
             .iter()
             .map(|vortex| Target {
-                control_point: vortex.control_point,
+                field_point: if WITH_AIC {
+                    vortex.control_point
+                } else {
+                    vortex.bound_vortex_center
+                },
                 normal: vortex.normal_at_control_point,
                 component_index: vortex.component_index,
             })
@@ -788,9 +791,8 @@ impl<'a> InfluenceMatrixBuilder<'a> {
             Vec::new()
         };
 
-        // Reflection reuse applies only to the fused path. The velocity-only
-        // path is not hot -- it serves the gradient kernels and tests, not
-        // `rebuild_aic` -- so it is not worth a second set of drivers.
+        // The control-point pass reuses reflected rows. The bound-force pass
+        // assembles independent columns, including its distinct self-bound rule.
         let plan = if WITH_AIC { self.mirror_plan() } else { None };
         let originals: Option<&[bool]> = plan.as_ref().map(|plan| plan.is_original.as_slice());
 
@@ -814,7 +816,7 @@ impl<'a> InfluenceMatrixBuilder<'a> {
                 // of the N² elements; it depends only on the source panel. The
                 // 0.0001 literal is the original same-component constant, which is
                 // deliberately not `core_radius_chord_fraction`.
-                let panel_width = (right - left).norm();
+                let panel_width = (right.y - left.y).hypot(right.z - left.z);
                 let core_same = 0.0001 * panel_width;
                 let core_other = (self.core_radius_chord_fraction * source.local_chord)
                     .max(self.core_radius_width_fraction * panel_width);
@@ -863,7 +865,7 @@ impl<'a> InfluenceMatrixBuilder<'a> {
                     {
                         continue;
                     }
-                    let field_point = target.control_point;
+                    let field_point = target.field_point;
                     let core = if target.component_index == source.component_index {
                         core_same
                     } else {
@@ -876,7 +878,7 @@ impl<'a> InfluenceMatrixBuilder<'a> {
                         &right,
                         self.prandtl_glauert_factor,
                         core,
-                        i != j,
+                        WITH_AIC || i != j,
                     );
                     if let Some((image_left, image_right, midpoint, factor)) = y_image {
                         let include_bound = !(self.symmetry.y_symmetry == SymmetryType::Symmetric
@@ -943,16 +945,18 @@ impl<'a> InfluenceMatrixBuilder<'a> {
     }
 
     #[must_use]
+    /// Velocity operator at bound-force points, with each self-bound leg excluded.
     pub fn velocity_influence_matrix(&self) -> MatX {
         self.assemble::<false>().velocity
     }
 
     #[must_use]
     pub fn normalwash_matrix(&self) -> MatX {
-        self.normalwash_and_velocity().0
+        self.assemble::<true>().aic.expect("normalwash requested")
     }
 
     #[must_use]
+    /// Control-point normalwash and the distinct bound-force velocity operator.
     pub fn normalwash_and_velocity(&self) -> (MatX, MatX) {
         let (aic, velocity, _) = self.normalwash_and_velocity_checked();
         (aic, velocity)
@@ -966,12 +970,19 @@ impl<'a> InfluenceMatrixBuilder<'a> {
     /// singular system — avoid a second full pass over the assembled matrix.
     #[must_use]
     pub fn normalwash_and_velocity_checked(&self) -> (MatX, MatX, bool) {
+        let (aic, _, velocity, finite) = self.normalwash_control_and_velocity_checked();
+        (aic, velocity, finite)
+    }
+
+    pub(crate) fn normalwash_control_and_velocity_checked(&self) -> (MatX, MatX, MatX, bool) {
         let assembly = self.assemble::<true>();
+        let velocity = self.assemble::<false>().velocity;
         (
             assembly
                 .aic
                 .expect("assemble::<true> always produces the normalwash matrix"),
             assembly.velocity,
+            velocity,
             assembly.aic_all_finite,
         )
     }

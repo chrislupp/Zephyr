@@ -159,10 +159,10 @@ fn influence_matrix_dimensions_and_normal_projection_are_consistent() {
     for row in 0..8 {
         for column in 0..8 {
             let normal = lattice.vortices()[row].normal_at_control_point;
-            let projected = normal.dot(&Vec3::new(
-                velocity[(3 * row, column)],
-                velocity[(3 * row + 1, column)],
-                velocity[(3 * row + 2, column)],
+            let projected = normal.dot(&builder.single_vortex_velocity(
+                &lattice.vortices()[row].control_point,
+                column,
+                true,
             ));
             assert_abs_diff_eq!(aic[(row, column)], projected, epsilon = 1.0e-14);
         }
@@ -529,8 +529,10 @@ fn induced_velocity_matches_the_influence_matrix_under_double_symmetry() {
             let target = (source + 1) % n;
             let mut circulation = VecX::zeros(n);
             circulation[source] = 1.0;
-            let sampled =
-                builder.induced_velocity(&lattice.vortices()[target].control_point, &circulation);
+            let sampled = builder.induced_velocity(
+                &lattice.vortices()[target].bound_vortex_center,
+                &circulation,
+            );
             let assembled = Vec3::new(
                 velocity[(3 * target, source)],
                 velocity[(3 * target + 1, source)],

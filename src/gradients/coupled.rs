@@ -115,7 +115,7 @@ pub struct StripLoadAdjoint<'a> {
     condition: &'a FlightCondition,
     /// The point each strip's moment cotangent is taken about.
     moment_points: Vec<Vec3>,
-    /// Total velocity at each control point, freestream plus induced.
+    /// Total velocity at each bound-force point, freestream plus induced.
     velocity: Vec<Vec3>,
     /// Kutta–Joukowski force on each panel.
     panel_force: Vec<Vec3>,
@@ -378,7 +378,7 @@ impl<'a> StripLoadAdjoint<'a> {
             for offset in 0..strip.num_vortices {
                 let index = strip.first_vortex_index + offset;
                 let vortex = &mesh.vortices()[index];
-                let arm = vortex.control_point - point;
+                let arm = vortex.bound_vortex_center - point;
                 let line = vortex.bound_vortex_right - vortex.bound_vortex_left;
                 for (column, cotangent) in columns.iter().enumerate() {
                     let seed =
@@ -449,7 +449,8 @@ impl<'a> StripLoadAdjoint<'a> {
                     for d in 0..3 {
                         out.bound_right[(3 * index + d, column)] += line[d];
                         out.bound_left[(3 * index + d, column)] -= line[d];
-                        out.control_point[(3 * index + d, column)] += arm[d];
+                        out.bound_left[(3 * index + d, column)] += 0.5 * arm[d];
+                        out.bound_right[(3 * index + d, column)] += 0.5 * arm[d];
                     }
                 }
             }
@@ -491,7 +492,7 @@ impl<'a> StripLoadAdjoint<'a> {
                     continue;
                 }
                 let core = core_radius(mesh, column, target.component_index);
-                let include_bound = row != column;
+                let include_bound = true;
                 let jacobians = horseshoe_velocity_jacobians(
                     &target.control_point,
                     &source.bound_vortex_left,
@@ -542,7 +543,15 @@ impl<'a> StripLoadAdjoint<'a> {
                     .rows_mut(3 * row, 3)
                     .gemm(-gamma, &gradient_normal, &adjoint_row, 1.0);
 
-                // Load path: the induced velocity at this control point moves
+                let jacobians = horseshoe_velocity_jacobians(
+                    &target.bound_vortex_center,
+                    &source.bound_vortex_left,
+                    &source.bound_vortex_right,
+                    self.prandtl_glauert,
+                    core,
+                    row != column,
+                );
+                // Load path: the induced velocity at this bound-force point moves
                 // when either the target or the source moves.
                 out.bound_left.rows_mut(3 * column, 3).gemm_tr(
                     gamma,
@@ -556,8 +565,14 @@ impl<'a> StripLoadAdjoint<'a> {
                     &seed_rows,
                     1.0,
                 );
-                out.control_point.rows_mut(3 * row, 3).gemm_tr(
-                    gamma,
+                out.bound_left.rows_mut(3 * row, 3).gemm_tr(
+                    0.5 * gamma,
+                    &jacobians.field_point,
+                    &seed_rows,
+                    1.0,
+                );
+                out.bound_right.rows_mut(3 * row, 3).gemm_tr(
+                    0.5 * gamma,
                     &jacobians.field_point,
                     &seed_rows,
                     1.0,
@@ -719,7 +734,8 @@ fn prandtl_glauert_factor(mach: Scalar) -> Scalar {
 /// The Leishman core radius the influence matrix builder uses, at its defaults.
 fn core_radius(mesh: &VortexLattice, source_index: usize, target_component: usize) -> Scalar {
     let source = &mesh.vortices()[source_index];
-    let width = (source.bound_vortex_right - source.bound_vortex_left).norm();
+    let width = (source.bound_vortex_right.y - source.bound_vortex_left.y)
+        .hypot(source.bound_vortex_right.z - source.bound_vortex_left.z);
     if source.component_index == target_component {
         0.0001 * width
     } else {

@@ -195,7 +195,7 @@ fn the_weighted_row_gradient_matches_finite_differences() {
                         source.bound_vortex_right,
                         1.0,
                         same_component_core(&mesh, source_index),
-                        row != source_index,
+                        true,
                     )
             })
             .sum()

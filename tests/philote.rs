@@ -644,10 +644,9 @@ async fn vlm_discipline_every_scalar_partial_matches_finite_differences() {
                 .as_slice()
                 .unwrap()[0];
             let expected = differences[output][0];
-            assert_abs_diff_eq!(
-                exact,
-                expected,
-                epsilon = 1.0e-5 * expected.abs() + NOISE_FLOOR
+            assert!(
+                (exact - expected).abs() <= 1.0e-5 * expected.abs() + NOISE_FLOOR,
+                "{output}/{name}: analytic {exact}, finite {expected}"
             );
         }
     }
