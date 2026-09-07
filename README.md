@@ -41,6 +41,18 @@ The default `vtk` feature uses the pure-Rust `vtkio` crate. A minimal build is
 available with `default-features = false`; visualization functions then return
 `PegasusError::FeatureDisabled`.
 
+The optional `parallel` feature distributes influence assembly and geometry
+reverse sweeps, including the selective half-wing analysis used by Philote.
+Set `RAYON_NUM_THREADS` before starting the process. Fewer than 128 circulation
+unknowns use serial loops; LU factorization remains serial. Geometry partial
+sums use fixed row groups and ordered accumulation, independent of pool size.
+For a ten-thread Philote server:
+
+```bash
+RAYON_NUM_THREADS=10 cargo run --release --features philote,parallel \
+  --example philote_vlm_server 127.0.0.1:50053
+```
+
 ## Basic analysis
 
 ```rust

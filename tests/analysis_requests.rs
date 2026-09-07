@@ -786,3 +786,103 @@ fn invalid_half_geometries_are_rejected_before_assembly() {
         assert!(Analysis::from_mesh(&m).evaluate(&c, &req).is_err());
     }
 }
+
+#[cfg(feature = "parallel")]
+#[test]
+fn selective_parallel_results_are_independent_of_thread_count() {
+    use pegasus_vlm::analysis::AnalysisResult;
+    fn bits(r: &AnalysisResult) -> Vec<u64> {
+        let mut result: Vec<_> = r.outputs.values().map(|v| v.to_bits()).collect();
+        for g in &r.gradients {
+            match &g.value {
+                GradientValue::Scalar(v) => result.push(v.to_bits()),
+                GradientValue::MeshNodes(nodes) => {
+                    result.extend(nodes.iter().flat_map(|v| v.iter().map(|x| x.to_bits())))
+                }
+            }
+        }
+        result
+    }
+    for (nx, ny) in [(2, 8), (6, 24)] {
+        let m = mesh(nx, ny);
+        for mode in [SolverMode::Full, SolverMode::HalfWing] {
+            let request = AnalysisRequest {
+                mode,
+                outputs: vec![Output::Lift, Output::Drag, Output::Pitch],
+                gradients: [Output::Lift, Output::Drag, Output::Pitch]
+                    .into_iter()
+                    .flat_map(|output| {
+                        [Input::Alpha, Input::MeshNodes(0)]
+                            .into_iter()
+                            .map(move |input| GradientRequest { output, input })
+                    })
+                    .collect(),
+                ..AnalysisRequest::default()
+            };
+            let mut reference = None;
+            for threads in [1, 3, 10] {
+                let pool = rayon::ThreadPoolBuilder::new()
+                    .num_threads(threads)
+                    .build()
+                    .unwrap();
+                let actual = pool.install(|| {
+                    let direct = Analysis::from_mesh(&m)
+                        .evaluate(&condition(), &request)
+                        .unwrap();
+                    // Exercise AIC-only then velocity-only assembly as well.
+                    let mut staged = Analysis::from_mesh(&m);
+                    let far = staged
+                        .evaluate(
+                            &condition(),
+                            &AnalysisRequest {
+                                mode,
+                                outputs: vec![Output::FarFieldInducedDrag],
+                                ..AnalysisRequest::default()
+                            },
+                        )
+                        .unwrap();
+                    let extended = staged.evaluate(&condition(), &request).unwrap();
+                    assert_eq!(bits(&direct), bits(&extended));
+                    assert_eq!(
+                        direct.work.unknowns,
+                        nx * ny * if mode == SolverMode::HalfWing { 1 } else { 2 }
+                    );
+                    let mut values = bits(&far);
+                    values.extend(bits(&direct));
+                    values
+                });
+                if let Some(expected) = &reference {
+                    assert_eq!(&actual, expected);
+                } else {
+                    reference = Some(actual);
+                }
+            }
+        }
+    }
+}
+
+#[test]
+fn half_wing_mesh_gradient_above_parallel_threshold_matches_difference() {
+    let mut m = mesh(6, 24);
+    let c = condition();
+    let output = Output::Drag;
+    let request = AnalysisRequest {
+        mode: SolverMode::HalfWing,
+        gradients: vec![GradientRequest {
+            output,
+            input: Input::MeshNodes(0),
+        }],
+        ..AnalysisRequest::default()
+    };
+    let result = Analysis::from_mesh(&m).evaluate(&c, &request).unwrap();
+    let GradientValue::MeshNodes(nodes) = &result.gradients[0].value else {
+        panic!()
+    };
+    let index = 3 * 25 + 12;
+    let step = 1e-6;
+    m.surfaces[0].nodes[index].z += step;
+    let plus = value(&m, &c, SolverMode::HalfWing, output);
+    m.surfaces[0].nodes[index].z -= 2.0 * step;
+    let minus = value(&m, &c, SolverMode::HalfWing, output);
+    close(nodes[index].z, (plus - minus) / (2.0 * step));
+}

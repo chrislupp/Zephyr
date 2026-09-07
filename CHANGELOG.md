@@ -16,6 +16,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   expensive half of a solve.
 
 ### Changed
+- The selective `Analysis` path, including half-wing symmetry and Philote's
+  `analysis_mode="half_wing"`, now honors the `parallel` feature for influence
+  assembly and mesh/section geometry reverse sweeps. Columns have disjoint
+  writes; geometry row chunks are reduced in fixed order across builds and
+  thread counts. Systems below 128 circulation unknowns retain serial execution.
 - The geometry reverse sweep evaluates one horseshoe kernel per vortex pair
   rather than five. An influence coefficient is `normal . velocity`, so its
   geometry gradient is the velocity Jacobians contracted with the target normal;

@@ -604,63 +604,101 @@ fn geometry_reverse(
     let pg = (1.0 - c.mach * c.mach).sqrt();
     let u = VortexLatticeSolver::freestream_direction(c);
     let omega = Vec3::new(c.roll_rate, c.pitch_rate, c.yaw_rate);
-    for (i, target) in s.mesh().vortices().iter().enumerate() {
-        let normal = s.linearized_normals()[i];
-        for &k in columns {
-            let lambda = adjoints[(i, k)];
-            if target.affected_by_freestream {
-                seeds[k].geometry.normal[i] -=
-                    lambda * (u + omega.cross(&(target.control_point - s.reference_point())));
-                seeds[k].geometry.control_point[i] -= lambda * normal.cross(&omega);
+    let n = s.mesh().vortex_count();
+    // Fixed ranges preserve reduction order across serial/parallel builds and
+    // pool sizes. Workers own their partial cotangents; no shared additions.
+    let rows_per_chunk = n.div_ceil(32).max(1);
+    let ranges: Vec<_> = (0..n)
+        .step_by(rows_per_chunk)
+        .map(|first| (first, (first + rows_per_chunk).min(n)))
+        .collect();
+    let sweep = |&(first, last): &(usize, usize)| {
+        let mut geometry: Vec<_> = columns
+            .iter()
+            .map(|_| LatticeCotangents::zeros(s.mesh()))
+            .collect();
+        for i in first..last {
+            let target = &s.mesh().vortices()[i];
+            let normal = s.linearized_normals()[i];
+            for (local, &k) in columns.iter().enumerate() {
+                let lambda = adjoints[(i, k)];
+                if target.affected_by_freestream {
+                    geometry[local].normal[i] -=
+                        lambda * (u + omega.cross(&(target.control_point - s.reference_point())));
+                    geometry[local].control_point[i] -= lambda * normal.cross(&omega);
+                }
+            }
+            for (j, source) in s.mesh().vortices().iter().enumerate() {
+                for image in 0..if half { 2 } else { 1 } {
+                    let left = if image == 0 {
+                        source.bound_vortex_left
+                    } else {
+                        reflect(source.bound_vortex_right)
+                    };
+                    let right = if image == 0 {
+                        source.bound_vortex_right
+                    } else {
+                        reflect(source.bound_vortex_left)
+                    };
+                    let radius = core(s.mesh(), i, j);
+                    let bound = image == 1 || i != j;
+                    let jac = horseshoe_velocity_jacobians(
+                        &target.control_point,
+                        &left,
+                        &right,
+                        pg,
+                        radius,
+                        bound,
+                    );
+                    let velocity = horseshoe_vortex_velocity(
+                        &target.control_point,
+                        &left,
+                        &right,
+                        pg,
+                        radius,
+                        bound,
+                    );
+                    let gamma = s.solution().circulation[j];
+                    for (local, &k) in columns.iter().enumerate() {
+                        let seed = gamma * (seeds[k].velocity[i] - adjoints[(i, k)] * normal);
+                        let l = jac.bound_left.tr_mul(&seed);
+                        let r = jac.bound_right.tr_mul(&seed);
+                        if image == 0 {
+                            geometry[local].bound_left[j] += l;
+                            geometry[local].bound_right[j] += r;
+                        } else {
+                            geometry[local].bound_right[j] += reflect(l);
+                            geometry[local].bound_left[j] += reflect(r);
+                        }
+                        geometry[local].control_point[i] += jac.field_point.tr_mul(&seed);
+                        geometry[local].normal[i] -= adjoints[(i, k)] * gamma * velocity;
+                    }
+                }
             }
         }
-        for (j, source) in s.mesh().vortices().iter().enumerate() {
-            for image in 0..if half { 2 } else { 1 } {
-                let left = if image == 0 {
-                    source.bound_vortex_left
-                } else {
-                    reflect(source.bound_vortex_right)
-                };
-                let right = if image == 0 {
-                    source.bound_vortex_right
-                } else {
-                    reflect(source.bound_vortex_left)
-                };
-                let radius = core(s.mesh(), i, j);
-                let bound = image == 1 || i != j;
-                let jac = horseshoe_velocity_jacobians(
-                    &target.control_point,
-                    &left,
-                    &right,
-                    pg,
-                    radius,
-                    bound,
-                );
-                let velocity = horseshoe_vortex_velocity(
-                    &target.control_point,
-                    &left,
-                    &right,
-                    pg,
-                    radius,
-                    bound,
-                );
-                let gamma = s.solution().circulation[j];
-                for &k in columns {
-                    let seed = gamma * (seeds[k].velocity[i] - adjoints[(i, k)] * normal);
-                    let l = jac.bound_left.tr_mul(&seed);
-                    let r = jac.bound_right.tr_mul(&seed);
-                    if image == 0 {
-                        seeds[k].geometry.bound_left[j] += l;
-                        seeds[k].geometry.bound_right[j] += r;
-                    } else {
-                        seeds[k].geometry.bound_right[j] += reflect(l);
-                        seeds[k].geometry.bound_left[j] += reflect(r);
-                    }
-                    seeds[k].geometry.control_point[i] += jac.field_point.tr_mul(&seed);
-                    seeds[k].geometry.normal[i] -= adjoints[(i, k)] * gamma * velocity;
-                }
-                work.geometry_interactions += 1;
+        geometry
+    };
+    #[cfg(feature = "parallel")]
+    let chunks: Vec<_> = {
+        use rayon::prelude::*;
+        if n >= super::operator::PARALLEL_MIN_PANELS {
+            ranges.par_iter().map(sweep).collect()
+        } else {
+            ranges.iter().map(sweep).collect()
+        }
+    };
+    #[cfg(not(feature = "parallel"))]
+    let chunks: Vec<_> = ranges.iter().map(sweep).collect();
+    for chunk in chunks {
+        for (&k, part) in columns.iter().zip(chunk) {
+            let target = &mut seeds[k].geometry;
+            for i in 0..n {
+                target.bound_left[i] += part.bound_left[i];
+                target.bound_right[i] += part.bound_right[i];
+                target.control_point[i] += part.control_point[i];
+                target.normal[i] += part.normal[i];
             }
         }
     }
+    work.geometry_interactions += n * n * if half { 2 } else { 1 };
 }
