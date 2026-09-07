@@ -308,3 +308,49 @@ fn induced_drag_node_gradients_agree_on_a_duplicated_mesh() {
     }
     assert!(worst < 1.0e-5, "worst relative error {worst}");
 }
+
+/// Compressible operating point: the reverse sweep contracts the same
+/// Prandtl-Glauert-scaled kernels the solve assembled, so a mismatch in that
+/// scaling shows up here and nowhere else.
+#[test]
+fn node_gradients_agree_with_resolves_at_mach_0_6() {
+    let (nx, ny) = (2, 3);
+    let input = mesh_input(nx, ny, 1.0, 3.0, false);
+    let compressible = FlightCondition {
+        alpha: 5.0 * DEGREES_TO_RADIANS,
+        mach: 0.6,
+        ..FlightCondition::default()
+    };
+
+    let lift_of = |input: &MeshInput| {
+        let mut solver = VortexLatticeSolver::new();
+        solver.set_mesh(input).unwrap();
+        let solution = solver.solve(&compressible).unwrap();
+        ForceCalculator::new()
+            .compute_with_references(&input.reference, solver.mesh(), &solution, &compressible)
+            .coefficients
+            .lift
+    };
+
+    let mut calculator = GradientCalculator::new();
+    calculator.set_mesh(&input).unwrap();
+    let gradients = calculator
+        .compute_mesh_node_gradients(&compressible)
+        .unwrap();
+    let exact = &gradients[0].lift;
+
+    let step = 1.0e-6;
+    let mut worst: f64 = 0.0;
+    for node in 0..(nx + 1) * (ny + 1) {
+        for direction in 0..3 {
+            let mut plus = input.clone();
+            let mut minus = input.clone();
+            plus.surfaces[0].nodes[node][direction] += step;
+            minus.surfaces[0].nodes[node][direction] -= step;
+            let difference = (lift_of(&plus) - lift_of(&minus)) / (2.0 * step);
+            let error = (exact.nodes[node][direction] - difference).abs();
+            worst = worst.max(error / difference.abs().max(1.0e-6));
+        }
+    }
+    assert!(worst < 1.0e-5, "worst relative error {worst}");
+}

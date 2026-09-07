@@ -7,7 +7,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- `GradientCalculator::mesh_node_gradients_from` and
+  `flight_condition_gradients_from`, which take a solver that already holds a
+  solution instead of building and solving their own. `VlmDiscipline`'s
+  `compute_partials` was solving the same operating point three times — once
+  itself, once inside each gradient call — and the factorization is the
+  expensive half of a solve.
+
 ### Changed
+- The geometry reverse sweep evaluates one horseshoe kernel per vortex pair
+  rather than five. An influence coefficient is `normal . velocity`, so its
+  geometry gradient is the velocity Jacobians contracted with the target normal;
+  `aic_element_gradient` rebuilt the horseshoe geometry three times to reach the
+  same answer, and its normal derivative is the velocity influence the solver has
+  already assembled. Together with the reused solve, an 8x40 linearize over
+  Philote drops from 197 ms to 136 ms, and 12x120 from 6.6 s to 4.9 s.
 - `GradientCalculator::compute_mesh_node_gradients` is reverse mode throughout.
   It solved the flow adjoint once and then threw that away, seeding the geometry
   contraction forward once per node coordinate: `3 (nx+1) (ny+1)` sweeps over the

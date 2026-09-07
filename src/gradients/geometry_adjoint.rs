@@ -20,7 +20,7 @@ const INV_2_PI: Scalar = 1.0 / (2.0 * PI);
 
 use super::forces::body_output_cotangent;
 use super::{
-    AdjointSolver, AeroOutput, OutputSelection, aic_element_gradient, force_circulation_gradient,
+    AdjointSolver, AeroOutput, OutputSelection, force_circulation_gradient,
     force_induced_velocity_gradient, horseshoe_velocity_jacobians, trefftz_circulation_gradients,
 };
 
@@ -252,6 +252,7 @@ fn geometry_cotangents(
         })
         .collect();
 
+    let velocity_influence = solver.velocity_matrix();
     let pg = prandtl_glauert_factor(solver.current_mach());
     let freestream = VortexLatticeSolver::freestream_direction(condition);
     let omega = Vec3::new(
@@ -274,45 +275,17 @@ fn geometry_cotangents(
             }
         }
 
+        let normal = target.normal_at_control_point;
         for (column, source) in mesh.vortices().iter().enumerate() {
             let core = core_radius(mesh, column, target.component_index);
             let include_bound = row != column;
             let gamma = solution.circulation[column];
 
-            // Influence-matrix term: psi^T (dA/dX) Gamma.
-            let gradient = aic_element_gradient(
-                &source.bound_vortex_left,
-                &source.bound_vortex_right,
-                &target.control_point,
-                &target.normal_at_control_point,
-                core,
-                pg,
-                include_bound,
-            );
-            for (index, cotangent) in result.iter_mut().enumerate() {
-                let weight = -adjoints[(row, index)] * gamma;
-                if weight == 0.0 {
-                    continue;
-                }
-                cotangent.bound_left[column] += weight * gradient.bound_left;
-                cotangent.bound_right[column] += weight * gradient.bound_right;
-                cotangent.control_point[row] += weight * gradient.control_point;
-                cotangent.normal[row] += weight * gradient.normal;
-            }
-
-            // Near-field term: the induced velocity that sets each panel force
-            // depends on the same geometry. The Jacobians are built once and
-            // contracted with every output's seed, which is what makes the
-            // sweep independent of the output count in the expensive kernel.
-            if gamma.abs() <= EPSILON {
-                continue;
-            }
-            if velocity_seeds
-                .iter()
-                .all(|seed| seed[row].norm_squared() <= 0.0)
-            {
-                continue;
-            }
+            // One kernel evaluation serves both geometry terms. The influence
+            // coefficient is `normal . velocity`, so its gradient is these same
+            // Jacobians contracted with the target normal -- evaluating
+            // `aic_element_gradient` as well would rebuild the horseshoe
+            // geometry three more times for an answer already in hand.
             let jacobians = horseshoe_velocity_jacobians(
                 &target.control_point,
                 &source.bound_vortex_left,
@@ -321,6 +294,38 @@ fn geometry_cotangents(
                 core,
                 include_bound,
             );
+
+            // Influence-matrix term: psi^T (dA/dX) Gamma. The normal derivative
+            // of `normal . velocity` is the velocity itself, which the solver
+            // already assembled for the primal.
+            if gamma != 0.0 {
+                let by_bound_left = jacobians.bound_left.tr_mul(&normal);
+                let by_bound_right = jacobians.bound_right.tr_mul(&normal);
+                let by_control_point = jacobians.field_point.tr_mul(&normal);
+                let by_normal = Vec3::new(
+                    velocity_influence[(3 * row, column)],
+                    velocity_influence[(3 * row + 1, column)],
+                    velocity_influence[(3 * row + 2, column)],
+                );
+                for (index, cotangent) in result.iter_mut().enumerate() {
+                    let weight = -adjoints[(row, index)] * gamma;
+                    if weight == 0.0 {
+                        continue;
+                    }
+                    cotangent.bound_left[column] += weight * by_bound_left;
+                    cotangent.bound_right[column] += weight * by_bound_right;
+                    cotangent.control_point[row] += weight * by_control_point;
+                    cotangent.normal[row] += weight * by_normal;
+                }
+            }
+
+            // Near-field term: the induced velocity that sets each panel force
+            // moves with the same geometry. Contracting the shared Jacobians
+            // with each output's seed keeps the kernel count independent of the
+            // number of outputs.
+            if gamma.abs() <= EPSILON {
+                continue;
+            }
             for (index, cotangent) in result.iter_mut().enumerate() {
                 let seed = velocity_seeds[index][row];
                 if seed.norm_squared() <= 0.0 {

@@ -320,8 +320,22 @@ impl GradientCalculator {
     ) -> Result<FullGradients> {
         let mut solver = self.configured_solver()?;
         solver.solve(condition)?;
+        self.flight_condition_gradients_from(&solver, condition)
+    }
+
+    /// As [`Self::compute_flight_condition_gradients`], reusing a solution the
+    /// caller already has.
+    ///
+    /// `solver` must hold a valid solution of `condition` on this calculator's
+    /// geometry. A caller that needs several gradient sets from one operating
+    /// point pays for the factorization once instead of once per set.
+    pub fn flight_condition_gradients_from(
+        &self,
+        solver: &VortexLatticeSolver,
+        condition: &FlightCondition,
+    ) -> Result<FullGradients> {
         let mut result = FullGradients::default();
-        let velocity_mach = velocity_influence_mach_derivative(&solver);
+        let velocity_mach = velocity_influence_mach_derivative(solver);
         let induced_velocity_mach = &velocity_mach * &solver.solution().circulation;
         let residual_mach = VecX::from_fn(solver.mesh().vortex_count(), |row, _| {
             -solver.linearized_normals()[row].dot(&Vec3::new(
@@ -355,11 +369,11 @@ impl GradientCalculator {
                 )
                 .induced_drag
             } else {
-                force_circulation_gradient(&solver, condition, output)
+                force_circulation_gradient(solver, condition, output)
             };
             circulation_gradients.set_column(column, &gradient);
         }
-        let lambdas = AdjointSolver::new(&solver)?.solve_batched(&circulation_gradients)?;
+        let lambdas = AdjointSolver::new(solver)?.solve_batched(&circulation_gradients)?;
 
         // Freestream sensitivities of the residual, shared by every output.
         let (sin_alpha, cos_alpha) = condition.alpha.sin_cos();
@@ -649,14 +663,27 @@ impl GradientCalculator {
         &self,
         condition: &FlightCondition,
     ) -> Result<Vec<SurfaceMeshNodeGradients>> {
+        let mut solver = self.configured_solver()?;
+        solver.solve(condition)?;
+        self.mesh_node_gradients_from(&solver, condition)
+    }
+
+    /// As [`Self::compute_mesh_node_gradients`], reusing a solution the caller
+    /// already has.
+    ///
+    /// `solver` must hold a valid solution of `condition` on this calculator's
+    /// geometry.
+    pub fn mesh_node_gradients_from(
+        &self,
+        solver: &VortexLatticeSolver,
+        condition: &FlightCondition,
+    ) -> Result<Vec<SurfaceMeshNodeGradients>> {
         let Some(GeometrySource::Mesh(mesh)) = self.source.as_ref() else {
             return Err(PegasusError::InvalidMesh(
                 "node gradients require a direct mesh source".into(),
             ));
         };
-        let mut solver = self.configured_solver()?;
-        solver.solve(condition)?;
-        let context = GeometryAdjointContext::new(&solver, condition, self.output_selection)?;
+        let context = GeometryAdjointContext::new(solver, condition, self.output_selection)?;
         let mut result: Vec<_> = mesh
             .surfaces
             .iter()

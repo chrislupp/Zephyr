@@ -387,15 +387,18 @@ impl ExplicitDiscipline for VlmDiscipline {
             &condition,
         );
 
+        // Both gradient sets run against the solution above rather than
+        // solving again: the factorization is the expensive part of an
+        // operating point, and one linearize used to pay for it three times.
         let mut calculator = GradientCalculator::new();
         calculator
             .set_mesh(&mesh)
             .map_err(|error| rejected("set_mesh", error.to_string()))?;
         let node_gradients = calculator
-            .compute_mesh_node_gradients(&condition)
+            .mesh_node_gradients_from(&solver, &condition)
             .map_err(|error| rejected("compute_mesh_node_gradients", error.to_string()))?;
         let flight = calculator
-            .compute_flight_condition_gradients(&condition)
+            .flight_condition_gradients_from(&solver, &condition)
             .map_err(|error| rejected("compute_flight_condition_gradients", error.to_string()))?;
 
         let mut partials: PartialMap = HashMap::new();
