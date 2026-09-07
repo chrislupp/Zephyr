@@ -39,6 +39,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `tests/mesh_node_gradient.rs` still differences every node component against
   re-solves, now including the far-field induced drag, which reaches the
   Trefftz-plane reverse sweep that the near-field cases do not.
+- The geometry reverse sweep runs under the `parallel` feature. It was the one
+  hot loop the feature did not reach: assembly was already multithreaded, so a
+  linearize spent most of its wall time in a single-threaded `O(N^2)` sweep over
+  vortex pairs. Rows are now split into a fixed 32 chunks, each owning its rows
+  outright and accumulating partial column sums that are added back in chunk
+  order. The chunk count is a property of the mesh rather than of the thread
+  pool, and both builds run the same chunked algorithm, so the feature's
+  guarantee holds: bit-identical to the serial build and independent of the
+  thread count, verified by hashing the lift, drag, pitch and induced-drag
+  gradients from the serial build and from 1, 3 and 10 threads. Below 128 panels
+  the sweep stays serial, the threshold assembly already uses. On ten cores,
+  mesh-node gradients drop from 91 ms to 25 ms at 8x40, 368 ms to 81 ms at 8x80,
+  and 2.50 s to 1.12 s at 12x120.
 
 ## [0.5.0] - 2026-09-05
 

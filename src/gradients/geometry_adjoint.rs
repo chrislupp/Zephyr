@@ -260,83 +260,31 @@ fn geometry_cotangents(
         condition.pitch_rate,
         condition.yaw_rate,
     );
+    let sweep = SweepInputs {
+        mesh,
+        solution,
+        adjoints,
+        velocity_influence,
+        velocity_seeds: &velocity_seeds,
+        reference_point: *solver.reference_point(),
+        freestream,
+        omega,
+        pg,
+        outputs: outputs.len(),
+    };
 
-    for (row, target) in mesh.vortices().iter().enumerate() {
-        // Right-hand side: the boundary condition moves with the control point
-        // and the normal.
-        if target.affected_by_freestream {
-            let local_velocity =
-                freestream + omega.cross(&(target.control_point - solver.reference_point()));
-            let control_point_seed = -target.normal_at_control_point.cross(&omega);
-            for (index, cotangent) in result.iter_mut().enumerate() {
-                let psi = adjoints[(row, index)];
-                cotangent.control_point[row] += psi * control_point_seed;
-                cotangent.normal[row] -= psi * local_velocity;
-            }
-        }
-
-        let normal = target.normal_at_control_point;
-        for (column, source) in mesh.vortices().iter().enumerate() {
-            let core = core_radius(mesh, column, target.component_index);
-            let include_bound = row != column;
-            let gamma = solution.circulation[column];
-
-            // One kernel evaluation serves both geometry terms. The influence
-            // coefficient is `normal . velocity`, so its gradient is these same
-            // Jacobians contracted with the target normal -- evaluating
-            // `aic_element_gradient` as well would rebuild the horseshoe
-            // geometry three more times for an answer already in hand.
-            let jacobians = horseshoe_velocity_jacobians(
-                &target.control_point,
-                &source.bound_vortex_left,
-                &source.bound_vortex_right,
-                pg,
-                core,
-                include_bound,
-            );
-
-            // Influence-matrix term: psi^T (dA/dX) Gamma. The normal derivative
-            // of `normal . velocity` is the velocity itself, which the solver
-            // already assembled for the primal.
-            if gamma != 0.0 {
-                let by_bound_left = jacobians.bound_left.tr_mul(&normal);
-                let by_bound_right = jacobians.bound_right.tr_mul(&normal);
-                let by_control_point = jacobians.field_point.tr_mul(&normal);
-                let by_normal = Vec3::new(
-                    velocity_influence[(3 * row, column)],
-                    velocity_influence[(3 * row + 1, column)],
-                    velocity_influence[(3 * row + 2, column)],
-                );
-                for (index, cotangent) in result.iter_mut().enumerate() {
-                    let weight = -adjoints[(row, index)] * gamma;
-                    if weight == 0.0 {
-                        continue;
-                    }
-                    cotangent.bound_left[column] += weight * by_bound_left;
-                    cotangent.bound_right[column] += weight * by_bound_right;
-                    cotangent.control_point[row] += weight * by_control_point;
-                    cotangent.normal[row] += weight * by_normal;
-                }
-            }
-
-            // Near-field term: the induced velocity that sets each panel force
-            // moves with the same geometry. Contracting the shared Jacobians
-            // with each output's seed keeps the kernel count independent of the
-            // number of outputs.
-            if gamma.abs() <= EPSILON {
-                continue;
-            }
-            for (index, cotangent) in result.iter_mut().enumerate() {
-                let seed = velocity_seeds[index][row];
-                if seed.norm_squared() <= 0.0 {
-                    continue;
-                }
-                let scaled = gamma * seed;
-                cotangent.control_point[row] += jacobians.field_point.tr_mul(&scaled);
-                cotangent.bound_left[column] += jacobians.bound_left.tr_mul(&scaled);
-                cotangent.bound_right[column] += jacobians.bound_right.tr_mul(&scaled);
-            }
-        }
+    // Rows are swept in fixed-size chunks whose partial column sums are added
+    // back in chunk order. Both builds run the same chunking, so the parallel
+    // result is bit-identical to the serial one and independent of the thread
+    // count -- the property the assembly driver in `solver::influence` holds to.
+    let count = mesh.vortex_count();
+    let rows_per_chunk = count.div_ceil(SWEEP_CHUNKS).max(1);
+    let ranges: Vec<(usize, usize)> = (0..count)
+        .step_by(rows_per_chunk)
+        .map(|first| (first, (first + rows_per_chunk).min(count)))
+        .collect();
+    for chunk in drive_row_chunks(&ranges, &sweep) {
+        chunk.accumulate_into(&mut result);
     }
 
     for (index, output) in outputs.iter().enumerate() {
@@ -361,6 +309,191 @@ fn geometry_cotangents(
         }
     }
     result
+}
+
+/// Row chunks the geometry sweep is split into.
+///
+/// Fixed rather than derived from the thread count: the chunk partials are
+/// summed in chunk order, so the count has to be a property of the problem for
+/// the result to be reproducible.
+const SWEEP_CHUNKS: usize = 32;
+
+/// Panel count below which the sweep stays on one thread.
+///
+/// Matches the assembly driver's threshold: the sweep is `O(N^2)` while handing
+/// out chunks is `O(N)`, so small lattices lose more to distribution than they
+/// gain. Affects speed only -- both branches run the same per-chunk code.
+#[cfg(feature = "parallel")]
+const PARALLEL_MIN_PANELS: usize = 128;
+
+/// Everything the row sweep reads. Shared immutably across chunks.
+struct SweepInputs<'a> {
+    mesh: &'a VortexLattice,
+    solution: &'a SolutionState,
+    adjoints: &'a MatX,
+    velocity_influence: &'a MatX,
+    velocity_seeds: &'a [Vec<Vec3>],
+    reference_point: Vec3,
+    freestream: Vec3,
+    omega: Vec3,
+    pg: Scalar,
+    outputs: usize,
+}
+
+/// One chunk's contribution: exclusive rows, and partial sums over columns.
+struct SweepChunk {
+    first_row: usize,
+    control_point: Vec<Vec<Vec3>>,
+    normal: Vec<Vec<Vec3>>,
+    bound_left: Vec<Vec<Vec3>>,
+    bound_right: Vec<Vec<Vec3>>,
+}
+
+impl SweepChunk {
+    fn accumulate_into(self, result: &mut [LatticeCotangents]) {
+        for (index, cotangent) in result.iter_mut().enumerate() {
+            for (offset, value) in self.control_point[index].iter().enumerate() {
+                cotangent.control_point[self.first_row + offset] += value;
+            }
+            for (offset, value) in self.normal[index].iter().enumerate() {
+                cotangent.normal[self.first_row + offset] += value;
+            }
+            for (column, value) in self.bound_left[index].iter().enumerate() {
+                cotangent.bound_left[column] += value;
+            }
+            for (column, value) in self.bound_right[index].iter().enumerate() {
+                cotangent.bound_right[column] += value;
+            }
+        }
+    }
+}
+
+/// Sweep one range of rows. Pure in its inputs, which is what lets the chunks
+/// run in any order.
+fn sweep_row_range(range: (usize, usize), sweep: &SweepInputs<'_>) -> SweepChunk {
+    let (first_row, last_row) = range;
+    let count = sweep.mesh.vortex_count();
+    let rows = last_row - first_row;
+    let mut chunk = SweepChunk {
+        first_row,
+        control_point: vec![vec![Vec3::zeros(); rows]; sweep.outputs],
+        normal: vec![vec![Vec3::zeros(); rows]; sweep.outputs],
+        bound_left: vec![vec![Vec3::zeros(); count]; sweep.outputs],
+        bound_right: vec![vec![Vec3::zeros(); count]; sweep.outputs],
+    };
+
+    for row in first_row..last_row {
+        let local = row - first_row;
+        let target = &sweep.mesh.vortices()[row];
+
+        // Right-hand side: the boundary condition moves with the control point
+        // and the normal.
+        if target.affected_by_freestream {
+            let local_velocity = sweep.freestream
+                + sweep
+                    .omega
+                    .cross(&(target.control_point - sweep.reference_point));
+            let control_point_seed = -target.normal_at_control_point.cross(&sweep.omega);
+            for index in 0..sweep.outputs {
+                let psi = sweep.adjoints[(row, index)];
+                chunk.control_point[index][local] += psi * control_point_seed;
+                chunk.normal[index][local] -= psi * local_velocity;
+            }
+        }
+
+        let normal = target.normal_at_control_point;
+        for (column, source) in sweep.mesh.vortices().iter().enumerate() {
+            let core = core_radius(sweep.mesh, column, target.component_index);
+            let include_bound = row != column;
+            let gamma = sweep.solution.circulation[column];
+
+            // One kernel evaluation serves both geometry terms. The influence
+            // coefficient is `normal . velocity`, so its gradient is these same
+            // Jacobians contracted with the target normal -- evaluating
+            // `aic_element_gradient` as well would rebuild the horseshoe
+            // geometry three more times for an answer already in hand.
+            let jacobians = horseshoe_velocity_jacobians(
+                &target.control_point,
+                &source.bound_vortex_left,
+                &source.bound_vortex_right,
+                sweep.pg,
+                core,
+                include_bound,
+            );
+
+            // Influence-matrix term: psi^T (dA/dX) Gamma. The normal derivative
+            // of `normal . velocity` is the velocity itself, which the solver
+            // already assembled for the primal.
+            if gamma != 0.0 {
+                let by_bound_left = jacobians.bound_left.tr_mul(&normal);
+                let by_bound_right = jacobians.bound_right.tr_mul(&normal);
+                let by_control_point = jacobians.field_point.tr_mul(&normal);
+                let by_normal = Vec3::new(
+                    sweep.velocity_influence[(3 * row, column)],
+                    sweep.velocity_influence[(3 * row + 1, column)],
+                    sweep.velocity_influence[(3 * row + 2, column)],
+                );
+                for index in 0..sweep.outputs {
+                    let weight = -sweep.adjoints[(row, index)] * gamma;
+                    if weight == 0.0 {
+                        continue;
+                    }
+                    chunk.bound_left[index][column] += weight * by_bound_left;
+                    chunk.bound_right[index][column] += weight * by_bound_right;
+                    chunk.control_point[index][local] += weight * by_control_point;
+                    chunk.normal[index][local] += weight * by_normal;
+                }
+            }
+
+            // Near-field term: the induced velocity that sets each panel force
+            // moves with the same geometry. Contracting the shared Jacobians
+            // with each output's seed keeps the kernel count independent of the
+            // number of outputs.
+            if gamma.abs() <= EPSILON {
+                continue;
+            }
+            for index in 0..sweep.outputs {
+                let seed = sweep.velocity_seeds[index][row];
+                if seed.norm_squared() <= 0.0 {
+                    continue;
+                }
+                let scaled = gamma * seed;
+                chunk.control_point[index][local] += jacobians.field_point.tr_mul(&scaled);
+                chunk.bound_left[index][column] += jacobians.bound_left.tr_mul(&scaled);
+                chunk.bound_right[index][column] += jacobians.bound_right.tr_mul(&scaled);
+            }
+        }
+    }
+    chunk
+}
+
+/// Sweep every row chunk, serially.
+#[cfg(not(feature = "parallel"))]
+fn drive_row_chunks(ranges: &[(usize, usize)], sweep: &SweepInputs<'_>) -> Vec<SweepChunk> {
+    ranges
+        .iter()
+        .map(|range| sweep_row_range(*range, sweep))
+        .collect()
+}
+
+/// Sweep every row chunk, one rayon task per chunk.
+///
+/// Chunks share nothing mutable and are collected in index order, so the
+/// partial sums are added back in the same order the serial driver uses.
+#[cfg(feature = "parallel")]
+fn drive_row_chunks(ranges: &[(usize, usize)], sweep: &SweepInputs<'_>) -> Vec<SweepChunk> {
+    use rayon::prelude::*;
+
+    if sweep.mesh.vortex_count() < PARALLEL_MIN_PANELS {
+        return ranges
+            .iter()
+            .map(|range| sweep_row_range(*range, sweep))
+            .collect();
+    }
+    ranges
+        .par_iter()
+        .map(|range| sweep_row_range(*range, sweep))
+        .collect()
 }
 
 /// Reverse of the fixed-circulation near-field force sweep.
