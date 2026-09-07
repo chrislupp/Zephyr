@@ -7,6 +7,52 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- `GradientCalculator::mesh_node_gradients_from` and
+  `flight_condition_gradients_from`, which take a solver that already holds a
+  solution instead of building and solving their own. `VlmDiscipline`'s
+  `compute_partials` was solving the same operating point three times — once
+  itself, once inside each gradient call — and the factorization is the
+  expensive half of a solve.
+
+### Changed
+- The geometry reverse sweep evaluates one horseshoe kernel per vortex pair
+  rather than five. An influence coefficient is `normal . velocity`, so its
+  geometry gradient is the velocity Jacobians contracted with the target normal;
+  `aic_element_gradient` rebuilt the horseshoe geometry three times to reach the
+  same answer, and its normal derivative is the velocity influence the solver has
+  already assembled. Together with the reused solve, an 8x40 linearize over
+  Philote drops from 197 ms to 136 ms, and 12x120 from 6.6 s to 4.9 s.
+- `GradientCalculator::compute_mesh_node_gradients` is reverse mode throughout.
+  It solved the flow adjoint once and then threw that away, seeding the geometry
+  contraction forward once per node coordinate: `3 (nx+1) (ny+1)` sweeps over the
+  influence matrix, each one dense, for a Jacobian with six rows. Cost grew
+  cubically with panel count — 1.3 s at 4x12 panels, 40 s at 8x20, 318 s at 8x40
+  — which put a mesh of any size out of reach of an optimizer. The geometry
+  sensitivity is now accumulated in a single reverse sweep, `LatticeCotangents`,
+  shared by every output and every downstream design variable, and mesh-node
+  gradients are a scatter of that cotangent onto the nodes that formed each
+  panel. The same three meshes now take 0.01 s, 0.04 s and 0.20 s, and the cost
+  no longer depends on the number of design variables. `evaluate` (and with it
+  the section-geometry gradients) became a contraction against the cotangent, so
+  those paths gained the same asymptotic improvement. No API or result changes:
+  `tests/mesh_node_gradient.rs` still differences every node component against
+  re-solves, now including the far-field induced drag, which reaches the
+  Trefftz-plane reverse sweep that the near-field cases do not.
+- The geometry reverse sweep runs under the `parallel` feature. It was the one
+  hot loop the feature did not reach: assembly was already multithreaded, so a
+  linearize spent most of its wall time in a single-threaded `O(N^2)` sweep over
+  vortex pairs. Rows are now split into a fixed 32 chunks, each owning its rows
+  outright and accumulating partial column sums that are added back in chunk
+  order. The chunk count is a property of the mesh rather than of the thread
+  pool, and both builds run the same chunked algorithm, so the feature's
+  guarantee holds: bit-identical to the serial build and independent of the
+  thread count, verified by hashing the lift, drag, pitch and induced-drag
+  gradients from the serial build and from 1, 3 and 10 threads. Below 128 panels
+  the sweep stays serial, the threshold assembly already uses. On ten cores,
+  mesh-node gradients drop from 91 ms to 25 ms at 8x40, 368 ms to 81 ms at 8x80,
+  and 2.50 s to 1.12 s at 12x120.
+
 ## [0.5.0] - 2026-09-05
 
 ### Added

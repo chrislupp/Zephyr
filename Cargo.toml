@@ -25,10 +25,12 @@ include = [
 [features]
 default = ["vtk"]
 vtk = ["dep:vtkio"]
-# Multithreads influence assembly over source panels. Off by default so the
-# standard build stays single-threaded. Results are bit-identical to the serial
-# build and independent of the thread count, because each source column writes a
-# disjoint slice and reads nothing another column writes.
+# Multithreads influence assembly over source panels, and the geometry reverse
+# sweep over target rows. Off by default so the standard build stays
+# single-threaded. Results are bit-identical to the serial build and independent
+# of the thread count: each source column writes a disjoint slice and reads
+# nothing another column writes, and the reverse sweep splits rows into a fixed
+# number of chunks whose partial column sums are added back in chunk order.
 #
 # Deliberately does NOT enable `faer/rayon`: gemm's cache-blocking parameters
 # differ between its sequential and rayon paths, which changes the order in

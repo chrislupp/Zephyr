@@ -303,7 +303,7 @@ impl VortexLatticeSolver {
         vector * cos + axis.cross(&vector) * sin + axis * axis.dot(&vector) * (1.0 - cos)
     }
 
-    fn effective_normals(&self, condition: &FlightCondition) -> Vec<Vec3> {
+    pub(crate) fn effective_normals(&self, condition: &FlightCondition) -> Vec<Vec3> {
         self.mesh
             .vortices()
             .iter()
@@ -328,7 +328,7 @@ impl VortexLatticeSolver {
             .collect()
     }
 
-    fn effective_normals_with_derivative(
+    pub(crate) fn effective_normals_with_derivative(
         &self,
         condition: &FlightCondition,
         control_name: &str,
@@ -380,7 +380,7 @@ impl VortexLatticeSolver {
         })
     }
 
-    fn rhs_for_normals(&self, condition: &FlightCondition, normals: &[Vec3]) -> VecX {
+    pub(crate) fn rhs_for_normals(&self, condition: &FlightCondition, normals: &[Vec3]) -> VecX {
         let freestream = Self::freestream_direction(condition);
         let omega = Vec3::new(
             condition.roll_rate,
@@ -495,6 +495,87 @@ impl VortexLatticeSolver {
         }
         let matrix = self.matrix_for_normals(&normals);
         solve_vector(&factorize(&matrix), &rhs)
+    }
+
+    /// Internal selective path. Its solver is owned exclusively by `Analysis`,
+    /// so partial response availability never escapes through the legacy API.
+    pub(crate) fn solve_selective(
+        &mut self,
+        condition: &FlightCondition,
+        half: bool,
+        velocity: bool,
+        reuse_solution: bool,
+        work: &mut crate::analysis::Work,
+    ) -> Result<()> {
+        let normals = self.effective_normals(condition);
+        let n = self.mesh.vortex_count();
+        let operator_changed = !self.aic_valid || self.current_mach != condition.mach;
+        let matrix_changed = operator_changed || self.solution_normals != normals;
+        if matrix_changed {
+            self.solution.is_valid = false;
+            self.current_mach = condition.mach;
+            let (matrix, velocities) =
+                if !operator_changed && self.velocity_influence_matrix.nrows() == 3 * n {
+                    // A control changes the normal projection, not the velocity
+                    // operator. Reuse its coefficients when they are available.
+                    (
+                        self.matrix_for_normals(&normals),
+                        std::mem::take(&mut self.velocity_influence_matrix),
+                    )
+                } else {
+                    crate::analysis::operator::assemble(
+                        &self.mesh,
+                        condition.mach,
+                        &normals,
+                        half,
+                        true,
+                        velocity,
+                        work,
+                    )
+                };
+            if !matrix.iter().all(|v| v.is_finite()) {
+                self.invalidate();
+                return Err(PegasusError::SingularSystem);
+            }
+            self.aic_matrix = matrix;
+            self.velocity_influence_matrix = velocities;
+            self.aic_lu = Some(factorize(&self.aic_matrix));
+            self.solution_lu = None;
+            self.solution_aic_matrix = None;
+            self.aic_valid = true;
+            self.solution_normals = normals;
+            work.factorizations += 1;
+        } else if velocity && self.velocity_influence_matrix.nrows() == 0 {
+            self.velocity_influence_matrix = crate::analysis::operator::assemble(
+                &self.mesh,
+                condition.mach,
+                &normals,
+                half,
+                false,
+                true,
+                work,
+            )
+            .1;
+        }
+        if matrix_changed || !reuse_solution || !self.solution.is_valid {
+            let rhs = self.rhs_for_normals(condition, &self.solution_normals);
+            let gamma = solve_vector(
+                self.aic_lu.as_ref().ok_or(PegasusError::InvalidSolution)?,
+                &rhs,
+            )?;
+            self.solution = SolutionState {
+                circulation: gamma,
+                is_valid: true,
+                ..SolutionState::default()
+            };
+            work.primal_solves += 1;
+        }
+        if velocity && self.solution.induced_velocity.nrows() == 0 {
+            let flat = &self.velocity_influence_matrix * &self.solution.circulation;
+            self.solution.induced_velocity = MatX::from_fn(n, 3, |i, j| flat[3 * i + j]);
+            work.velocity_products += 1;
+        }
+        Ok(())
     }
 
     pub fn solve(&mut self, condition: &FlightCondition) -> Result<SolutionState> {

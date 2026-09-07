@@ -6,9 +6,9 @@ mod biot_savart;
 mod calculator;
 mod coupled;
 mod forces;
-mod geometry_adjoint;
+pub(crate) mod geometry_adjoint;
 mod mach;
-mod section_geometry;
+pub(crate) mod section_geometry;
 mod selection;
 mod trefftz;
 

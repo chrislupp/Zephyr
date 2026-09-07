@@ -121,6 +121,18 @@ println!("dCL/dalpha = {}", lift.by_alpha);
 # }
 ```
 
+## Selective outputs and half-wing analysis
+
+`analysis::Analysis` accepts explicit output and derivative requests. Unrequested
+force calculations, Trefftz interactions, detailed arrays, and derivative stages
+are skipped. An optional `SolverMode::HalfWing` solves only the original half's
+unknowns while accounting for reflected influences. Full geometry is the default;
+existing APIs keep their current behavior.
+
+See [the selective analysis guide](docs/selective-analysis.md) for the request API,
+symmetry restrictions, reference conventions, caching, and Philote options. Run
+`cargo run --release --example selective_analysis` for a working example.
+
 ## VTK visualization
 
 The visualization module writes surface meshes (`.vtu`) and spanwise loads,

@@ -577,7 +577,7 @@ fn base_force_and_moment(
     )
 }
 
-fn body_output_cotangent(output: AeroOutput, alpha: Scalar) -> (Vec3, Vec3) {
+pub(crate) fn body_output_cotangent(output: AeroOutput, alpha: Scalar) -> (Vec3, Vec3) {
     let (sin, cos) = alpha.sin_cos();
     match output {
         AeroOutput::Lift => (Vec3::new(-sin, 0.0, cos), Vec3::zeros()),

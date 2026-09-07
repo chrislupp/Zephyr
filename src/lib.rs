@@ -19,6 +19,7 @@
 //! retain AVL's historical degree convention.
 
 pub mod aero;
+pub mod analysis;
 pub mod core;
 pub mod dynamics;
 pub mod error;
