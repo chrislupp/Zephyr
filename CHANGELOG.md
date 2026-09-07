@@ -7,6 +7,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+- `GradientCalculator::compute_mesh_node_gradients` is reverse mode throughout.
+  It solved the flow adjoint once and then threw that away, seeding the geometry
+  contraction forward once per node coordinate: `3 (nx+1) (ny+1)` sweeps over the
+  influence matrix, each one dense, for a Jacobian with six rows. Cost grew
+  cubically with panel count — 1.3 s at 4x12 panels, 40 s at 8x20, 318 s at 8x40
+  — which put a mesh of any size out of reach of an optimizer. The geometry
+  sensitivity is now accumulated in a single reverse sweep, `LatticeCotangents`,
+  shared by every output and every downstream design variable, and mesh-node
+  gradients are a scatter of that cotangent onto the nodes that formed each
+  panel. The same three meshes now take 0.01 s, 0.04 s and 0.20 s, and the cost
+  no longer depends on the number of design variables. `evaluate` (and with it
+  the section-geometry gradients) became a contraction against the cotangent, so
+  those paths gained the same asymptotic improvement. No API or result changes:
+  `tests/mesh_node_gradient.rs` still differences every node component against
+  re-solves, now including the far-field induced drag, which reaches the
+  Trefftz-plane reverse sweep that the near-field cases do not.
+
 ## [0.5.0] - 2026-09-05
 
 ### Added

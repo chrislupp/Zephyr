@@ -6,7 +6,7 @@ use crate::error::{PegasusError, Result};
 use crate::geometry::{Aircraft, MeshInput};
 use crate::solver::{FlightCondition, VortexLatticeSolver};
 
-use super::geometry_adjoint::{GeometryAdjointContext, direct_mesh_node_direction};
+use super::geometry_adjoint::{GeometryAdjointContext, scatter_mesh_node_cotangents};
 use super::mach::velocity_influence_mach_derivative;
 use super::section_geometry::section_direction;
 use super::{
@@ -665,24 +665,10 @@ impl GradientCalculator {
             })
             .collect();
         for (surface_index, surface_result) in result.iter_mut().enumerate() {
-            let surface = &mesh.surfaces[surface_index];
-            for i in 0..=surface.nx {
-                for j in 0..=surface.ny {
-                    let node_index = i * (surface.ny + 1) + j;
-                    for component in 0..3 {
-                        let direction = direct_mesh_node_direction(
-                            mesh,
-                            solver.mesh(),
-                            surface_index,
-                            i,
-                            j,
-                            component,
-                        )?;
-                        for (output, value) in context.evaluate(&direction)? {
-                            surface_result.output_mut(output).nodes[node_index][component] = value;
-                        }
-                    }
-                }
+            for (output, cotangent) in context.cotangents() {
+                let nodes =
+                    scatter_mesh_node_cotangents(mesh, solver.mesh(), surface_index, cotangent)?;
+                surface_result.output_mut(output).nodes = nodes;
             }
         }
         Ok(result)
