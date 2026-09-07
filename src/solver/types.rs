@@ -151,7 +151,7 @@ pub struct SurfaceMeshInfo {
 }
 
 /// Nondimensional flight state. Angles, rates, and controls are radians.
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct FlightCondition {
     pub alpha: Scalar,
     pub beta: Scalar,

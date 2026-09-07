@@ -6,7 +6,11 @@
 //! transposed solve per output rather than one primal solve per node
 //! coordinate — the reason to run this through an adjoint at all.
 
+use crate::analysis::{
+    Analysis, AnalysisRequest, GradientRequest, GradientValue, Input, Output, SolverMode,
+};
 use std::collections::HashMap;
+use std::sync::Mutex;
 
 use async_trait::async_trait;
 use philote_mdo::{
@@ -86,6 +90,8 @@ const FLIGHT_INPUTS: [&str; 6] = [
 pub struct VlmDiscipline {
     registry: VariableRegistry,
     surfaces: Vec<SurfaceOption>,
+    analysis_request: Option<AnalysisRequest>,
+    analysis_cache: Mutex<Option<(MeshInput, Analysis)>>,
 }
 
 impl Default for VlmDiscipline {
@@ -93,6 +99,8 @@ impl Default for VlmDiscipline {
         Self {
             registry: VariableRegistry::new(false),
             surfaces: vec![SurfaceOption::default()],
+            analysis_request: None,
+            analysis_cache: Mutex::new(None),
         }
     }
 }
@@ -104,6 +112,8 @@ impl VlmDiscipline {
         Self {
             registry: VariableRegistry::new(false),
             surfaces,
+            analysis_request: None,
+            analysis_cache: Mutex::new(None),
         }
     }
 
@@ -192,6 +202,9 @@ impl Discipline for VlmDiscipline {
 
     fn initialize(&mut self) -> Result<()> {
         self.add_option("num_surfaces", "int")?;
+        self.add_option("analysis_outputs", "str")?;
+        self.add_option("analysis_gradients", "dict")?;
+        self.add_option("analysis_mode", "str")?;
         for key in [
             "surface_names",
             "surface_nx",
@@ -282,6 +295,58 @@ impl Discipline for VlmDiscipline {
                 },
             )?;
         }
+        if ["analysis_outputs", "analysis_gradients", "analysis_mode"]
+            .iter()
+            .any(|key| options.contains_key(*key))
+        {
+            let mut request = self
+                .analysis_request
+                .clone()
+                .unwrap_or_else(|| AnalysisRequest {
+                    outputs: vec![
+                        Output::Lift,
+                        Output::Drag,
+                        Output::Side,
+                        Output::Roll,
+                        Output::Pitch,
+                        Output::Yaw,
+                    ],
+                    ..AnalysisRequest::default()
+                });
+            if let Some(value) = options.get("analysis_mode") {
+                request.mode = match value.as_str() {
+                    Some("full") => SolverMode::Full,
+                    Some("half_wing") => SolverMode::HalfWing,
+                    _ => return Err(invalid("analysis_mode must be 'full' or 'half_wing'")),
+                };
+            }
+            if let Some(value) = options.get("analysis_outputs") {
+                request.outputs = option_tokens(value, "analysis_outputs")?
+                    .iter()
+                    .map(|name| analysis_output(name))
+                    .collect::<Result<_>>()?;
+            }
+            if let Some(value) = options.get("analysis_gradients") {
+                let entries = value.as_object().ok_or_else(|| {
+                    invalid("analysis_gradients must map output names to input-name lists")
+                })?;
+                request.gradients.clear();
+                for (name, inputs) in entries {
+                    let output = analysis_output(name)?;
+                    for input in option_tokens(inputs, "analysis_gradients")? {
+                        request.gradients.push(GradientRequest {
+                            output,
+                            input: self.analysis_input(&input)?,
+                        });
+                    }
+                }
+            }
+            self.analysis_request = Some(request);
+        }
+        *self
+            .analysis_cache
+            .get_mut()
+            .map_err(|_| invalid("analysis cache is poisoned"))? = None;
         Ok(())
     }
 
@@ -304,13 +369,36 @@ impl Discipline for VlmDiscipline {
         self.add_input("pitch_rate", &[1], "")?;
         self.add_input("yaw_rate", &[1], "")?;
 
-        for output in OUTPUTS {
-            self.add_output(output, &[1], "")?;
+        if let Some(request) = &self.analysis_request {
+            let mut outputs = request.outputs.clone();
+            // A gradient output must exist in the discipline registry, even if
+            // its value is only an internal dependency of the core request.
+            outputs.extend(request.gradients.iter().map(|g| g.output));
+            outputs.sort();
+            outputs.dedup();
+            for output in outputs {
+                self.add_output(output_name(output), &[1], "")?;
+            }
+        } else {
+            for output in OUTPUTS {
+                self.add_output(output, &[1], "")?;
+            }
         }
         Ok(())
     }
 
     fn setup_partials(&mut self) -> Result<()> {
+        if let Some(request) = &self.analysis_request {
+            let pairs: Vec<_> = request
+                .gradients
+                .iter()
+                .map(|g| (output_name(g.output), self.input_name(&g.input)))
+                .collect();
+            for (output, input) in pairs {
+                self.declare_partials(output, &input)?;
+            }
+            return Ok(());
+        }
         let names: Vec<String> = self.surfaces.iter().map(|s| s.name.clone()).collect();
         for output in OUTPUTS {
             for name in &names {
@@ -338,6 +426,19 @@ impl Discipline for VlmDiscipline {
 #[async_trait]
 impl ExplicitDiscipline for VlmDiscipline {
     async fn compute(&self, inputs: &ArrayMap) -> Result<ArrayMap> {
+        if let Some(request) = &self.analysis_request {
+            let mut values_request = request.clone();
+            values_request
+                .outputs
+                .extend(request.gradients.iter().map(|g| g.output));
+            values_request.gradients.clear();
+            let result = self.evaluate_selected(inputs, &values_request)?;
+            return Ok(result
+                .outputs
+                .into_iter()
+                .map(|(o, v)| (output_name(o).to_owned(), scalar(v)))
+                .collect());
+        }
         let mesh = self.build_mesh(inputs)?;
         let condition = self.build_condition(inputs)?;
 
@@ -370,6 +471,28 @@ impl ExplicitDiscipline for VlmDiscipline {
     }
 
     async fn compute_partials(&self, inputs: &ArrayMap) -> Result<PartialMap> {
+        if let Some(request) = &self.analysis_request {
+            let mut derivative_request = request.clone();
+            derivative_request.outputs.clear();
+            let result = self.evaluate_selected(inputs, &derivative_request)?;
+            return Ok(result
+                .gradients
+                .into_iter()
+                .map(|gradient| {
+                    let key = (
+                        output_name(gradient.request.output).to_owned(),
+                        self.input_name(&gradient.request.input),
+                    );
+                    let values = match gradient.value {
+                        GradientValue::Scalar(v) => vec![v],
+                        GradientValue::MeshNodes(nodes) => {
+                            nodes.iter().flat_map(|node| node.iter().copied()).collect()
+                        }
+                    };
+                    (key, flat(values))
+                })
+                .collect());
+        }
         let mesh = self.build_mesh(inputs)?;
         let condition = self.build_condition(inputs)?;
 
@@ -480,5 +603,104 @@ impl ExplicitDiscipline for VlmDiscipline {
         }
 
         Ok(partials)
+    }
+}
+
+fn analysis_output(name: &str) -> Result<Output> {
+    match name {
+        "CL" => Ok(Output::Lift),
+        "CD" => Ok(Output::Drag),
+        "CY" => Ok(Output::Side),
+        "Cl" => Ok(Output::Roll),
+        "Cm" => Ok(Output::Pitch),
+        "Cn" => Ok(Output::Yaw),
+        "CDi_near" => Ok(Output::NearFieldInducedDrag),
+        "CDv" => Ok(Output::ViscousDrag),
+        "CL_far" => Ok(Output::FarFieldLift),
+        "CY_far" => Ok(Output::FarFieldSide),
+        "CDi" => Ok(Output::FarFieldInducedDrag),
+        "e" => Ok(Output::SpanEfficiency),
+        _ => Err(invalid(format!("unknown analysis output '{name}'"))),
+    }
+}
+fn output_name(output: Output) -> &'static str {
+    match output {
+        Output::Lift => "CL",
+        Output::Drag => "CD",
+        Output::Side => "CY",
+        Output::Roll => "Cl",
+        Output::Pitch => "Cm",
+        Output::Yaw => "Cn",
+        Output::NearFieldInducedDrag => "CDi_near",
+        Output::ViscousDrag => "CDv",
+        Output::FarFieldLift => "CL_far",
+        Output::FarFieldSide => "CY_far",
+        Output::FarFieldInducedDrag => "CDi",
+        Output::SpanEfficiency => "e",
+    }
+}
+impl VlmDiscipline {
+    fn analysis_input(&self, name: &str) -> Result<Input> {
+        if let Some(index) = self.surfaces.iter().position(|s| s.name == name) {
+            return Ok(Input::MeshNodes(index));
+        }
+        match name {
+            "alpha" => Ok(Input::Alpha),
+            "beta" => Ok(Input::Beta),
+            "mach" => Ok(Input::Mach),
+            "roll_rate" => Ok(Input::RollRate),
+            "pitch_rate" => Ok(Input::PitchRate),
+            "yaw_rate" => Ok(Input::YawRate),
+            "moment_ref_x" => Ok(Input::MomentReference(0)),
+            "moment_ref_y" => Ok(Input::MomentReference(1)),
+            "moment_ref_z" => Ok(Input::MomentReference(2)),
+            "reference_area" => Ok(Input::ReferenceArea),
+            "reference_chord" => Ok(Input::ReferenceChord),
+            "reference_span" => Ok(Input::ReferenceSpan),
+            "dynamic_pressure" => Ok(Input::DynamicPressure),
+            _ => Err(invalid(format!("unknown analysis input '{name}'"))),
+        }
+    }
+    fn input_name(&self, input: &Input) -> String {
+        match input {
+            Input::Alpha => "alpha",
+            Input::Beta => "beta",
+            Input::Mach => "mach",
+            Input::RollRate => "roll_rate",
+            Input::PitchRate => "pitch_rate",
+            Input::YawRate => "yaw_rate",
+            Input::MomentReference(0) => "moment_ref_x",
+            Input::MomentReference(1) => "moment_ref_y",
+            Input::MomentReference(_) => "moment_ref_z",
+            Input::ReferenceArea => "reference_area",
+            Input::ReferenceChord => "reference_chord",
+            Input::ReferenceSpan => "reference_span",
+            Input::DynamicPressure => "dynamic_pressure",
+            Input::MeshNodes(i) => return self.surfaces[*i].name.clone(),
+            _ => unreachable!("only structured-mesh and flight inputs are parsed"),
+        }
+        .to_owned()
+    }
+    fn evaluate_selected(
+        &self,
+        inputs: &ArrayMap,
+        request: &AnalysisRequest,
+    ) -> Result<crate::analysis::AnalysisResult> {
+        let mesh = self.build_mesh(inputs)?;
+        let condition = self.build_condition(inputs)?;
+        let mut cache = self
+            .analysis_cache
+            .lock()
+            .map_err(|_| invalid("analysis cache is poisoned"))?;
+        if cache.as_ref().is_none_or(|(previous, _)| previous != &mesh) {
+            let analysis = Analysis::from_mesh(&mesh);
+            *cache = Some((mesh, analysis));
+        }
+        cache
+            .as_mut()
+            .unwrap()
+            .1
+            .evaluate(&condition, request)
+            .map_err(|e| rejected("selective analysis", e.to_string()))
     }
 }

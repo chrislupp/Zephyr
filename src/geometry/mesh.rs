@@ -4,7 +4,7 @@ use crate::core::{Scalar, Vec3};
 use crate::error::{PegasusError, Result};
 
 /// Coefficient-normalization quantities.
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct ReferenceQuantities {
     /// Reference area.
     pub area: Scalar,
@@ -39,7 +39,7 @@ impl From<&super::Aircraft> for ReferenceQuantities {
 }
 
 /// Structured `(nx+1) × (ny+1)` node grid.
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct SurfaceMesh {
     /// Surface name.
     pub name: String,
@@ -141,7 +141,7 @@ impl SurfaceMesh {
 }
 
 /// Complete direct-mesh analysis input.
-#[derive(Clone, Debug, Default)]
+#[derive(Clone, Debug, Default, PartialEq)]
 pub struct MeshInput {
     /// Surface grids.
     pub surfaces: Vec<SurfaceMesh>,

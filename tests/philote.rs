@@ -700,3 +700,78 @@ async fn disciplines_declare_every_partial_that_is_not_identically_zero() {
         }
     }
 }
+
+#[tokio::test]
+async fn selected_analysis_declares_and_computes_only_requested_outputs_and_partials() {
+    let mut discipline = VlmDiscipline::default();
+    discipline.initialize().unwrap();
+    discipline
+        .set_options(&options(&[
+            ("surface_names", serde_json::json!(["Wing"])),
+            ("surface_nx", serde_json::json!([2])),
+            ("surface_ny", serde_json::json!([3])),
+            ("surface_y_duplicated", serde_json::json!([true])),
+            ("analysis_mode", "half_wing".into()),
+            ("analysis_outputs", serde_json::json!(["CL", "CDi"])),
+            (
+                "analysis_gradients",
+                serde_json::json!({"CL":["alpha"],"CDi":["Wing"]}),
+            ),
+        ]))
+        .unwrap();
+    discipline.setup().unwrap();
+    discipline.setup_partials().unwrap();
+    let inputs = vlm_inputs(2, 3, 1.0, 3.0);
+    let outputs = discipline.compute(&inputs).await.unwrap();
+    assert_eq!(outputs.len(), 2);
+    assert!(outputs.contains_key("CL"));
+    assert!(outputs.contains_key("CDi"));
+    let partials = discipline.compute_partials(&inputs).await.unwrap();
+    assert_eq!(partials.len(), 2);
+    assert!(partials.contains_key(&("CL".into(), "alpha".into())));
+    assert!(partials.contains_key(&("CDi".into(), "Wing".into())));
+    let alpha_difference = difference(&discipline, &inputs, "alpha", 0, 1e-6).await;
+    assert_abs_diff_eq!(
+        partials[&("CL".into(), "alpha".into())][0],
+        alpha_difference["CL"][0],
+        epsilon = 1e-7
+    );
+    // An interior node preserves the half-space restriction in both directions.
+    let node_index = 4;
+    let derivative = difference(&discipline, &inputs, "Wing", node_index, 1e-6).await;
+    assert_abs_diff_eq!(
+        partials[&("CDi".into(), "Wing".into())][node_index],
+        derivative["CDi"][0],
+        epsilon = 1e-7
+    );
+}
+
+#[tokio::test]
+async fn explicit_empty_analysis_and_outputs_only_do_not_return_partials() {
+    for selected in [serde_json::json!([]), serde_json::json!(["CL"])] {
+        let mut discipline = VlmDiscipline::default();
+        discipline.initialize().unwrap();
+        discipline
+            .set_options(&options(&[
+                ("surface_names", serde_json::json!(["Wing"])),
+                ("surface_nx", serde_json::json!([2])),
+                ("surface_ny", serde_json::json!([3])),
+                ("analysis_outputs", selected.clone()),
+            ]))
+            .unwrap();
+        discipline.setup().unwrap();
+        discipline.setup_partials().unwrap();
+        let inputs = vlm_inputs(2, 3, 1.0, 3.0);
+        assert_eq!(
+            discipline.compute(&inputs).await.unwrap().len(),
+            selected.as_array().unwrap().len()
+        );
+        assert!(
+            discipline
+                .compute_partials(&inputs)
+                .await
+                .unwrap()
+                .is_empty()
+        );
+    }
+}

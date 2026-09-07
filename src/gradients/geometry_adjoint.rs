@@ -62,7 +62,7 @@ pub(crate) struct LatticeCotangents {
 }
 
 impl LatticeCotangents {
-    fn zeros(mesh: &VortexLattice) -> Self {
+    pub(crate) fn zeros(mesh: &VortexLattice) -> Self {
         Self {
             bound_left: vec![Vec3::zeros(); mesh.vortex_count()],
             bound_right: vec![Vec3::zeros(); mesh.vortex_count()],
