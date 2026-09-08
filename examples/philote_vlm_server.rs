@@ -36,6 +36,13 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let server = Arc::new(ExplicitServer::new(VlmDiscipline::default()).with_verbose(true));
 
     println!("Pegasus VLM discipline listening on {address}");
+    #[cfg(feature = "parallel")]
+    println!(
+        "Parallel feature enabled; Rayon threads: {}",
+        rayon::current_num_threads()
+    );
+    #[cfg(not(feature = "parallel"))]
+    println!("Parallel feature disabled");
 
     Server::builder()
         .add_service(DisciplineServiceServer::from_arc(server.clone()))

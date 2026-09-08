@@ -340,7 +340,7 @@ pub fn force_circulation_gradient(
                 Vec3::zeros()
             };
         let line = vortex.bound_vortex_right - vortex.bound_vortex_left;
-        let arm = vortex.control_point - reference.moment_reference_point;
+        let arm = vortex.bound_vortex_center - reference.moment_reference_point;
         let combined_seed = force_seed + moment_seed.cross(&arm) / reference.chord;
         direct[i] = 2.0 / reference.area * combined_seed.dot(&velocity.cross(&line));
         let cotangent = 2.0 * solution.circulation[i] / reference.area * line.cross(&combined_seed);
@@ -454,7 +454,7 @@ pub fn force_induced_velocity_gradient(
         .enumerate()
         .map(|(index, vortex)| {
             let line = vortex.bound_vortex_right - vortex.bound_vortex_left;
-            let arm = vortex.control_point - reference.moment_reference_point;
+            let arm = vortex.bound_vortex_center - reference.moment_reference_point;
             let combined_seed = force_seed + moment_seed.cross(&arm) / reference.chord;
             2.0 * solution.circulation[index] / reference.area * line.cross(&combined_seed)
         })
@@ -464,10 +464,10 @@ pub fn force_induced_velocity_gradient(
 /// Forward geometry derivative of all six primary coefficients while holding
 /// circulation and induced velocity fixed.
 ///
-/// Endpoint and control-point direction slices must contain exactly one vector
+/// Endpoint and bound-force-point direction slices must contain exactly one vector
 /// per vortex; a mismatch is an error rather than a silent truncation, which
 /// would return a partial derivative indistinguishable from a correct one. The
-/// control-point direction is also the moment-arm direction; callers moving the
+/// bound-force-point direction is also the moment-arm direction; callers moving the
 /// reference point should subtract that direction first.
 pub fn force_geometry_jvp(
     mesh: &VortexLattice,
@@ -476,12 +476,12 @@ pub fn force_geometry_jvp(
     reference: &ReferenceQuantities,
     bound_left_direction: &[Vec3],
     bound_right_direction: &[Vec3],
-    control_point_direction: &[Vec3],
+    bound_center_direction: &[Vec3],
 ) -> Result<[Scalar; 6]> {
     let count = mesh.vortex_count();
     if bound_left_direction.len() != count
         || bound_right_direction.len() != count
-        || control_point_direction.len() != count
+        || bound_center_direction.len() != count
         || solution.circulation.len() != count
     {
         return Err(PegasusError::InvalidGeometry(
@@ -508,10 +508,10 @@ pub fn force_geometry_jvp(
         let panel_force = 2.0 * solution.circulation[index] * velocity.cross(&line);
         let panel_force_direction =
             2.0 * solution.circulation[index] * velocity.cross(&line_direction);
-        let arm = vortex.control_point - reference.moment_reference_point;
+        let arm = vortex.bound_vortex_center - reference.moment_reference_point;
         force_derivative += panel_force_direction;
         moment_derivative +=
-            control_point_direction[index].cross(&panel_force) + arm.cross(&panel_force_direction);
+            bound_center_direction[index].cross(&panel_force) + arm.cross(&panel_force_direction);
     }
     force_derivative /= reference.area;
     moment_derivative /= reference.area * reference.chord;
@@ -539,7 +539,8 @@ fn force_and_moment(
             * solution.circulation[index]
             * velocity.cross(&(vortex.bound_vortex_right - vortex.bound_vortex_left));
         force += panel_force;
-        moment += (vortex.control_point - reference.moment_reference_point).cross(&panel_force);
+        moment +=
+            (vortex.bound_vortex_center - reference.moment_reference_point).cross(&panel_force);
     }
     (
         force / reference.area,
@@ -569,7 +570,8 @@ fn base_force_and_moment(
             * solution.circulation[index]
             * (freestream + induced).cross(&(vortex.bound_vortex_right - vortex.bound_vortex_left));
         force += panel_force;
-        moment += (vortex.control_point - reference.moment_reference_point).cross(&panel_force);
+        moment +=
+            (vortex.bound_vortex_center - reference.moment_reference_point).cross(&panel_force);
     }
     (
         force / reference.area,

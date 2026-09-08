@@ -8,50 +8,80 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+
+- `analysis::Analysis`, `AnalysisRequest` and `AnalysisResult` for selecting
+  individual aerodynamic outputs, derivative pairs and optional circulation,
+  induced-velocity and surface-load arrays. Requests reuse cached operators,
+  factorizations, loads and adjoints; omitted quantities are absent from the
+  result. `Work` reports the operations and operator storage used by each call.
+- `SolverMode::HalfWing` solves only the original semispan and includes its
+  reflected influence, retaining full-aircraft coefficient normalization and
+  folding geometry derivatives onto the supplied inputs. Requested detail arrays
+  expand to the full wing. It requires surfaces duplicated about `y = 0` and
+  symmetric flight conditions and controls; unsupported cases return an error.
+  Full geometry remains the default. A native example and selective-analysis
+  guide demonstrate the API.
+- Philote `VlmDiscipline` options `analysis_outputs`, `analysis_gradients` and
+  `analysis_mode` expose selective requests and half-wing symmetry. The discipline
+  declares the selected outputs and derivative pairs and reuses the primal
+  analysis when computing partials at the same mesh and flight condition.
 - `GradientCalculator::mesh_node_gradients_from` and
-  `flight_condition_gradients_from`, which take a solver that already holds a
-  solution instead of building and solving their own. `VlmDiscipline`'s
-  `compute_partials` was solving the same operating point three times — once
-  itself, once inside each gradient call — and the factorization is the
-  expensive half of a solve.
+  `flight_condition_gradients_from` reuse a solver's existing solution. The
+  legacy Philote derivative path uses them to avoid repeating the primal solve.
+- `VortexLatticeSolver::control_velocity_matrix` exposes the velocity influence
+  at boundary-condition control points, separately from the bound-force operator
+  returned by `velocity_matrix`.
+- Independent OptVL 2.1.1 reference fixtures and a regeneration script, covering
+  lattice coordinates, circulation, lift, drag, pitch and alpha derivatives.
+  Cases include cosine and negative-sine spacing, nonuniform CLAF, wing–tail
+  interference, and 40-/680-panel symmetric uCRM wings. Matching section cases
+  agree within 2e-8 for coefficients/circulation and 2e-7 for alpha derivatives.
 
 ### Changed
-- The geometry reverse sweep evaluates one horseshoe kernel per vortex pair
-  rather than five. An influence coefficient is `normal . velocity`, so its
-  geometry gradient is the velocity Jacobians contracted with the target normal;
-  `aic_element_gradient` rebuilt the horseshoe geometry three times to reach the
-  same answer, and its normal derivative is the velocity influence the solver has
-  already assembled. Together with the reused solve, an 8x40 linearize over
-  Philote drops from 197 ms to 136 ms, and 12x120 from 6.6 s to 4.9 s.
-- `GradientCalculator::compute_mesh_node_gradients` is reverse mode throughout.
-  It solved the flow adjoint once and then threw that away, seeding the geometry
-  contraction forward once per node coordinate: `3 (nx+1) (ny+1)` sweeps over the
-  influence matrix, each one dense, for a Jacobian with six rows. Cost grew
-  cubically with panel count — 1.3 s at 4x12 panels, 40 s at 8x20, 318 s at 8x40
-  — which put a mesh of any size out of reach of an optimizer. The geometry
-  sensitivity is now accumulated in a single reverse sweep, `LatticeCotangents`,
-  shared by every output and every downstream design variable, and mesh-node
-  gradients are a scatter of that cotangent onto the nodes that formed each
-  panel. The same three meshes now take 0.01 s, 0.04 s and 0.20 s, and the cost
-  no longer depends on the number of design variables. `evaluate` (and with it
-  the section-geometry gradients) became a contraction against the cotangent, so
-  those paths gained the same asymptotic improvement. No API or result changes:
-  `tests/mesh_node_gradient.rs` still differences every node component against
-  re-solves, now including the far-field induced drag, which reaches the
-  Trefftz-plane reverse sweep that the near-field cases do not.
-- The geometry reverse sweep runs under the `parallel` feature. It was the one
-  hot loop the feature did not reach: assembly was already multithreaded, so a
-  linearize spent most of its wall time in a single-threaded `O(N^2)` sweep over
-  vortex pairs. Rows are now split into a fixed 32 chunks, each owning its rows
-  outright and accumulating partial column sums that are added back in chunk
-  order. The chunk count is a property of the mesh rather than of the thread
-  pool, and both builds run the same chunked algorithm, so the feature's
-  guarantee holds: bit-identical to the serial build and independent of the
-  thread count, verified by hashing the lift, drag, pitch and induced-drag
-  gradients from the serial build and from 1, 3 and 10 threads. Below 128 panels
-  the sweep stays serial, the threshold assembly already uses. On ten cores,
-  mesh-node gradients drop from 91 ms to 25 ms at 8x40, 368 ms to 81 ms at 8x80,
-  and 2.50 s to 1.12 s at 12x120.
+
+- Mesh-node sensitivities now accumulate in a shared reverse geometry sweep and
+  scatter onto the input nodes, replacing a separate forward sweep for every
+  node coordinate. Section sensitivities contract against the same lattice
+  cotangents. Control-point and bound-force kernel Jacobians are each shared
+  across requested outputs.
+- The `parallel` feature covers geometry reverse sweeps and selective full- and
+  half-wing influence assembly, including Philote's `analysis_mode="half_wing"`.
+  Independent columns and fixed row chunks with ordered reductions preserve
+  results across thread counts. Systems below 128 circulation unknowns retain
+  serial loops; LU factorization remains serial. The VLM server reports whether
+  parallel support is enabled and the Rayon thread count at startup.
+- Near-field analysis now requires distinct control-point and bound-force
+  velocity operators. Work counters include both kernel passes and their
+  storage. Earlier timings of the single-operator implementation do not describe
+  the corrected calculation.
+- `force_geometry_jvp` now takes bound-force-point directions as its final
+  geometry argument, including any subtraction for motion of the moment
+  reference point. Callers that supplied control-point directions must update
+  them to match the corrected moment arms.
+
+### Fixed
+
+- Control-point normalwash includes each panel's own bound vortex, as in AVL.
+  Force velocities are evaluated at the bound-force points with the self-bound
+  leg excluded, and moments use those same force points. The previous port
+  omitted the self-bound contribution from the flow solve and reused
+  control-point velocities for force integration, producing incorrect lift,
+  drag and moments.
+- Legacy and selective full/half-wing derivatives now differentiate the
+  appropriate control and force operators separately, including cached control
+  updates, Mach/flight derivatives, moment-reference derivatives and mesh/section
+  adjoints. Section bound-force points have their own geometry sensitivities;
+  with cosine span spacing they need not lie halfway between the bound endpoints.
+- Section chordwise placement follows AVL CSPACER for the supported spacing
+  distributions. CLAF shifts control points, with consistent section and camber
+  sensitivities. Direct-node meshes retain node-defined panel placement.
+- Vortex-core widths use the bound leg's yz projection, and direct-mesh Trefftz
+  normals use the correct components and orientation.
+- Aerodynamic assertions that reproduced the v0.2.0 port errors now use the
+  independent OptVL references. Historical span-geometry and dynamics checks
+  remain, trim must reach its requested lift, and mesh/section gradients are
+  checked against re-solves. The finite-wing lift-slope test uses the corrected
+  Helmbold formula.
 
 ## [0.5.0] - 2026-09-05
 

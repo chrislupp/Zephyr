@@ -11,11 +11,20 @@ crates.io.
 
 ## Status
 
-The Rust port preserves the numerical conventions and panel ordering of
-Pegasus 0.2.0. The legacy source at tag `v0.2.0` (commit `556b0ea`) is the
-behavioral oracle for parity fixtures. Philote servers and Philote-dependent
-OpenMDAO workflows are intentionally deferred; the crate has no C, C++, or
-Python runtime dependency.
+Aerodynamic results are checked against independent OptVL 2.1.1 fixtures,
+including full and symmetric section wings, a wing–tail configuration, and
+680-panel uCRM geometry. The old v0.2.0 oracle remains useful for unaffected
+span geometry and dynamics, but its aerodynamic values contain port errors.
+
+Normalwash includes every bound vortex at the control points; force velocities
+exclude the self-bound leg and are evaluated at the bound-force points.
+Moments use those same points. The solver retains separate control and force
+velocity operators, and the adjoints differentiate both. Section cosine spacing
+and CLAF follow AVL CSPACER. Direct node meshes retain quarter/three-quarter
+panel placement and physically twisted nodes, so importing sections and
+supplying twisted nodes need not produce identical lattices.
+
+The crate has no C, C++, or Python runtime dependency. Philote is optional.
 
 ## Units and axes
 
@@ -40,6 +49,18 @@ pegasus-vlm = { git = "https://github.com/chrislupp/Pegasus.git" }
 The default `vtk` feature uses the pure-Rust `vtkio` crate. A minimal build is
 available with `default-features = false`; visualization functions then return
 `PegasusError::FeatureDisabled`.
+
+The optional `parallel` feature distributes influence assembly and geometry
+reverse sweeps, including the selective half-wing analysis used by Philote.
+Set `RAYON_NUM_THREADS` before starting the process. Fewer than 128 circulation
+unknowns use serial loops; LU factorization remains serial. Geometry partial
+sums use fixed row groups and ordered accumulation, independent of pool size.
+For a ten-thread Philote server:
+
+```bash
+RAYON_NUM_THREADS=10 cargo run --release --features philote,parallel \
+  --example philote_vlm_server 127.0.0.1:50053
+```
 
 ## Basic analysis
 

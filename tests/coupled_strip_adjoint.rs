@@ -150,7 +150,7 @@ fn check(duplicated: bool) {
     let cotangent = adjoint.mesh_node_cotangents(&input, &columns).unwrap();
     assert_eq!(cotangent.len(), columns.len());
 
-    let step = 1.0e-6;
+    let step = 1.0e-7;
     let mut worst = 0.0f64;
     for node in 0..input.surfaces[0].node_count() {
         for direction in 0..3 {
@@ -241,7 +241,7 @@ fn flight_condition_cotangents_match_finite_differences() {
     let derivatives = adjoint.flight_condition_cotangents(&columns).unwrap();
     assert_eq!(derivatives.len(), columns.len());
 
-    let step = 1e-6;
+    let step = 1e-7;
     for (name, is_alpha) in [("alpha", true), ("beta", false)] {
         let mut evaluated = Vec::with_capacity(2);
         for sign in [1.0, -1.0] {

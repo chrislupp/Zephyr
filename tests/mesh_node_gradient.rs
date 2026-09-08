@@ -6,10 +6,9 @@
 //! The frozen cases allowed a pass *rate* — 80% of components within tolerance
 //! for the full-span mesh, 95% for the duplicated one — rather than requiring
 //! every component to agree. The Rust adjoint does not need that concession:
-//! every component agrees, with a worst relative error near 6e-7, which is the
-//! truncation floor of the difference itself. These assert full agreement and
-//! bound the worst error, and record the oracle's weaker bars so the
-//! strengthening is visible rather than silent.
+//! every component must agree within relative and absolute finite-difference
+//! tolerances. The absolute allowance accounts for cancellation at the small
+//! step needed to stay within the vortex-core collinearity branch.
 
 use pegasus_vlm::aero::ForceCalculator;
 use pegasus_vlm::core::{DEGREES_TO_RADIANS, Vec3};
@@ -73,7 +72,7 @@ fn validate(input: &MeshInput, nx: usize, ny: usize) -> (f64, f64) {
     let lift = &gradients[0].lift;
     let drag = &gradients[0].drag;
 
-    let step = 1.0e-6;
+    let step = 1.0e-7;
     let node_count = (nx + 1) * (ny + 1);
     let mut checked = 0usize;
     let mut agreed = 0usize;
@@ -93,14 +92,13 @@ fn validate(input: &MeshInput, nx: usize, ny: usize) -> (f64, f64) {
                 (drag.nodes[node][direction], drag_plus, drag_minus),
             ] {
                 let difference = (forward - backward) / (2.0 * step);
-                let tolerance = 1.0e-4 * (difference.abs() + 1.0e-6);
+                let tolerance = 1.0e-9 + 1.0e-5 * difference.abs();
                 let error = (exact - difference).abs();
                 checked += 1;
                 if error <= tolerance {
                     agreed += 1;
                 }
-                let scale = difference.abs().max(1.0e-6);
-                worst = worst.max(error / scale);
+                worst = worst.max(error / tolerance);
             }
         }
     }
@@ -135,8 +133,8 @@ fn node_gradients_agree_with_resolves_on_a_full_span_mesh() {
     let input = mesh_input(nx, ny, 1.0, 3.0, false);
     let (rate, worst) = validate(&input, nx, ny);
     // The oracle asked only for 0.8 here.
-    assert_eq!(rate, 1.0, "worst relative error {worst:e}");
-    assert!(worst < 1.0e-5, "worst relative error {worst:e}");
+    assert_eq!(rate, 1.0, "worst tolerance ratio {worst:e}");
+    assert!(worst <= 1.0, "worst tolerance ratio {worst:e}");
 }
 
 /// Ports `CLGradientYDuplicated`.
@@ -150,8 +148,8 @@ fn node_gradients_agree_with_resolves_on_a_duplicated_mesh() {
     let input = mesh_input(nx, ny, 1.0, 3.0, true);
     let (rate, worst) = validate(&input, nx, ny);
     // The oracle asked only for 0.95 here.
-    assert_eq!(rate, 1.0, "worst relative error {worst:e}");
-    assert!(worst < 1.0e-5, "worst relative error {worst:e}");
+    assert_eq!(rate, 1.0, "worst tolerance ratio {worst:e}");
+    assert!(worst <= 1.0, "worst tolerance ratio {worst:e}");
 }
 
 /// Ports `FullSpanVsYDuplicated`.
@@ -265,7 +263,7 @@ fn induced_drag_node_gradients_agree_with_resolves() {
         .unwrap();
     let exact = &gradients[0].induced_drag;
 
-    let step = 1.0e-6;
+    let step = 1.0e-7;
     let mut worst: f64 = 0.0;
     for node in 0..(nx + 1) * (ny + 1) {
         for direction in 0..3 {
@@ -293,7 +291,7 @@ fn induced_drag_node_gradients_agree_on_a_duplicated_mesh() {
         .unwrap();
     let exact = &gradients[0].induced_drag;
 
-    let step = 1.0e-6;
+    let step = 1.0e-7;
     let mut worst: f64 = 0.0;
     for node in 0..(nx + 1) * (ny + 1) {
         for direction in 0..3 {
@@ -339,7 +337,7 @@ fn node_gradients_agree_with_resolves_at_mach_0_6() {
         .unwrap();
     let exact = &gradients[0].lift;
 
-    let step = 1.0e-6;
+    let step = 1.0e-7;
     let mut worst: f64 = 0.0;
     for node in 0..(nx + 1) * (ny + 1) {
         for direction in 0..3 {

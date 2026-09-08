@@ -335,13 +335,15 @@ impl GradientCalculator {
         condition: &FlightCondition,
     ) -> Result<FullGradients> {
         let mut result = FullGradients::default();
-        let velocity_mach = velocity_influence_mach_derivative(solver);
+        let velocity_mach = velocity_influence_mach_derivative(solver, true);
         let induced_velocity_mach = &velocity_mach * &solver.solution().circulation;
+        let control_velocity_mach =
+            velocity_influence_mach_derivative(solver, false) * &solver.solution().circulation;
         let residual_mach = VecX::from_fn(solver.mesh().vortex_count(), |row, _| {
             -solver.linearized_normals()[row].dot(&Vec3::new(
-                induced_velocity_mach[3 * row],
-                induced_velocity_mach[3 * row + 1],
-                induced_velocity_mach[3 * row + 2],
+                control_velocity_mach[3 * row],
+                control_velocity_mach[3 * row + 1],
+                control_velocity_mach[3 * row + 2],
             ))
         });
         // Every selected output needs the same adjoint vector for alpha, beta

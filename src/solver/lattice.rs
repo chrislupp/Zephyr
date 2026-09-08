@@ -3,7 +3,6 @@
 use crate::core::{DEGREES_TO_RADIANS, EPSILON, Scalar, SpacingType, Vec3};
 use crate::error::{PegasusError, Result};
 use crate::geometry::{Aircraft, MeshInput, Surface, SurfaceMesh};
-use crate::utils::spacing;
 
 use super::{ControlSurfaceInfluence, HorseshoeVortex, Strip, SurfaceMeshInfo};
 
@@ -97,7 +96,6 @@ impl VortexLattice {
         let scale = surface.scale();
         let translation = surface.translation();
         let angle_offset = surface.angle_offset_degrees() * DEGREES_TO_RADIANS;
-        let x_edges = spacing(nx + 1, surface.chordwise_spacing());
         let mut strip_index = 0;
         let mut wetted_area = 0.0;
         let mut total_width = 0.0;
@@ -185,7 +183,7 @@ impl VortexLattice {
 
                 let claf = (1.0 - fc) * chord_left / strip.chord_center * left.cl_alpha_factor()
                     + fc * chord_right / strip.chord_center * right.cl_alpha_factor();
-                let (x_vortex, x_control) =
+                let (x_edges, x_vortex, x_control, _) =
                     chordwise_spacing(nx, surface.chordwise_spacing(), claf);
                 self.strips.push(strip.clone());
 
@@ -364,8 +362,8 @@ impl VortexLattice {
             if yz_mag > EPSILON {
                 strip.leading_edge_sweep_slope = (le_right.x - le_left.x) / yz_mag;
                 strip.trailing_edge_sweep_slope = (te_right.x - te_left.x) / yz_mag;
-                strip.trefftz_normal_y = dy / yz_mag;
-                strip.trefftz_normal_z = dz / yz_mag;
+                strip.trefftz_normal_y = -dz / yz_mag;
+                strip.trefftz_normal_z = dy / yz_mag;
             }
             strip.reference_point = strip.leading_edge_center;
             strip.reference_point.x += 0.25 * strip.chord_center;
@@ -695,23 +693,44 @@ fn reflect_swapped(point: &Vec3, y_offset: Scalar) -> Vec3 {
     Vec3::new(point.x, y_offset - point.y, point.z)
 }
 
+/// AVL CSPACER: panel boundaries, bound vortices, control points, and the
+/// control-point derivative with respect to the section lift-slope factor.
 pub(crate) fn chordwise_spacing(
     count: usize,
     distribution: SpacingType,
     cl_alpha_factor: Scalar,
-) -> (Vec<Scalar>, Vec<Scalar>) {
-    let edges = spacing(count + 1, distribution);
-    let mut vortex = vec![0.0; count];
-    let mut control = vec![0.0; count];
+) -> (Vec<Scalar>, Vec<Scalar>, Vec<Scalar>, Vec<Scalar>) {
+    let d0 = 1.0 / (4 * count) as Scalar;
+    let d1 = std::f64::consts::PI / (4 * count + 2) as Scalar;
+    let d2 = 0.5 * std::f64::consts::PI / (4 * count + 1) as Scalar;
+    let mut edges = Vec::with_capacity(count + 1);
+    let mut vortex = Vec::with_capacity(count);
+    let mut control = Vec::with_capacity(count);
+    let mut control_claf = Vec::with_capacity(count);
     for i in 0..count {
-        let dx = edges[i + 1] - edges[i];
-        let fraction = if cl_alpha_factor != 1.0 && i == 0 {
-            (0.25 / cl_alpha_factor).clamp(0.1, 0.4)
-        } else {
-            0.25
+        let uniform = |offset: Scalar| (4 * i) as Scalar * d0 + offset * d0;
+        let cosine = |offset: Scalar| 0.5 * (1.0 - (((4 * i + 1) as Scalar + offset) * d1).cos());
+        // SpacingType::Sine and negative AVL CSPACE cluster at the trailing edge.
+        let sine = |offset: Scalar| (((4 * i) as Scalar + offset) * d2).sin();
+        let position = |offset: Scalar| match distribution {
+            SpacingType::None | SpacingType::Uniform => uniform(offset),
+            SpacingType::Cosine => cosine(offset),
+            SpacingType::Sine => sine(offset),
+            SpacingType::Blend => 0.5 * (uniform(offset) + cosine(offset)),
         };
-        vortex[i] = edges[i] + fraction * dx;
-        control[i] = edges[i] + 0.75 * dx;
+        edges.push(position(0.0));
+        vortex.push(position(1.0));
+        let offset = 1.0 + 2.0 * cl_alpha_factor;
+        control.push(position(offset));
+        let cosine_derivative = d1 * (((4 * i + 1) as Scalar + offset) * d1).sin();
+        control_claf.push(match distribution {
+            SpacingType::None | SpacingType::Uniform => 2.0 * d0,
+            SpacingType::Cosine => cosine_derivative,
+            SpacingType::Sine => 2.0 * d2 * (((4 * i) as Scalar + offset) * d2).cos(),
+            SpacingType::Blend => 0.5 * (2.0 * d0 + cosine_derivative),
+        });
     }
-    (vortex, control)
+    edges[0] = 0.0;
+    edges.push(1.0);
+    (edges, vortex, control, control_claf)
 }

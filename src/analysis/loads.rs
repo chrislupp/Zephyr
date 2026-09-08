@@ -85,7 +85,7 @@ pub(crate) fn evaluate(
                             .cross(&(v.bound_vortex_right - v.bound_vortex_left));
                     force += f;
                     if plan.moments {
-                        moment_qc += (v.control_point - qc).cross(&f);
+                        moment_qc += (v.bound_vortex_center - qc).cross(&f);
                     }
                     if details.is_some() {
                         normal_load += strip.chord_center

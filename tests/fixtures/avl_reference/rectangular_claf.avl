@@ -1,0 +1,17 @@
+Rectangular cosine CLAF reference
+0.2
+0 0 0
+4 1 4
+0.25 0 0
+0
+SURFACE
+Wing
+2 1 4 1
+SECTION
+0 -2 0 1 0
+CLAF
+0.8
+SECTION
+0 2 0 1 0
+CLAF
+1.1

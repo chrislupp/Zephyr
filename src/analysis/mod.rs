@@ -186,8 +186,10 @@ impl Analysis {
         // If evaluation fails, the next call must never reuse its partial state.
         self.condition = None;
         solver.solve_selective(condition, half, plan.velocity, reuse, &mut result.work)?;
-        result.work.operator_bytes =
-            std::mem::size_of::<Scalar>() * (solver.aic().len() + solver.velocity_matrix().len());
+        result.work.operator_bytes = std::mem::size_of::<Scalar>()
+            * (solver.aic().len()
+                + solver.control_velocity_matrix().len()
+                + solver.velocity_matrix().len());
         let missing: Vec<_> = request
             .outputs
             .iter()
