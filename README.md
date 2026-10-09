@@ -148,3 +148,52 @@ benchmarks, committed parity fixtures, and a manifest mapping the non-Philote
 
 Pegasus is licensed under GPL-3.0-or-later. See the repository's `LICENSE`
 file.
+
+### Direct-mesh derivative products
+
+After solving, `gradients::MeshLinearization::new(&solver)` provides analytical
+`jvp(&directions, selection)` and `vjp(&coefficient_seeds)` methods. Directions
+and returned cotangents use the original `MeshInput` surface/node order. A node
+index is `i * (ny + 1) + j`, with XYZ in the mesh's physical coordinate units.
+VJP seeds are `AeroGradients` values interpreted as weights on lift, near-field
+drag, side force, roll, pitch, yaw and Trefftz induced drag. Directions are
+`MeshNodeDirection` values; each supplied direction uses one tangent right-hand
+side. Each coefficient seed uses one adjoint right-hand side. Both paths batch
+right-hand sides and reuse the primal factorization.
+
+For `R = A(x) Gamma - b(x)`, the tangent solves
+`A dGamma = db - dA Gamma` and returns `f_x dx + f_Gamma dGamma`.
+The reverse product solves `A^T lambda = f_Gamma^T w` and accumulates
+`f_x^T w - R_x^T lambda`. Shared nodes and mirrored surfaces accumulate through
+the transpose of lattice construction. Coefficient reference quantities and
+flight condition are fixed; all moment coefficients retain Pegasus's reference
+chord convention. The linearization borrows the solver, original input mesh
+and the condition stored with its valid solution, so they cannot be mutated
+while applying products.
+
+The reverse Trefftz geometry kernel differentiates the same endpoint geometry
+and cross-surface core law as the primal. Its pair term is
+`weight * dot(strip_width, displacement) / radius`, with
+`radius = sqrt(dot(displacement, displacement)^2 + core^4)`. It accumulates
+endpoint, strip-width and core cotangents in one strip-pair sweep, then maps the
+active core's chord/width derivative back to nodes. The core maximum uses the
+chord branch at a tie (a nonsmooth, branch-specific derivative). The influence
+kernel also includes its core-radius dependence. Point-coincidence and strip
+collapse branches follow the primal; collapsed chord stations, section polars,
+deflected control normals and symmetry planes are rejected by this interface.
+
+Use direct products for few input directions, adjoint products for few weighted
+responses, and choose based on the actual system. The coefficient node-gradient
+convenience API now uses this reverse accumulation instead of reconstructing
+one coordinate direction at a time. No AD, finite differences, differentiation
+code generation or optimizer is used in these production paths.
+
+For many strip-load outputs and few input directions,
+`MeshLinearization::strip_load_jvp` returns force/moment directions from tangent
+solves, including optional motion of strip moment reference points.
+`StripLoadAdjoint::mesh_node_cotangents` and `moment_point_cotangents` supply the
+corresponding reverse products. Raw resultants use the existing Kutta-Joukowski
+normalization; the caller supplies dynamic-pressure scaling. With
+`F = 2 Gamma (V cross line)` and `M = (cp-p) cross F`, the explicit point term is
+`dM = -dp cross F` and its transpose is `bar_p = bar_M cross F`. These local
+operators do not replace a coupled aeroelastic tangent/adjoint solve.

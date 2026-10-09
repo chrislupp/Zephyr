@@ -2,14 +2,15 @@
 
 use crate::core::{EPSILON, MatX, Scalar, SymmetryType, Vec3, VecX};
 use crate::error::{PegasusError, Result};
+#[cfg(test)]
 use crate::geometry::MeshInput;
 use crate::solver::{FlightCondition, VortexLattice, VortexLatticeSolver};
 
 use super::{
     AdjointSolver, AeroOutput, OutputSelection, aic_element_gradient, force_circulation_gradient,
-    force_geometry_jvp, force_induced_velocity_gradient, horseshoe_velocity_vjp_bound_left,
-    horseshoe_velocity_vjp_bound_right, horseshoe_velocity_vjp_field_point,
-    trefftz_circulation_gradients, trefftz_geometry_jvp,
+    force_geometry_jvp, force_induced_velocity_gradient, horseshoe_velocity_core_derivative,
+    horseshoe_velocity_vjp_bound_left, horseshoe_velocity_vjp_bound_right,
+    horseshoe_velocity_vjp_field_point, trefftz_circulation_gradients, trefftz_geometry_jvp,
 };
 
 #[derive(Clone, Debug)]
@@ -240,10 +241,20 @@ impl<'a> GeometryAdjointContext<'a> {
                     pg,
                     row != column,
                 );
+                let core_gradient = horseshoe_velocity_core_derivative(
+                    &target.control_point,
+                    &source.bound_vortex_left,
+                    &source.bound_vortex_right,
+                    pg,
+                    core,
+                    row != column,
+                );
                 let entry_direction = gradient.bound_left.dot(&direction.bound_left[column])
                     + gradient.bound_right.dot(&direction.bound_right[column])
                     + gradient.control_point.dot(&direction.control_point[row])
-                    + gradient.normal.dot(&direction.normal[row]);
+                    + gradient.normal.dot(&direction.normal[row])
+                    + core_gradient.dot(&target.normal_at_control_point)
+                        * core_direction(mesh, column, target.component_index, direction);
                 matrix_product += entry_direction * solution.circulation[column];
             }
             rhs_direction - matrix_product
@@ -310,15 +321,26 @@ fn induced_velocity_geometry_contraction(
                 row != column,
                 seed,
             );
+            let core_gradient = horseshoe_velocity_core_derivative(
+                &target.control_point,
+                &source.bound_vortex_left,
+                &source.bound_vortex_right,
+                pg,
+                core,
+                row != column,
+            );
             result += gamma
                 * (field_gradient.dot(&direction.control_point[row])
                     + left_gradient.dot(&direction.bound_left[column])
-                    + right_gradient.dot(&direction.bound_right[column]));
+                    + right_gradient.dot(&direction.bound_right[column])
+                    + core_gradient.dot(seed)
+                        * core_direction(mesh, column, target.component_index, direction));
         }
     }
     result
 }
 
+#[cfg(test)]
 pub(crate) fn direct_mesh_node_direction(
     input: &MeshInput,
     lattice: &VortexLattice,
@@ -433,6 +455,7 @@ pub(crate) fn direct_mesh_node_direction(
     Ok(result)
 }
 
+#[cfg(test)]
 fn node_direction(target_i: usize, target_j: usize, i: usize, j: usize, component: usize) -> Vec3 {
     if target_i == i && target_j == j {
         Vec3::from_fn(|row, _| if row == component { 1.0 } else { 0.0 })
@@ -451,6 +474,7 @@ pub(crate) fn normalized_direction(vector: &Vec3, direction: &Vec3) -> Vec3 {
     }
 }
 
+#[cfg(test)]
 fn normalized_dot(vector: &Vec3, direction: &Vec3) -> Scalar {
     let norm = vector.norm();
     if norm <= EPSILON {
@@ -462,4 +486,23 @@ fn normalized_dot(vector: &Vec3, direction: &Vec3) -> Scalar {
 
 pub(crate) fn reflected_direction(direction: Vec3) -> Vec3 {
     Vec3::new(direction.x, -direction.y, direction.z)
+}
+
+fn core_direction(
+    mesh: &VortexLattice,
+    j: usize,
+    target_component: usize,
+    direction: &LatticeDirections,
+) -> Scalar {
+    let source = &mesh.vortices()[j];
+    let line = source.bound_vortex_right - source.bound_vortex_left;
+    let width = line.norm();
+    0.0001
+        * if source.component_index != target_component && source.local_chord >= width {
+            direction.local_chord[j]
+        } else if width > 0.0 {
+            line.dot(&(direction.bound_right[j] - direction.bound_left[j])) / width
+        } else {
+            0.0
+        }
 }

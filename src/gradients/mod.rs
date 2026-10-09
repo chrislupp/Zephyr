@@ -8,6 +8,7 @@ mod coupled;
 mod forces;
 mod geometry_adjoint;
 mod mach;
+mod mesh_products;
 mod section_geometry;
 mod selection;
 mod trefftz;
@@ -18,9 +19,9 @@ pub use aic::{
     velocity_column_gradient, velocity_row_gradient,
 };
 pub use biot_savart::{
-    HorseshoeVelocityJacobians, horseshoe_velocity_jacobians, horseshoe_velocity_pg_derivative,
-    horseshoe_velocity_vjp_bound_left, horseshoe_velocity_vjp_bound_right,
-    horseshoe_velocity_vjp_field_point,
+    HorseshoeVelocityJacobians, horseshoe_velocity_core_derivative, horseshoe_velocity_jacobians,
+    horseshoe_velocity_pg_derivative, horseshoe_velocity_vjp_bound_left,
+    horseshoe_velocity_vjp_bound_right, horseshoe_velocity_vjp_field_point,
 };
 pub use calculator::{
     AeroGradients, FullGradients, GeometryGradients, GeometryVariable, GradientCalculator,
@@ -32,8 +33,10 @@ pub use forces::{
     force_circulation_gradient, force_geometry_jvp, force_induced_velocity_gradient,
     selected_force_circulation_gradients,
 };
+pub use mesh_products::{COEFFICIENT_ORDER, MeshLinearization, MeshNodeDirection};
 pub use section_geometry::{interpolated_twist_jvp, panel_normal_jvp};
 pub use selection::{AeroOutput, OutputSelection};
 pub use trefftz::{
-    TrefftzCirculationGradients, trefftz_circulation_gradients, trefftz_geometry_jvp,
+    TrefftzCirculationGradients, TrefftzGeometryCotangent, trefftz_circulation_gradients,
+    trefftz_geometry_jvp, trefftz_geometry_vjp,
 };

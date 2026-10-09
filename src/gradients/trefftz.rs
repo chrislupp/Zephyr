@@ -283,3 +283,122 @@ pub fn trefftz_geometry_jvp(
     }
     Ok([d_lift, d_side, d_drag])
 }
+
+/// Cotangents of the fixed-circulation Trefftz geometry. Endpoint arrays follow
+/// vortex order; only each strip's last chordwise vortex receives a seed.
+#[derive(Clone, Debug)]
+pub struct TrefftzGeometryCotangent {
+    pub bound_left: Vec<Vec3>,
+    pub bound_right: Vec<Vec3>,
+    pub strip_chord: Vec<Scalar>,
+}
+
+/// Hand-derived transpose of [`trefftz_geometry_jvp`]. Seeds are ordered
+/// `[CL_far, CY_far, CDi]`; reference area and core fractions are constants.
+/// The active core-radius branch matches the primal (`chord >= width` at a
+/// tie). At that nonsmooth tie this is the chosen branch derivative only.
+/// Degenerate-strip and coincident-point guards match the primal exactly.
+#[allow(clippy::too_many_arguments)]
+pub fn trefftz_geometry_vjp(
+    mesh: &VortexLattice,
+    solution: &SolutionState,
+    reference_area: Scalar,
+    core_chord_fraction: Scalar,
+    core_width_fraction: Scalar,
+    seed: [Scalar; 3],
+) -> Result<TrefftzGeometryCotangent> {
+    if seed.iter().any(|x| !x.is_finite()) {
+        return Err(PegasusError::InvalidGeometry(
+            "nonfinite Trefftz seed".into(),
+        ));
+    }
+    let mut out = TrefftzGeometryCotangent {
+        bound_left: vec![Vec3::zeros(); mesh.vortex_count()],
+        bound_right: vec![Vec3::zeros(); mesh.vortex_count()],
+        strip_chord: vec![0.0; mesh.strip_count()],
+    };
+    if !solution.is_valid || mesh.strip_count() == 0 || reference_area <= 0.0 {
+        return Ok(out);
+    }
+    let index: Vec<_> = mesh
+        .strips()
+        .iter()
+        .map(|s| s.first_vortex_index + s.num_vortices - 1)
+        .collect();
+    let gamma: Vec<_> = mesh
+        .strips()
+        .iter()
+        .map(|s| {
+            solution
+                .circulation
+                .rows(s.first_vortex_index, s.num_vortices)
+                .sum()
+        })
+        .collect();
+    let yz = |p: Vec3| Vec3::new(0.0, p.y, p.z);
+    for (i, target) in mesh.strips().iter().enumerate() {
+        let ti = index[i];
+        let left = yz(mesh.vortices()[ti].bound_vortex_left);
+        let right = yz(mesh.vortices()[ti].bound_vortex_right);
+        let width = right - left;
+        if width.norm() < EPSILON {
+            continue;
+        }
+        let center = 0.5 * (left + right);
+        let direct = Vec3::new(0.0, 2.0 * seed[0], -2.0 * seed[1]) * (gamma[i] / reference_area);
+        out.bound_right[ti] += direct;
+        out.bound_left[ti] -= direct;
+        if seed[2] == 0.0 {
+            continue;
+        }
+        for (j, source) in mesh.strips().iter().enumerate() {
+            let sj = index[j];
+            let sl = yz(mesh.vortices()[sj].bound_vortex_left);
+            let sr = yz(mesh.vortices()[sj].bound_vortex_right);
+            let source_width = sr - sl;
+            let chord_core = core_chord_fraction * source.chord_center;
+            let width_core = core_width_fraction * source_width.norm();
+            let core = if target.surface_index == source.surface_index {
+                0.0
+            } else {
+                chord_core.max(width_core)
+            };
+            let d1 = center - sl;
+            let d2 = center - sr;
+            let radius = |d: Vec3| (d.norm_squared().powi(2) + core.powi(4)).sqrt();
+            let r1 = radius(d1);
+            let r2 = radius(d2);
+            if r1 <= EPSILON || r2 <= EPSILON {
+                continue;
+            }
+            let factor = seed[2] * gamma[i] * gamma[j] * INV_2_PI / reference_area;
+            let mut core_bar = 0.0;
+            for (leg, d, r, sign) in [(0, d1, r1, 1.0), (1, d2, r2, -1.0)] {
+                // phi = factor * sign * dot(width, d) / sqrt(dot(d,d)^2 + core^4).
+                let weight = factor * sign;
+                let numerator = width.dot(&d);
+                let width_bar = weight * d / r;
+                let d_bar =
+                    weight * (width / r - 2.0 * numerator * d.norm_squared() * d / r.powi(3));
+                out.bound_right[ti] += width_bar + 0.5 * d_bar;
+                out.bound_left[ti] += -width_bar + 0.5 * d_bar;
+                if leg == 0 {
+                    out.bound_left[sj] -= d_bar;
+                } else {
+                    out.bound_right[sj] -= d_bar;
+                }
+                core_bar -= 2.0 * weight * numerator * core.powi(3) / r.powi(3);
+            }
+            if target.surface_index != source.surface_index {
+                if chord_core >= width_core {
+                    out.strip_chord[j] += core_chord_fraction * core_bar;
+                } else if source_width.norm() > 0.0 {
+                    let bar = core_width_fraction * core_bar * source_width / source_width.norm();
+                    out.bound_right[sj] += bar;
+                    out.bound_left[sj] -= bar;
+                }
+            }
+        }
+    }
+    Ok(out)
+}

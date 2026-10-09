@@ -49,6 +49,8 @@ pub struct HorseshoeVelocityJacobians {
     pub bound_left: Mat3,
     /// Derivative with respect to the bound-vortex right endpoint.
     pub bound_right: Mat3,
+    /// Velocity derivative with respect to the regularization radius.
+    pub core_radius: Vec3,
 }
 
 /// All three geometry Jacobians of the horseshoe velocity in one pass.
@@ -73,7 +75,15 @@ pub fn horseshoe_velocity_jacobians(
     let core_4 = core_four(core_radius);
     let bound_active = include_bound && geometry.bound_is_active();
 
-    let mut result = HorseshoeVelocityJacobians::default();
+    let mut result = HorseshoeVelocityJacobians {
+        core_radius: core_derivative(
+            &geometry,
+            core_radius,
+            prandtl_glauert_factor,
+            include_bound,
+        ),
+        ..Default::default()
+    };
     for component in 0..3 {
         let mut basis = Vec3::zeros();
         basis[component] = 1.0;
@@ -437,4 +447,51 @@ fn trailing_leg_vjp(p: &Vec3, p_mag: Scalar, core_4: Scalar, sign: Scalar, seed:
         seed.y * p.z * d_t_y + seed.z * (-t - p.y * d_t_y),
         seed.y * (t + p.z * d_t_z) + seed.z * (-p.y * d_t_z),
     )
+}
+
+/// Analytical derivative of velocity with respect to the Leishman core radius.
+/// The primal branch guards and Prandtl-Glauert factors are held fixed.
+#[must_use]
+pub fn horseshoe_velocity_core_derivative(
+    field_point: &Vec3,
+    bound_left: &Vec3,
+    bound_right: &Vec3,
+    prandtl_glauert_factor: Scalar,
+    core_radius: Scalar,
+    include_bound: bool,
+) -> Vec3 {
+    core_derivative(
+        &Geometry::new(field_point, bound_left, bound_right, prandtl_glauert_factor),
+        core_radius,
+        prandtl_glauert_factor,
+        include_bound,
+    )
+}
+fn core_derivative(g: &Geometry, c: Scalar, pg: Scalar, include_bound: bool) -> Vec3 {
+    if c == 0.0 {
+        return Vec3::zeros();
+    }
+    let c4 = core_four(c);
+    let c3 = c * c * c;
+    let mut out = Vec3::zeros();
+    if include_bound && g.bound_is_active() {
+        let dot = g.a.dot(&g.b);
+        let l2 = g.a_sq + g.b_sq - 2.0 * dot;
+        let ra = (g.a_sq * g.a_sq + c4).sqrt().sqrt();
+        let rb = (g.b_sq * g.b_sq + c4).sqrt().sqrt();
+        let numerator = (g.a_sq - dot) / ra + (g.b_sq - dot) / rb;
+        let dn = -c3 * ((g.a_sq - dot) / ra.powi(5) + (g.b_sq - dot) / rb.powi(5));
+        let denominator = (g.cross_sq * g.cross_sq + l2 * l2 * c4).sqrt();
+        out +=
+            g.cross_ab * (dn / denominator - numerator * 2.0 * l2 * l2 * c3 / denominator.powi(3));
+    }
+    for (p, mag, sign) in [(g.a, g.a_mag, -1.0), (g.b, g.b_mag, 1.0)] {
+        if mag > 0.0 {
+            let q = p.y * p.y + p.z * p.z;
+            let den = (q * q + c4).sqrt();
+            let dt = -2.0 * sign * (1.0 - p.x / mag) * c3 / den.powi(3);
+            out += Vec3::new(0.0, p.z * dt, -p.y * dt);
+        }
+    }
+    scale_x(out, pg) * INV_4_PI
 }

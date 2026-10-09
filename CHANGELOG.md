@@ -7,6 +7,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- Tangent strip-load products and adjoint moment-point cotangents for coupled
+  applications with moving structural load reference points.
+- `MeshLinearization::jvp` and `vjp`: batched direct and adjoint products for
+  direct-mesh coefficient sensitivities, sharing the solved primal factorization.
+- Hand-derived Trefftz geometry VJP, including cross-surface core-radius and
+  strip-chord dependence, and a regularization-radius velocity derivative.
+- Solved flight-condition access tied to state invalidation.
+
+### Changed
+- Mesh-node coefficient gradients now accumulate weighted adjoint cotangents in
+  one vortex-pair sweep instead of traversing all pairs per mesh coordinate.
+
+### Fixed
+- Geometry products include the influence-kernel radius chain through source
+  width/chord, in addition to the endpoint derivatives at fixed radius.
+
 ## [0.5.0] - 2026-09-05
 
 ### Added

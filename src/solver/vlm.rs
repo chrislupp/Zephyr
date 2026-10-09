@@ -98,6 +98,7 @@ pub struct VortexLatticeSolver {
     unit_circulation: MatX,
     unit_responses_valid: bool,
     solution: SolutionState,
+    solved_condition: Option<FlightCondition>,
     current_mach: Scalar,
 }
 
@@ -119,6 +120,7 @@ impl Default for VortexLatticeSolver {
             unit_circulation: MatX::zeros(0, 6),
             unit_responses_valid: false,
             solution: SolutionState::default(),
+            solved_condition: None,
             current_mach: 0.0,
         }
     }
@@ -183,6 +185,7 @@ impl VortexLatticeSolver {
     }
 
     fn invalidate(&mut self) {
+        self.solved_condition = None;
         self.aic_valid = false;
         self.unit_responses_valid = false;
         self.solution_aic_matrix = None;
@@ -593,6 +596,7 @@ impl VortexLatticeSolver {
             induced_velocity: induced,
             is_valid: true,
         };
+        self.solved_condition = Some(condition.clone());
         self.solution = state.clone();
         Ok(state)
     }
@@ -642,6 +646,26 @@ impl VortexLatticeSolver {
 
     pub(crate) fn linearized_normals(&self) -> &[Vec3] {
         &self.solution_normals
+    }
+
+    /// Flight condition belonging to the current valid solution.
+    #[must_use]
+    pub fn solution_condition(&self) -> Option<&FlightCondition> {
+        self.solved_condition
+            .as_ref()
+            .filter(|_| self.solution.is_valid)
+    }
+
+    pub(crate) fn solve_linearized_batched(&self, rhs: &MatX) -> Result<MatX> {
+        let factorization = self
+            .solution_lu
+            .as_ref()
+            .or(self.aic_lu.as_ref())
+            .ok_or(PegasusError::InvalidSolution)?;
+        if rhs.nrows() != self.mesh.vortex_count() {
+            return Err(PegasusError::InvalidSolution);
+        }
+        solve_matrix(factorization, rhs)
     }
 
     pub(crate) fn solve_linearized_transpose(&self, rhs: &VecX) -> Result<VecX> {

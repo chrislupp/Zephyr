@@ -78,20 +78,23 @@ pub struct MeshNodeCotangent {
 ///
 /// Columns are the caller's functionals; rows are laid out `3 * vortex + d`,
 /// matching the velocity-influence matrix.
-struct LatticeCotangents {
-    bound_left: MatX,
-    bound_right: MatX,
-    control_point: MatX,
-    normal: MatX,
+pub(crate) struct LatticeCotangents {
+    pub(crate) bound_left: MatX,
+    pub(crate) bound_right: MatX,
+    pub(crate) control_point: MatX,
+    pub(crate) normal: MatX,
+    pub(crate) strip_chord: MatX,
 }
 
 impl LatticeCotangents {
-    fn zeros(vortex_count: usize, columns: usize) -> Self {
+    pub(crate) fn zeros(mesh: &VortexLattice, columns: usize) -> Self {
+        let vortex_count = mesh.vortex_count();
         Self {
             bound_left: MatX::zeros(3 * vortex_count, columns),
             bound_right: MatX::zeros(3 * vortex_count, columns),
             control_point: MatX::zeros(3 * vortex_count, columns),
             normal: MatX::zeros(3 * vortex_count, columns),
+            strip_chord: MatX::zeros(mesh.strip_count(), columns),
         }
     }
 }
@@ -254,10 +257,49 @@ impl<'a> StripLoadAdjoint<'a> {
         let circulation_gradients = self.circulation_gradients(&panel_seed, &velocity_seed);
         let adjoints = AdjointSolver::new(self.solver)?.solve_batched(&circulation_gradients)?;
 
-        let mut cotangents = LatticeCotangents::zeros(mesh.vortex_count(), columns.len());
+        let mut cotangents = LatticeCotangents::zeros(mesh, columns.len());
         self.accumulate_explicit(columns, &panel_seed, &mut cotangents);
         self.accumulate_pairwise(&velocity_seed, &adjoints, &mut cotangents);
         self.to_mesh_nodes(input, &cotangents)
+    }
+
+    /// Cotangents of the strip moment reference points, paired with
+    /// `mesh_node_cotangents` when those points depend on the structural state.
+    /// For M = sum (cp-p) cross F, bar_p = sum bar_M cross F. No linear solve
+    /// is needed: moving the load reference points does not alter the flow.
+    pub fn moment_point_cotangents(
+        &self,
+        columns: &[StripLoadCotangent],
+    ) -> Result<Vec<Vec<Vec3>>> {
+        let ns = self.mesh().strip_count();
+        if columns.iter().any(|c| {
+            c.force.len() != ns
+                || c.moment.len() != ns
+                || c.force
+                    .iter()
+                    .chain(&c.moment)
+                    .any(|v| v.iter().any(|x| !x.is_finite()))
+        }) {
+            return Err(PegasusError::InvalidGeometry(
+                "invalid strip-load cotangent".into(),
+            ));
+        }
+        Ok(columns
+            .iter()
+            .map(|c| {
+                self.mesh()
+                    .strips()
+                    .iter()
+                    .enumerate()
+                    .map(|(s, strip)| {
+                        (strip.first_vortex_index..strip.first_vortex_index + strip.num_vortices)
+                            .fold(Vec3::zeros(), |sum, i| {
+                                sum + c.moment[s].cross(&self.panel_force[i])
+                            })
+                    })
+                    .collect()
+            })
+            .collect())
     }
 
     /// Derivatives of the same functionals with respect to the flight
@@ -366,7 +408,7 @@ impl<'a> StripLoadAdjoint<'a> {
     /// dependence into both the circulation gradient and the geometry sweep.
     ///
     /// Both are returned laid out `3 * vortex + d` by column.
-    fn panel_cotangents(&self, columns: &[StripLoadCotangent]) -> (MatX, MatX) {
+    pub(crate) fn panel_cotangents(&self, columns: &[StripLoadCotangent]) -> (MatX, MatX) {
         let mesh = self.mesh();
         let solution = self.solver.solution();
         let count = mesh.vortex_count();
@@ -401,7 +443,7 @@ impl<'a> StripLoadAdjoint<'a> {
     /// the velocity influence matrix. Mirrors
     /// [`force_circulation_gradient`](super::force_circulation_gradient), which
     /// does the same thing for a single aircraft-level coefficient.
-    fn circulation_gradients(&self, panel_seed: &MatX, velocity_seed: &MatX) -> MatX {
+    pub(crate) fn circulation_gradients(&self, panel_seed: &MatX, velocity_seed: &MatX) -> MatX {
         let mesh = self.mesh();
         let mut direct = MatX::zeros(mesh.vortex_count(), panel_seed.ncols());
         for (index, vortex) in mesh.vortices().iter().enumerate() {
@@ -424,7 +466,7 @@ impl<'a> StripLoadAdjoint<'a> {
     /// Two of them: the bound-vortex line the panel force is proportional to,
     /// and the moment arm from the strip's moment point to the panel's control
     /// point.
-    fn accumulate_explicit(
+    pub(crate) fn accumulate_explicit(
         &self,
         columns: &[StripLoadCotangent],
         panel_seed: &MatX,
@@ -465,7 +507,7 @@ impl<'a> StripLoadAdjoint<'a> {
     /// dense Jacobian blocks once per pair covers both, for every column at
     /// once. Evaluating a seeded VJP per column instead would re-derive the same
     /// geometry `ndof` times per pair.
-    fn accumulate_pairwise(
+    pub(crate) fn accumulate_pairwise(
         &self,
         velocity_seed: &MatX,
         adjoints: &MatX,
@@ -517,6 +559,30 @@ impl<'a> StripLoadAdjoint<'a> {
                     core,
                     include_bound,
                 );
+
+                // The core radius itself depends on source width/chord. Carry
+                // its chain rule as well as the endpoint derivatives at fixed core.
+                let line = source.bound_vortex_right - source.bound_vortex_left;
+                let width = line.norm();
+                let chord_active =
+                    source.component_index != target.component_index && source.local_chord >= width;
+                for k in 0..adjoints.ncols() {
+                    let seed = Vec3::new(
+                        velocity_seed[(3 * row, k)],
+                        velocity_seed[(3 * row + 1, k)],
+                        velocity_seed[(3 * row + 2, k)],
+                    ) - adjoints[(row, k)] * normal;
+                    let bar = 0.0001 * gamma * jacobians.core_radius.dot(&seed);
+                    if chord_active {
+                        out.strip_chord[(source.strip_index, k)] += bar;
+                    } else if width > 0.0 {
+                        for d in 0..3 {
+                            let value = bar * line[d] / width;
+                            out.bound_right[(3 * column + d, k)] += value;
+                            out.bound_left[(3 * column + d, k)] -= value;
+                        }
+                    }
+                }
 
                 // Residual path. `R = A gamma - rhs`, and the coupled Jacobian
                 // consumes `-psi^T dR/dg`, hence the negative weight.
@@ -591,7 +657,7 @@ impl<'a> StripLoadAdjoint<'a> {
     /// The transpose of the lattice construction: the bound vortex sits at the
     /// quarter chord of its panel's two chordwise edges, the control point at
     /// three quarters, and the normal comes from the panel's diagonals.
-    fn to_mesh_nodes(
+    pub(crate) fn to_mesh_nodes(
         &self,
         input: &MeshInput,
         cotangents: &LatticeCotangents,
@@ -624,6 +690,28 @@ impl<'a> StripLoadAdjoint<'a> {
             for (column, per_column) in result.iter_mut().enumerate() {
                 let nodes = &mut per_column.surfaces[surface_index];
                 for strip_offset in 0..surface.ny {
+                    let mut chord_seed =
+                        cotangents.strip_chord[(info.first_strip_index + strip_offset, column)];
+                    if surface.y_duplicated {
+                        let duplicate = &lattice.surface_info()[slot + 1];
+                        chord_seed += cotangents.strip_chord
+                            [(duplicate.first_strip_index + strip_offset, column)];
+                    }
+                    for j in [strip_offset, strip_offset + 1] {
+                        let le = j;
+                        let te = surface.nx * (surface.ny + 1) + j;
+                        let chord = surface.nodes[te] - surface.nodes[le];
+                        if chord_seed != 0.0 {
+                            if chord.norm() <= crate::core::EPSILON {
+                                return Err(PegasusError::InvalidGeometry(
+                                    "undefined chord derivative at a collapsed station".into(),
+                                ));
+                            }
+                            let bar = chord * (0.5 * chord_seed / chord.norm());
+                            nodes[te] += bar;
+                            nodes[le] -= bar;
+                        }
+                    }
                     for chord_offset in 0..surface.nx {
                         let index =
                             info.first_vortex_index + strip_offset * surface.nx + chord_offset;

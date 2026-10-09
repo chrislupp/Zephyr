@@ -6,7 +6,7 @@ use crate::error::{PegasusError, Result};
 use crate::geometry::{Aircraft, MeshInput};
 use crate::solver::{FlightCondition, VortexLatticeSolver};
 
-use super::geometry_adjoint::{GeometryAdjointContext, direct_mesh_node_direction};
+use super::geometry_adjoint::GeometryAdjointContext;
 use super::mach::velocity_influence_mach_derivative;
 use super::section_geometry::section_direction;
 use super::{
@@ -656,33 +656,27 @@ impl GradientCalculator {
         };
         let mut solver = self.configured_solver()?;
         solver.solve(condition)?;
-        let context = GeometryAdjointContext::new(&solver, condition, self.output_selection)?;
+        let outputs: Vec<_> = super::COEFFICIENT_ORDER
+            .into_iter()
+            .filter(|&o| self.output_selection.contains(o))
+            .collect();
+        let seeds: Vec<_> = outputs
+            .iter()
+            .map(|&o| {
+                let mut seed = AeroGradients::default();
+                seed.set(o, 1.0);
+                seed
+            })
+            .collect();
+        let products = super::MeshLinearization::new(&solver)?.vjp(&seeds)?;
         let mut result: Vec<_> = mesh
             .surfaces
             .iter()
-            .map(|surface| {
-                SurfaceMeshNodeGradients::zeros(surface.name.clone(), surface.nx, surface.ny)
-            })
+            .map(|s| SurfaceMeshNodeGradients::zeros(s.name.clone(), s.nx, s.ny))
             .collect();
-        for (surface_index, surface_result) in result.iter_mut().enumerate() {
-            let surface = &mesh.surfaces[surface_index];
-            for i in 0..=surface.nx {
-                for j in 0..=surface.ny {
-                    let node_index = i * (surface.ny + 1) + j;
-                    for component in 0..3 {
-                        let direction = direct_mesh_node_direction(
-                            mesh,
-                            solver.mesh(),
-                            surface_index,
-                            i,
-                            j,
-                            component,
-                        )?;
-                        for (output, value) in context.evaluate(&direction)? {
-                            surface_result.output_mut(output).nodes[node_index][component] = value;
-                        }
-                    }
-                }
+        for (output, product) in outputs.into_iter().zip(products) {
+            for (surface, nodes) in result.iter_mut().zip(product.surfaces) {
+                surface.output_mut(output).nodes = nodes;
             }
         }
         Ok(result)
