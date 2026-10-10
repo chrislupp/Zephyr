@@ -6,7 +6,10 @@
 //! transposed solve per output rather than one primal solve per node
 //! coordinate — the reason to run this through an adjoint at all.
 
-use std::collections::HashMap;
+use std::{
+    collections::HashMap,
+    sync::{Mutex, MutexGuard},
+};
 
 use async_trait::async_trait;
 use philote_mdo::{
@@ -82,11 +85,32 @@ const FLIGHT_INPUTS: [&str; 6] = [
 ];
 
 /// Explicit discipline mapping a node mesh and flight condition to loads.
+///
+/// `outputs` selects coefficient names (comma-separated, default all six).
+/// `fixed_inputs` names inputs held constant by the caller's differentiation
+/// problem (default none). Their partials are not declared or returned; remove
+/// a name before using that input as a design variable. Forward evaluations
+/// still honor every supplied value, including fixed inputs.
+///
+/// One solved state is cached using exact equality of all input arrays. Option
+/// changes clear the cache. Function and derivative requests share that state;
+/// no approximate matching or numerical differentiation is used.
 #[derive(Debug)]
 pub struct VlmDiscipline {
     registry: VariableRegistry,
     surfaces: Vec<SurfaceOption>,
     consistent_forces: bool,
+    outputs: Vec<String>,
+    fixed_inputs: Vec<String>,
+    cache: Mutex<Option<SolvedState>>,
+}
+
+#[derive(Debug)]
+struct SolvedState {
+    inputs: ArrayMap,
+    mesh: MeshInput,
+    condition: FlightCondition,
+    solver: VortexLatticeSolver,
 }
 
 impl Default for VlmDiscipline {
@@ -95,6 +119,9 @@ impl Default for VlmDiscipline {
             registry: VariableRegistry::new(false),
             surfaces: vec![SurfaceOption::default()],
             consistent_forces: false,
+            outputs: OUTPUTS.iter().map(|s| (*s).into()).collect(),
+            fixed_inputs: Vec::new(),
+            cache: Mutex::new(None),
         }
     }
 }
@@ -107,7 +134,40 @@ impl VlmDiscipline {
             registry: VariableRegistry::new(false),
             surfaces,
             consistent_forces: false,
+            outputs: OUTPUTS.iter().map(|s| (*s).into()).collect(),
+            fixed_inputs: Vec::new(),
+            cache: Mutex::new(None),
         }
+    }
+
+    fn solved(&self, inputs: &ArrayMap) -> Result<MutexGuard<'_, Option<SolvedState>>> {
+        let mut cache = self
+            .cache
+            .lock()
+            .map_err(|_| rejected("cache", "poisoned solution cache"))?;
+        if cache.as_ref().is_none_or(|state| state.inputs != *inputs) {
+            *cache = None;
+            let mesh = self.build_mesh(inputs)?;
+            let condition = self.build_condition(inputs)?;
+            let mut solver = VortexLatticeSolver::new();
+            solver
+                .set_mesh(&mesh)
+                .map_err(|e| rejected("set_mesh", e.to_string()))?;
+            solver
+                .solve(&condition)
+                .map_err(|e| rejected("solve", e.to_string()))?;
+            *cache = Some(SolvedState {
+                inputs: inputs.clone(),
+                mesh,
+                condition,
+                solver,
+            });
+        }
+        Ok(cache)
+    }
+
+    fn active(&self, input: &str) -> bool {
+        !self.fixed_inputs.iter().any(|name| name == input)
     }
 
     /// The configured surfaces.
@@ -199,6 +259,8 @@ impl Discipline for VlmDiscipline {
     fn initialize(&mut self) -> Result<()> {
         self.add_option("num_surfaces", "int")?;
         self.add_option("consistent_forces", "bool")?;
+        self.add_option("outputs", "str")?;
+        self.add_option("fixed_inputs", "str")?;
         for key in [
             "surface_names",
             "surface_nx",
@@ -218,6 +280,20 @@ impl Discipline for VlmDiscipline {
     }
 
     fn set_options(&mut self, options: &HashMap<String, serde_json::Value>) -> Result<()> {
+        *self
+            .cache
+            .get_mut()
+            .map_err(|_| rejected("cache", "poisoned solution cache"))? = None;
+        if let Some(value) = options.get("outputs") {
+            let outputs = option_tokens(value, "outputs")?;
+            if outputs.is_empty() || outputs.iter().any(|s| !OUTPUTS.contains(&s.as_str())) {
+                return Err(invalid("outputs must select from CL,CD,CY,Cl,Cm,Cn"));
+            }
+            self.outputs = outputs;
+        }
+        if let Some(value) = options.get("fixed_inputs") {
+            self.fixed_inputs = option_tokens(value, "fixed_inputs")?;
+        }
         if let Some(value) = options.get("consistent_forces") {
             self.consistent_forces = super::option_bool(value);
         }
@@ -314,17 +390,36 @@ impl Discipline for VlmDiscipline {
         self.add_input("pitch_rate", &[1], "")?;
         self.add_input("yaw_rate", &[1], "")?;
 
-        for output in OUTPUTS {
-            self.add_output(output, &[1], "")?;
+        for input in &self.fixed_inputs {
+            let known = self.surfaces.iter().any(|s| s.name == *input)
+                || FLIGHT_INPUTS.contains(&input.as_str())
+                || [
+                    "reference_area",
+                    "reference_chord",
+                    "reference_span",
+                    "moment_ref_x",
+                    "moment_ref_y",
+                    "moment_ref_z",
+                    "dynamic_pressure",
+                ]
+                .contains(&input.as_str());
+            if !known {
+                return Err(invalid(format!("unknown fixed input {input}")));
+            }
+        }
+        for output in self.outputs.clone() {
+            self.add_output(&output, &[1], "")?;
         }
         Ok(())
     }
 
     fn setup_partials(&mut self) -> Result<()> {
         let names: Vec<String> = self.surfaces.iter().map(|s| s.name.clone()).collect();
-        for output in OUTPUTS {
+        for output in self.outputs.clone() {
             for name in &names {
-                self.declare_partials(output, name)?;
+                if self.active(name) {
+                    self.declare_partials(&output, name)?;
+                }
             }
             for input in [
                 "reference_area",
@@ -335,10 +430,14 @@ impl Discipline for VlmDiscipline {
                 "moment_ref_z",
                 "dynamic_pressure",
             ] {
-                self.declare_partials(output, input)?;
+                if self.active(input) {
+                    self.declare_partials(&output, input)?;
+                }
             }
             for input in FLIGHT_INPUTS {
-                self.declare_partials(output, input)?;
+                if self.active(input) {
+                    self.declare_partials(&output, input)?;
+                }
             }
         }
         Ok(())
@@ -348,21 +447,15 @@ impl Discipline for VlmDiscipline {
 #[async_trait]
 impl ExplicitDiscipline for VlmDiscipline {
     async fn compute(&self, inputs: &ArrayMap) -> Result<ArrayMap> {
-        let mesh = self.build_mesh(inputs)?;
-        let condition = self.build_condition(inputs)?;
-
-        let mut solver = VortexLatticeSolver::new();
-        solver
-            .set_mesh(&mesh)
-            .map_err(|error| rejected("set_mesh", error.to_string()))?;
-        let solution = solver
-            .solve(&condition)
-            .map_err(|error| rejected("solve", error.to_string()))?;
+        let cache = self.solved(inputs)?;
+        let state = cache.as_ref().expect("solved state");
+        let (mesh, condition, solver) = (&state.mesh, &state.condition, &state.solver);
+        let solution = solver.solution();
         let results = ForceCalculator::new().compute_with_references(
             &mesh.reference,
             solver.mesh(),
-            &solution,
-            &condition,
+            solution,
+            condition,
         );
 
         let mut outputs = HashMap::new();
@@ -374,47 +467,59 @@ impl ExplicitDiscipline for VlmDiscipline {
             ("Cm", results.coefficients.pitch),
             ("Cn", results.coefficients.yaw),
         ] {
-            outputs.insert(name.to_string(), scalar(value));
+            if self.outputs.iter().any(|s| s == name) {
+                outputs.insert(name.to_string(), scalar(value));
+            }
         }
         Ok(outputs)
     }
 
     async fn compute_partials(&self, inputs: &ArrayMap) -> Result<PartialMap> {
-        let mesh = self.build_mesh(inputs)?;
-        let condition = self.build_condition(inputs)?;
-
-        let mut solver = VortexLatticeSolver::new();
-        solver
-            .set_mesh(&mesh)
-            .map_err(|error| rejected("set_mesh", error.to_string()))?;
-        let solution = solver
-            .solve(&condition)
-            .map_err(|error| rejected("solve", error.to_string()))?;
+        let cache = self.solved(inputs)?;
+        let state = cache.as_ref().expect("solved state");
+        let (mesh, condition, solver) = (&state.mesh, &state.condition, &state.solver);
+        let solution = solver.solution();
         let results = ForceCalculator::new().compute_with_references(
             &mesh.reference,
             solver.mesh(),
-            &solution,
-            &condition,
+            solution,
+            condition,
         );
 
         let mut calculator = GradientCalculator::new();
         calculator.set_output_selection(crate::gradients::OutputSelection {
             induced_drag: false,
-            ..crate::gradients::OutputSelection::all()
+            lift: self.outputs.iter().any(|s| s == "CL"),
+            drag: self.outputs.iter().any(|s| s == "CD"),
+            side: self.outputs.iter().any(|s| s == "CY"),
+            roll: self.outputs.iter().any(|s| s == "Cl"),
+            pitch: self.outputs.iter().any(|s| s == "Cm"),
+            yaw: self.outputs.iter().any(|s| s == "Cn"),
         });
-        calculator
-            .set_mesh(&mesh)
-            .map_err(|error| rejected("set_mesh", error.to_string()))?;
         let node_gradients = calculator
-            .compute_mesh_node_gradients(&condition)
+            .node_gradients_at_solution(mesh, solver, condition)
             .map_err(|error| rejected("compute_mesh_node_gradients", error.to_string()))?;
+        let alpha_only = [
+            "beta",
+            "mach",
+            "roll_rate",
+            "pitch_rate",
+            "yaw_rate",
+            "moment_ref_x",
+            "moment_ref_y",
+            "moment_ref_z",
+        ]
+        .iter()
+        .all(|name| !self.active(name));
         let flight = calculator
-            .compute_flight_condition_gradients(&condition)
+            .flight_gradients_at_solution(solver, condition, alpha_only)
             .map_err(|error| rejected("compute_flight_condition_gradients", error.to_string()))?;
 
         let mut partials: PartialMap = HashMap::new();
         let mut insert = |output: &str, input: &str, values: Vec<f64>| {
-            partials.insert((output.to_string(), input.to_string()), flat(values));
+            if self.outputs.iter().any(|s| s == output) && self.active(input) {
+                partials.insert((output.to_string(), input.to_string()), flat(values));
+            }
         };
 
         // Node partials, surface by surface.

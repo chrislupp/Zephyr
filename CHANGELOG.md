@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+- Philote VLM function and derivative requests reuse one solved state, keyed by
+  all input arrays and invalidated when options change. Node and flight
+  derivatives reuse that factorization instead of rebuilding separate solvers.
+- Optional Philote `outputs` and `fixed_inputs` selections restrict returned
+  coefficients and declared partials. Defaults retain the complete interface.
+  Alpha-only requests bypass unused Mach/rate/reference derivative calculations.
+
 ### Added
 - Opt-in `MeshInput::consistent_forces` and Philote `consistent_forces` option:
   include the self bound leg in collocation, evaluate Kutta–Joukowski induced
