@@ -34,6 +34,7 @@ fn duplicated_wing(nx: usize, ny: usize) -> MeshInput {
         }
     }
     MeshInput {
+        consistent_forces: false,
         surfaces: vec![surface],
         reference: reference(),
     }
@@ -62,6 +63,7 @@ fn oblique_duplicated(nx: usize, ny: usize) -> MeshInput {
         }
     }
     MeshInput {
+        consistent_forces: false,
         surfaces: vec![surface],
         reference: reference(),
     }
@@ -89,6 +91,7 @@ fn offset_plane_wing(nx: usize, ny: usize) -> MeshInput {
         }
     }
     MeshInput {
+        consistent_forces: false,
         surfaces: vec![surface],
         reference: reference(),
     }
@@ -113,6 +116,7 @@ fn plain_wing(nx: usize, ny: usize) -> MeshInput {
         }
     }
     MeshInput {
+        consistent_forces: false,
         surfaces: vec![surface],
         reference: reference(),
     }

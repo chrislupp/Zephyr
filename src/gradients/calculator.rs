@@ -321,13 +321,15 @@ impl GradientCalculator {
         let mut solver = self.configured_solver()?;
         solver.solve(condition)?;
         let mut result = FullGradients::default();
-        let velocity_mach = velocity_influence_mach_derivative(&solver);
+        let velocity_mach = velocity_influence_mach_derivative(&solver, true);
         let induced_velocity_mach = &velocity_mach * &solver.solution().circulation;
+        let collocation_mach =
+            velocity_influence_mach_derivative(&solver, false) * &solver.solution().circulation;
         let residual_mach = VecX::from_fn(solver.mesh().vortex_count(), |row, _| {
             -solver.linearized_normals()[row].dot(&Vec3::new(
-                induced_velocity_mach[3 * row],
-                induced_velocity_mach[3 * row + 1],
-                induced_velocity_mach[3 * row + 2],
+                collocation_mach[3 * row],
+                collocation_mach[3 * row + 1],
+                collocation_mach[3 * row + 2],
             ))
         });
         // Every selected output needs the same adjoint vector for alpha, beta
@@ -656,6 +658,38 @@ impl GradientCalculator {
         };
         let mut solver = self.configured_solver()?;
         solver.solve(condition)?;
+        if mesh.consistent_forces && !self.output_selection.induced_drag {
+            let outputs: Vec<_> = OUTPUTS
+                .into_iter()
+                .filter(|o| self.output_selection.contains(*o))
+                .collect();
+            let reference = solver.reference_quantities();
+            let points = vec![reference.moment_reference_point; solver.mesh().strip_count()];
+            let adjoint = super::StripLoadAdjoint::new(&solver, condition, &points)?;
+            let columns: Vec<_> = outputs
+                .iter()
+                .map(|&output| {
+                    let (force, moment) =
+                        super::forces::body_output_cotangent(output, condition.alpha);
+                    super::StripLoadCotangent {
+                        force: vec![force / reference.area; points.len()],
+                        moment: vec![moment / (reference.area * reference.chord); points.len()],
+                    }
+                })
+                .collect();
+            let values = adjoint.mesh_node_cotangents(mesh, &columns)?;
+            let mut result: Vec<_> = mesh
+                .surfaces
+                .iter()
+                .map(|s| SurfaceMeshNodeGradients::zeros(s.name.clone(), s.nx, s.ny))
+                .collect();
+            for (output, value) in outputs.into_iter().zip(values) {
+                for (surface, nodes) in result.iter_mut().zip(value.surfaces) {
+                    surface.output_mut(output).nodes = nodes;
+                }
+            }
+            return Ok(result);
+        }
         let context = GeometryAdjointContext::new(&solver, condition, self.output_selection)?;
         let mut result: Vec<_> = mesh
             .surfaces

@@ -340,7 +340,7 @@ pub fn force_circulation_gradient(
                 Vec3::zeros()
             };
         let line = vortex.bound_vortex_right - vortex.bound_vortex_left;
-        let arm = vortex.control_point - reference.moment_reference_point;
+        let arm = mesh.force_point(vortex) - reference.moment_reference_point;
         let combined_seed = force_seed + moment_seed.cross(&arm) / reference.chord;
         direct[i] = 2.0 / reference.area * combined_seed.dot(&velocity.cross(&line));
         let cotangent = 2.0 * solution.circulation[i] / reference.area * line.cross(&combined_seed);
@@ -454,7 +454,7 @@ pub fn force_induced_velocity_gradient(
         .enumerate()
         .map(|(index, vortex)| {
             let line = vortex.bound_vortex_right - vortex.bound_vortex_left;
-            let arm = vortex.control_point - reference.moment_reference_point;
+            let arm = mesh.force_point(vortex) - reference.moment_reference_point;
             let combined_seed = force_seed + moment_seed.cross(&arm) / reference.chord;
             2.0 * solution.circulation[index] / reference.area * line.cross(&combined_seed)
         })
@@ -508,10 +508,15 @@ pub fn force_geometry_jvp(
         let panel_force = 2.0 * solution.circulation[index] * velocity.cross(&line);
         let panel_force_direction =
             2.0 * solution.circulation[index] * velocity.cross(&line_direction);
-        let arm = vortex.control_point - reference.moment_reference_point;
+        let arm = mesh.force_point(vortex) - reference.moment_reference_point;
         force_derivative += panel_force_direction;
-        moment_derivative +=
-            control_point_direction[index].cross(&panel_force) + arm.cross(&panel_force_direction);
+        moment_derivative += (if mesh.consistent_forces() {
+            0.5 * (bound_left_direction[index] + bound_right_direction[index])
+        } else {
+            control_point_direction[index]
+        })
+        .cross(&panel_force)
+            + arm.cross(&panel_force_direction);
     }
     force_derivative /= reference.area;
     moment_derivative /= reference.area * reference.chord;
@@ -539,7 +544,7 @@ fn force_and_moment(
             * solution.circulation[index]
             * velocity.cross(&(vortex.bound_vortex_right - vortex.bound_vortex_left));
         force += panel_force;
-        moment += (vortex.control_point - reference.moment_reference_point).cross(&panel_force);
+        moment += (mesh.force_point(vortex) - reference.moment_reference_point).cross(&panel_force);
     }
     (
         force / reference.area,
@@ -569,7 +574,7 @@ fn base_force_and_moment(
             * solution.circulation[index]
             * (freestream + induced).cross(&(vortex.bound_vortex_right - vortex.bound_vortex_left));
         force += panel_force;
-        moment += (vortex.control_point - reference.moment_reference_point).cross(&panel_force);
+        moment += (mesh.force_point(vortex) - reference.moment_reference_point).cross(&panel_force);
     }
     (
         force / reference.area,
@@ -577,7 +582,7 @@ fn base_force_and_moment(
     )
 }
 
-fn body_output_cotangent(output: AeroOutput, alpha: Scalar) -> (Vec3, Vec3) {
+pub(crate) fn body_output_cotangent(output: AeroOutput, alpha: Scalar) -> (Vec3, Vec3) {
     let (sin, cos) = alpha.sin_cos();
     match output {
         AeroOutput::Lift => (Vec3::new(-sin, 0.0, cos), Vec3::zeros()),

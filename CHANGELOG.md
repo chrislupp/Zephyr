@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- Opt-in `MeshInput::consistent_forces` and Philote `consistent_forces` option:
+  include the self bound leg in collocation, evaluate Kutta–Joukowski induced
+  velocity at bound centers, and take moments at those same centers. Defaults
+  remain unchanged for frozen legacy parity. Mesh, alpha, and Mach derivatives
+  use separate collocation and force influence matrices in this mode.
+- Batched strip-adjoint calculation of the six mesh-node coefficient gradients
+  in corrected-force mode when Trefftz induced drag is not requested. Philote
+  uses this path to avoid one aerodynamic geometry sweep per mesh node.
+- Exact single-horseshoe force/moment and corrected mesh-gradient regression
+  checks for the new force convention.
+
 ## [0.5.0] - 2026-09-05
 
 ### Added

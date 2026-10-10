@@ -238,7 +238,7 @@ impl<'a> GeometryAdjointContext<'a> {
                     &target.normal_at_control_point,
                     core,
                     pg,
-                    row != column,
+                    mesh.consistent_forces() || row != column,
                 );
                 let entry_direction = gradient.bound_left.dot(&direction.bound_left[column])
                     + gradient.bound_right.dot(&direction.bound_right[column])
@@ -284,7 +284,7 @@ fn induced_velocity_geometry_contraction(
             }
             let core = core_radius(mesh, column, target.component_index);
             let field_gradient = horseshoe_velocity_vjp_field_point(
-                &target.control_point,
+                &mesh.force_point(target),
                 &source.bound_vortex_left,
                 &source.bound_vortex_right,
                 pg,
@@ -293,7 +293,7 @@ fn induced_velocity_geometry_contraction(
                 seed,
             );
             let left_gradient = horseshoe_velocity_vjp_bound_left(
-                &target.control_point,
+                &mesh.force_point(target),
                 &source.bound_vortex_left,
                 &source.bound_vortex_right,
                 pg,
@@ -302,7 +302,7 @@ fn induced_velocity_geometry_contraction(
                 seed,
             );
             let right_gradient = horseshoe_velocity_vjp_bound_right(
-                &target.control_point,
+                &mesh.force_point(target),
                 &source.bound_vortex_left,
                 &source.bound_vortex_right,
                 pg,
@@ -311,8 +311,13 @@ fn induced_velocity_geometry_contraction(
                 seed,
             );
             result += gamma
-                * (field_gradient.dot(&direction.control_point[row])
-                    + left_gradient.dot(&direction.bound_left[column])
+                * (field_gradient.dot(
+                    &(if mesh.consistent_forces() {
+                        0.5 * (direction.bound_left[row] + direction.bound_right[row])
+                    } else {
+                        direction.control_point[row]
+                    }),
+                ) + left_gradient.dot(&direction.bound_left[column])
                     + right_gradient.dot(&direction.bound_right[column]));
         }
     }

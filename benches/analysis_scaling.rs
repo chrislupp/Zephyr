@@ -16,6 +16,7 @@ fn mesh(ny: usize) -> MeshInput {
         }
     }
     MeshInput {
+        consistent_forces: false,
         surfaces: vec![surface],
         reference: ReferenceQuantities {
             area: 10.0,

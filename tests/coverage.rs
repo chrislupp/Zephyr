@@ -338,6 +338,7 @@ fn geometry_accessors_validation_and_gradient_configuration_are_checked() {
     nonfinite.nodes[0].x = f64::NAN;
     assert!(nonfinite.validate().is_err());
     let invalid_reference = MeshInput {
+        consistent_forces: false,
         surfaces: vec![SurfaceMesh::new("mesh", 1, 1)],
         reference: ReferenceQuantities {
             area: 0.0,

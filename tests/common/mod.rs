@@ -123,6 +123,7 @@ pub fn rectangular_mesh(nx: usize, ny: usize) -> MeshInput {
         }
     }
     MeshInput {
+        consistent_forces: false,
         surfaces: vec![surface],
         reference: ReferenceQuantities {
             area: 4.0,

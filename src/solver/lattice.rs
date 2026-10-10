@@ -34,6 +34,24 @@ impl Default for VortexLattice {
 }
 
 impl VortexLattice {
+    /// Whether the direct mesh requests physically consistent force locations.
+    #[must_use]
+    pub fn consistent_forces(&self) -> bool {
+        self.mesh_input
+            .as_ref()
+            .is_some_and(|input| input.consistent_forces)
+    }
+
+    /// Location where Kutta-Joukowski forces act for the selected convention.
+    #[must_use]
+    pub fn force_point(&self, vortex: &HorseshoeVortex) -> Vec3 {
+        if self.consistent_forces() {
+            vortex.bound_vortex_center
+        } else {
+            vortex.control_point
+        }
+    }
+
     #[must_use]
     pub fn new() -> Self {
         Self::default()

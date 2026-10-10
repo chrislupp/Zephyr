@@ -378,7 +378,7 @@ impl<'a> StripLoadAdjoint<'a> {
             for offset in 0..strip.num_vortices {
                 let index = strip.first_vortex_index + offset;
                 let vortex = &mesh.vortices()[index];
-                let arm = vortex.control_point - point;
+                let arm = mesh.force_point(vortex) - point;
                 let line = vortex.bound_vortex_right - vortex.bound_vortex_left;
                 for (column, cotangent) in columns.iter().enumerate() {
                     let seed =
@@ -449,7 +449,12 @@ impl<'a> StripLoadAdjoint<'a> {
                     for d in 0..3 {
                         out.bound_right[(3 * index + d, column)] += line[d];
                         out.bound_left[(3 * index + d, column)] -= line[d];
-                        out.control_point[(3 * index + d, column)] += arm[d];
+                        if mesh.consistent_forces() {
+                            out.bound_left[(3 * index + d, column)] += 0.5 * arm[d];
+                            out.bound_right[(3 * index + d, column)] += 0.5 * arm[d];
+                        } else {
+                            out.control_point[(3 * index + d, column)] += arm[d];
+                        }
                     }
                 }
             }
@@ -491,7 +496,7 @@ impl<'a> StripLoadAdjoint<'a> {
                     continue;
                 }
                 let core = core_radius(mesh, column, target.component_index);
-                let include_bound = row != column;
+                let include_bound = mesh.consistent_forces() || row != column;
                 let jacobians = horseshoe_velocity_jacobians(
                     &target.control_point,
                     &source.bound_vortex_left,
@@ -544,6 +549,18 @@ impl<'a> StripLoadAdjoint<'a> {
 
                 // Load path: the induced velocity at this control point moves
                 // when either the target or the source moves.
+                let jacobians = if mesh.consistent_forces() {
+                    horseshoe_velocity_jacobians(
+                        &mesh.force_point(target),
+                        &source.bound_vortex_left,
+                        &source.bound_vortex_right,
+                        self.prandtl_glauert,
+                        core,
+                        row != column,
+                    )
+                } else {
+                    jacobians
+                };
                 out.bound_left.rows_mut(3 * column, 3).gemm_tr(
                     gamma,
                     &jacobians.bound_left,
@@ -556,12 +573,27 @@ impl<'a> StripLoadAdjoint<'a> {
                     &seed_rows,
                     1.0,
                 );
-                out.control_point.rows_mut(3 * row, 3).gemm_tr(
-                    gamma,
-                    &jacobians.field_point,
-                    &seed_rows,
-                    1.0,
-                );
+                if mesh.consistent_forces() {
+                    out.bound_left.rows_mut(3 * row, 3).gemm_tr(
+                        0.5 * gamma,
+                        &jacobians.field_point,
+                        &seed_rows,
+                        1.0,
+                    );
+                    out.bound_right.rows_mut(3 * row, 3).gemm_tr(
+                        0.5 * gamma,
+                        &jacobians.field_point,
+                        &seed_rows,
+                        1.0,
+                    );
+                } else {
+                    out.control_point.rows_mut(3 * row, 3).gemm_tr(
+                        gamma,
+                        &jacobians.field_point,
+                        &seed_rows,
+                        1.0,
+                    );
+                }
             }
 
             // The right-hand side is the freestream and rotation normalwash,

@@ -86,6 +86,7 @@ const FLIGHT_INPUTS: [&str; 6] = [
 pub struct VlmDiscipline {
     registry: VariableRegistry,
     surfaces: Vec<SurfaceOption>,
+    consistent_forces: bool,
 }
 
 impl Default for VlmDiscipline {
@@ -93,6 +94,7 @@ impl Default for VlmDiscipline {
         Self {
             registry: VariableRegistry::new(false),
             surfaces: vec![SurfaceOption::default()],
+            consistent_forces: false,
         }
     }
 }
@@ -104,6 +106,7 @@ impl VlmDiscipline {
         Self {
             registry: VariableRegistry::new(false),
             surfaces,
+            consistent_forces: false,
         }
     }
 
@@ -115,7 +118,10 @@ impl VlmDiscipline {
 
     /// Assemble a [`MeshInput`] from the incoming node arrays.
     fn build_mesh(&self, inputs: &ArrayMap) -> Result<MeshInput> {
-        let mut mesh = MeshInput::default();
+        let mut mesh = MeshInput {
+            consistent_forces: self.consistent_forces,
+            ..MeshInput::default()
+        };
         for surface in &self.surfaces {
             let nodes = sized_input(inputs, &surface.name, surface.node_values())?;
             let mut generated = SurfaceMesh::new(&surface.name, surface.nx, surface.ny);
@@ -192,6 +198,7 @@ impl Discipline for VlmDiscipline {
 
     fn initialize(&mut self) -> Result<()> {
         self.add_option("num_surfaces", "int")?;
+        self.add_option("consistent_forces", "bool")?;
         for key in [
             "surface_names",
             "surface_nx",
@@ -211,6 +218,9 @@ impl Discipline for VlmDiscipline {
     }
 
     fn set_options(&mut self, options: &HashMap<String, serde_json::Value>) -> Result<()> {
+        if let Some(value) = options.get("consistent_forces") {
+            self.consistent_forces = super::option_bool(value);
+        }
         let count = match options.get("num_surfaces") {
             Some(value) => option_usize(value, "num_surfaces")?,
             None => self.surfaces.len(),
@@ -388,6 +398,10 @@ impl ExplicitDiscipline for VlmDiscipline {
         );
 
         let mut calculator = GradientCalculator::new();
+        calculator.set_output_selection(crate::gradients::OutputSelection {
+            induced_drag: false,
+            ..crate::gradients::OutputSelection::all()
+        });
         calculator
             .set_mesh(&mesh)
             .map_err(|error| rejected("set_mesh", error.to_string()))?;

@@ -202,7 +202,7 @@ impl ForceCalculator {
             let line = vortex.bound_vortex_right - vortex.bound_vortex_left;
             let panel_force = 2.0 * solution.circulation[index] * velocity.cross(&line);
             force += panel_force;
-            moment += (vortex.control_point - loads.quarter_chord_position).cross(&panel_force);
+            moment += (mesh.force_point(vortex) - loads.quarter_chord_position).cross(&panel_force);
             normal_loading += strip.chord_center
                 * panel_force.dot(&Vec3::new(
                     0.0,

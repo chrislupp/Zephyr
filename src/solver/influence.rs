@@ -761,7 +761,7 @@ impl<'a> InfluenceMatrixBuilder<'a> {
     /// on the same operands in the same order as the two-pass version. Only
     /// the traversal order over mutually independent elements changes, plus
     /// hoisting of values that depend solely on the source panel.
-    fn assemble<const WITH_AIC: bool>(&self) -> Assembly {
+    fn assemble<const WITH_AIC: bool>(&self, force_points: bool) -> Assembly {
         let vortices = self.mesh.vortices();
         let n = vortices.len();
         if n == 0 {
@@ -775,7 +775,11 @@ impl<'a> InfluenceMatrixBuilder<'a> {
         let targets: Vec<Target> = vortices
             .iter()
             .map(|vortex| Target {
-                control_point: vortex.control_point,
+                control_point: if force_points {
+                    self.mesh.force_point(vortex)
+                } else {
+                    vortex.control_point
+                },
                 normal: vortex.normal_at_control_point,
                 component_index: vortex.component_index,
             })
@@ -876,7 +880,7 @@ impl<'a> InfluenceMatrixBuilder<'a> {
                         &right,
                         self.prandtl_glauert_factor,
                         core,
-                        i != j,
+                        (!force_points && self.mesh.consistent_forces()) || i != j,
                     );
                     if let Some((image_left, image_right, midpoint, factor)) = y_image {
                         let include_bound = !(self.symmetry.y_symmetry == SymmetryType::Symmetric
@@ -943,8 +947,14 @@ impl<'a> InfluenceMatrixBuilder<'a> {
     }
 
     #[must_use]
+    pub fn force_velocity_matrix(&self) -> MatX {
+        self.assemble::<false>(true).velocity
+    }
+
+    /// Velocity at collocation points.
+    #[must_use]
     pub fn velocity_influence_matrix(&self) -> MatX {
-        self.assemble::<false>().velocity
+        self.assemble::<false>(false).velocity
     }
 
     #[must_use]
@@ -966,7 +976,7 @@ impl<'a> InfluenceMatrixBuilder<'a> {
     /// singular system — avoid a second full pass over the assembled matrix.
     #[must_use]
     pub fn normalwash_and_velocity_checked(&self) -> (MatX, MatX, bool) {
-        let assembly = self.assemble::<true>();
+        let assembly = self.assemble::<true>(false);
         (
             assembly
                 .aic

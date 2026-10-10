@@ -5,7 +5,10 @@ use crate::solver::VortexLatticeSolver;
 
 use super::horseshoe_velocity_pg_derivative;
 
-pub(crate) fn velocity_influence_mach_derivative(solver: &VortexLatticeSolver) -> MatX {
+pub(crate) fn velocity_influence_mach_derivative(
+    solver: &VortexLatticeSolver,
+    force_points: bool,
+) -> MatX {
     let mesh = solver.mesh();
     let n = mesh.vortex_count();
     let mach = solver.current_mach();
@@ -18,6 +21,11 @@ pub(crate) fn velocity_influence_mach_derivative(solver: &VortexLatticeSolver) -
     let mut matrix = MatX::zeros(3 * n, n);
     for row in 0..n {
         let target = &mesh.vortices()[row];
+        let point = if force_points {
+            mesh.force_point(target)
+        } else {
+            target.control_point
+        };
         for column in 0..n {
             let source = &mesh.vortices()[column];
             let width = (source.bound_vortex_right - source.bound_vortex_left).norm();
@@ -28,12 +36,12 @@ pub(crate) fn velocity_influence_mach_derivative(solver: &VortexLatticeSolver) -
                 (0.0001 * source.local_chord).max(0.0001 * width)
             };
             let mut derivative = horseshoe_velocity_pg_derivative(
-                &target.control_point,
+                &point,
                 &source.bound_vortex_left,
                 &source.bound_vortex_right,
                 pg,
                 core,
-                row != column,
+                (!force_points && mesh.consistent_forces()) || row != column,
             );
             if symmetry.y_symmetry != SymmetryType::None {
                 let offset = 2.0 * symmetry.y_symmetry_plane;
@@ -48,10 +56,10 @@ pub(crate) fn velocity_influence_mach_derivative(solver: &VortexLatticeSolver) -
                     source.bound_vortex_left.z,
                 );
                 let include_bound = !(symmetry.y_symmetry == SymmetryType::Symmetric
-                    && (target.control_point - 0.5 * (left + right)).norm_squared() < EPSILON);
+                    && (point - 0.5 * (left + right)).norm_squared() < EPSILON);
                 derivative += symmetry.y_symmetry.factor()
                     * horseshoe_velocity_pg_derivative(
-                        &target.control_point,
+                        &point,
                         &left,
                         &right,
                         pg,
@@ -72,14 +80,7 @@ pub(crate) fn velocity_influence_mach_derivative(solver: &VortexLatticeSolver) -
                     offset - source.bound_vortex_left.z,
                 );
                 derivative += symmetry.z_symmetry.factor()
-                    * horseshoe_velocity_pg_derivative(
-                        &target.control_point,
-                        &left,
-                        &right,
-                        pg,
-                        core,
-                        true,
-                    );
+                    * horseshoe_velocity_pg_derivative(&point, &left, &right, pg, core, true);
                 if symmetry.y_symmetry != SymmetryType::None {
                     let y_offset = 2.0 * symmetry.y_symmetry_plane;
                     let z_offset = 2.0 * symmetry.z_symmetry_plane;
@@ -95,14 +96,7 @@ pub(crate) fn velocity_influence_mach_derivative(solver: &VortexLatticeSolver) -
                     );
                     derivative += symmetry.y_symmetry.factor()
                         * symmetry.z_symmetry.factor()
-                        * horseshoe_velocity_pg_derivative(
-                            &target.control_point,
-                            &left,
-                            &right,
-                            pg,
-                            core,
-                            true,
-                        );
+                        * horseshoe_velocity_pg_derivative(&point, &left, &right, pg, core, true);
                 }
             }
             derivative *= pg_direction;

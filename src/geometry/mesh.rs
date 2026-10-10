@@ -143,6 +143,9 @@ impl SurfaceMesh {
 /// Complete direct-mesh analysis input.
 #[derive(Clone, Debug, Default)]
 pub struct MeshInput {
+    /// Use full collocation self influence and bound-vortex force evaluation.
+    /// False retains the historical v0.2 coefficient convention.
+    pub consistent_forces: bool,
     /// Surface grids.
     pub surfaces: Vec<SurfaceMesh>,
     /// Normalization quantities.
