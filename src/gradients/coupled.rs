@@ -476,6 +476,46 @@ impl<'a> StripLoadAdjoint<'a> {
         adjoints: &MatX,
         out: &mut LatticeCotangents,
     ) {
+        let n = self.mesh().vortex_count();
+        if !self.mesh().consistent_forces() || n < 128 {
+            self.accumulate_pairwise_rows(velocity_seed, adjoints, out, 0..n);
+            return;
+        }
+        // Fixed blocks and ordered reduction make the arithmetic independent
+        // of the pool size (and of whether the parallel feature is enabled).
+        // Bound scratch storage to 16 O(N * outputs) blocks, not O(N^2).
+        let block_size = n.div_ceil(16);
+        let blocks: Vec<_> = (0..n)
+            .step_by(block_size)
+            .map(|start| start..(start + block_size).min(n))
+            .collect();
+        let evaluate = |rows: &std::ops::Range<usize>| {
+            let mut local = LatticeCotangents::zeros(n, adjoints.ncols());
+            self.accumulate_pairwise_rows(velocity_seed, adjoints, &mut local, rows.clone());
+            local
+        };
+        #[cfg(feature = "parallel")]
+        let partials: Vec<_> = {
+            use rayon::prelude::*;
+            blocks.par_iter().map(evaluate).collect()
+        };
+        #[cfg(not(feature = "parallel"))]
+        let partials: Vec<_> = blocks.iter().map(evaluate).collect();
+        for local in partials {
+            out.bound_left += local.bound_left;
+            out.bound_right += local.bound_right;
+            out.control_point += local.control_point;
+            out.normal += local.normal;
+        }
+    }
+
+    fn accumulate_pairwise_rows(
+        &self,
+        velocity_seed: &MatX,
+        adjoints: &MatX,
+        out: &mut LatticeCotangents,
+        rows: std::ops::Range<usize>,
+    ) {
         let mesh = self.mesh();
         let solution = self.solver.solution();
         let freestream = VortexLatticeSolver::freestream_direction(self.condition);
@@ -485,7 +525,8 @@ impl<'a> StripLoadAdjoint<'a> {
             self.condition.yaw_rate,
         );
 
-        for (row, target) in mesh.vortices().iter().enumerate() {
+        for row in rows {
+            let target = &mesh.vortices()[row];
             let normal = target.normal_at_control_point;
             let seed_rows = velocity_seed.rows(3 * row, 3);
             let adjoint_row = adjoints.row(row);

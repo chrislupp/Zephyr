@@ -28,7 +28,9 @@ vtk = ["dep:vtkio"]
 # Multithreads influence assembly over source panels. Off by default so the
 # standard build stays single-threaded. Results are bit-identical to the serial
 # build and independent of the thread count, because each source column writes a
-# disjoint slice and reads nothing another column writes.
+# disjoint slice and reads nothing another column writes. Corrected-force mesh
+# adjoints also parallelize their pairwise geometry sweep, using fixed blocks
+# and ordered reduction in both the serial and threaded builds.
 #
 # Deliberately does NOT enable `faer/rayon`: gemm's cache-blocking parameters
 # differ between its sequential and rayon paths, which changes the order in

@@ -8,6 +8,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Changed
+- The `parallel` feature also threads the corrected-force mesh-adjoint pairwise
+  geometry sweep at 128 or more panels. Sixteen fixed blocks and an ordered
+  reduction preserve reproducibility across thread counts and serial/parallel
+  builds, with bounded O(N * outputs) scratch storage. Legacy-force and small
+  meshes retain their existing serial accumulation.
 - Philote VLM function and derivative requests reuse one solved state, keyed by
   all input arrays and invalidated when options change. Node and flight
   derivatives reuse that factorization instead of rebuilding separate solvers.

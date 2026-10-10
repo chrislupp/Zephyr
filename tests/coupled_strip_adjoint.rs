@@ -286,3 +286,94 @@ fn a_flight_condition_cotangent_of_the_wrong_length_is_an_error() {
     assert!(adjoint.flight_condition_cotangents(&short).is_err());
     assert!(adjoint.flight_condition_cotangents(&[]).unwrap().is_empty());
 }
+
+#[test]
+fn threaded_geometry_gradients_are_reproducible_and_match_resolves() {
+    // An uneven block count, above the parallel threshold.
+    let mut surface = SurfaceMesh::new("Wing", 2, 65);
+    for i in 0..=2 {
+        for j in 0..=65 {
+            let eta = j as f64 / 65.0;
+            surface
+                .set_node(
+                    i,
+                    j,
+                    Vec3::new(
+                        0.2 * eta + (1.0 - 0.3 * eta) * i as f64 / 2.0,
+                        6.0 * eta,
+                        0.1 * eta,
+                    ),
+                )
+                .unwrap();
+        }
+    }
+    let mut input = MeshInput {
+        consistent_forces: true,
+        ..MeshInput::default()
+    };
+    input.surfaces.push(surface);
+    let flight = condition();
+    let points = moment_points(65);
+    let columns = cotangents(65);
+    let evaluate = |threads| {
+        let calculate = || {
+            let mut solver = VortexLatticeSolver::new();
+            solver.set_mesh(&input).unwrap();
+            solver.solve(&flight).unwrap();
+            StripLoadAdjoint::new(&solver, &flight, &points)
+                .unwrap()
+                .mesh_node_cotangents(&input, &columns)
+                .unwrap()
+        };
+        #[cfg(feature = "parallel")]
+        {
+            rayon::ThreadPoolBuilder::new()
+                .num_threads(threads)
+                .build()
+                .unwrap()
+                .install(calculate)
+        }
+        #[cfg(not(feature = "parallel"))]
+        {
+            let _ = threads;
+            calculate()
+        }
+    };
+    let serial = evaluate(1);
+    #[cfg(feature = "parallel")]
+    for threads in [2, 4, 8] {
+        let threaded = evaluate(threads);
+        for (a, b) in serial.iter().zip(&threaded) {
+            assert_eq!(a.surfaces, b.surfaces);
+        }
+    }
+    // Test-only independent directional difference through a whole re-solve.
+    let directions: Vec<_> = (0..input.surfaces[0].node_count())
+        .map(|i| {
+            let t = i as f64;
+            Vec3::new(0.02 * t.sin(), 0.03 * t.cos(), 0.01 * (0.7 * t).sin())
+        })
+        .collect();
+    let h = 1e-5;
+    let mut plus = input.clone();
+    let mut minus = input.clone();
+    for ((p, m), d) in plus.surfaces[0]
+        .nodes
+        .iter_mut()
+        .zip(&mut minus.surfaces[0].nodes)
+        .zip(&directions)
+    {
+        *p += h * d;
+        *m -= h * d;
+    }
+    let forward = functionals_at(&plus, &points, &columns, &flight);
+    let backward = functionals_at(&minus, &points, &columns, &flight);
+    for ((gradient, p), m) in serial.iter().zip(forward).zip(backward) {
+        let analytic: f64 = gradient.surfaces[0]
+            .iter()
+            .zip(&directions)
+            .map(|(g, d)| g.dot(d))
+            .sum();
+        assert!((analytic - (p - m) / (2.0 * h)).abs() < 1e-6);
+    }
+}
