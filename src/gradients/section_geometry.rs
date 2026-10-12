@@ -405,6 +405,49 @@ fn write_interval(
             );
             result.local_chord[vortex_index] = chord_center_direction;
 
+            // Control coverage depends on chord-weighted hinge position;
+            // inferred axes depend on the pre-normal-recalculation y-z span.
+            let mut influence = 0;
+            for control_left in left.control_surfaces() {
+                let Some(control_right) = right
+                    .control_surfaces()
+                    .iter()
+                    .find(|control| control.name == control_left.name)
+                else {
+                    continue;
+                };
+                let hinge = (1.0 - fc) * control_left.hinge_x_fraction * chord_left
+                    + fc * control_right.hinge_x_fraction * chord_right;
+                let d_hinge = (1.0 - fc) * control_left.hinge_x_fraction * left_seed.chord
+                    + fc * control_right.hinge_x_fraction * right_seed.chord;
+                let fraction = hinge.abs() / strip.chord_center;
+                let d_fraction = (hinge.signum() * d_hinge - fraction * chord_center_direction)
+                    / strip.chord_center;
+                let dx = edges[chord_index + 1] - edges[chord_index];
+                let t = (fraction - edges[chord_index]) / dx;
+                let base_gain = (1.0 - fc) * control_left.gain + fc * control_right.gain;
+                let overlap = if hinge >= 0.0 {
+                    1.0 - t.clamp(0.0, 1.0)
+                } else {
+                    t.clamp(0.0, 1.0)
+                };
+                if (base_gain * overlap).abs() <= EPSILON {
+                    continue;
+                }
+                if t > 0.0 && t < 1.0 {
+                    result.control_gains[vortex_index][influence] =
+                        base_gain * d_fraction / dx * if hinge >= 0.0 { -1.0 } else { 1.0 };
+                }
+                let axis = (1.0 - fc) * control_left.hinge_vector + fc * control_right.hinge_vector;
+                if axis.norm() <= EPSILON {
+                    result.control_axes[vortex_index][influence] = normalized_direction(
+                        &Vec3::new(0.0, delta_y, delta_z),
+                        &Vec3::new(0.0, d_delta_y, d_delta_z),
+                    );
+                }
+                influence += 1;
+            }
+
             let vortex = &lattice.vortices()[vortex_index];
             result.normal[vortex_index] = panel_normal_jvp(
                 &vortex.bound_vortex_left,
@@ -464,6 +507,16 @@ fn mirror_directions(
             result.bound_right[mirrored] = reflected_direction(result.bound_left[original]);
             result.control_point[mirrored] = reflected_direction(result.control_point[original]);
             result.normal[mirrored] = reflected_direction(result.normal[original]);
+            result.control_axes[mirrored] = result.control_axes[original]
+                .iter()
+                .copied()
+                .map(reflected_direction)
+                .collect();
+            result.control_gains[mirrored] = result.control_gains[original]
+                .iter()
+                .zip(&lattice.control_influences()[original])
+                .map(|(gain, influence)| -gain * influence.reflection_sign)
+                .collect();
             result.local_chord[mirrored] = result.local_chord[original];
         }
     }

@@ -59,6 +59,12 @@ pub enum PegasusError {
     /// Invalid flight condition.
     #[error("invalid flight condition: {0}")]
     InvalidFlightCondition(String),
+    /// Invalid trim configuration or prescribed trim data.
+    #[error("invalid trim problem: {0}")]
+    InvalidTrim(String),
+    /// A trim solve failed to reach a locally differentiable equilibrium.
+    #[error("trim failed: {0}")]
+    TrimFailed(String),
     /// A dense solve could not produce a finite solution.
     #[error("singular or ill-conditioned aerodynamic system")]
     SingularSystem,

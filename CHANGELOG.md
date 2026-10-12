@@ -8,6 +8,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Changed
+- Geometry and strip-load adjoints now support deflected control normals,
+  including hinge-direction changes with mesh deformation and section-control
+  coverage changes. Symmetry-plane and viscous geometry restrictions remain.
+- Control derivative calls reject stale solved states and unknown commands;
+  solves reject unknown control names. Fixed-control angle/rate updates reuse
+  the deflected factorization.
+- Corrected-force moment-reference gradients now translate bound-center moment
+  arms consistently with the primal force convention.
+
 - The `parallel` feature also threads the corrected-force mesh-adjoint pairwise
   geometry sweep at 128 or more panels. Sixteen fixed blocks and an ordered
   reduction preserve reproducibility across thread counts and serial/parallel
@@ -21,6 +30,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   Alpha-only requests bypass unused Mach/rate/reference derivative calculations.
 
 ### Added
+- A runnable SciPy sizing optimization through explicit Philote RPCs, with
+  analytical gradients through internal trim, independent gradient checks,
+  and a recorded optimization maintaining Fz/My equilibrium at every evaluation.
+- Optional internal trim in the explicit Philote VLM discipline and a
+  transport-independent `MeshTrimSolver`: selected operating-variable outputs,
+  dimensional force/moment balances or coefficient targets, linked controls,
+  scaled damped Newton with bounds and conditioning diagnostics, and exact
+  direct/adjoint sensitivities through the converged trim solution.
+- Dimensional Philote body resultants `Fx,Fy,Fz,Mx,My,Mz`, including analytical
+  scaling and frame-conversion partials; native and explicit-client trim examples.
+- `MeshControlSurface` definitions on structured meshes: material hinge
+  coordinates, span intervals, leading/trailing-edge coverage, gains and mirrored
+  signs. Hinges follow the incoming deformed mesh; commands rotate normals.
+- Analytical `GradientCalculator::compute_control_gradients` for coefficients
+  and induced drag, and `StripLoadAdjoint::control_cotangents` for distributed
+  force/moment functionals. External applications own coupled solves and can
+  supply commands directly or use internal trim.
+- Philote `controls` metadata and per-command `control_<name>` inputs with exact
+  partials, cache invalidation and `fixed_inputs` support; native usage example
+  and independent re-solve checks for controls and deformed geometry.
+
 - Opt-in `MeshInput::consistent_forces` and Philote `consistent_forces` option:
   include the self bound leg in collocation, evaluate Kutta–Joukowski induced
   velocity at bound centers, and take moments at those same centers. Defaults

@@ -100,6 +100,7 @@ pub struct VortexLatticeSolver {
     unit_responses_valid: bool,
     solution: SolutionState,
     current_mach: Scalar,
+    solved_condition: Option<FlightCondition>,
 }
 
 impl Default for VortexLatticeSolver {
@@ -122,6 +123,7 @@ impl Default for VortexLatticeSolver {
             unit_responses_valid: false,
             solution: SolutionState::default(),
             current_mach: 0.0,
+            solved_condition: None,
         }
     }
 }
@@ -192,6 +194,7 @@ impl VortexLatticeSolver {
         self.solution_lu = None;
         self.solution_normals.clear();
         self.solution.is_valid = false;
+        self.solved_condition = None;
     }
 
     pub fn rebuild_aic(&mut self) -> Result<()> {
@@ -305,11 +308,6 @@ impl VortexLatticeSolver {
             + self.unit_circulation.column(5) * condition.yaw_rate
     }
 
-    fn rotate_about_axis(vector: Vec3, axis: &Vec3, angle: Scalar) -> Vec3 {
-        let (sin, cos) = angle.sin_cos();
-        vector * cos + axis.cross(&vector) * sin + axis * axis.dot(&vector) * (1.0 - cos)
-    }
-
     fn effective_normals(&self, condition: &FlightCondition) -> Vec<Vec3> {
         self.mesh
             .vortices()
@@ -322,7 +320,7 @@ impl VortexLatticeSolver {
                 for (name, deflection) in &condition.control_deflections {
                     for influence in influences.iter().filter(|item| item.name == *name) {
                         if influence.hinge_axis.norm_squared() > EPSILON * EPSILON {
-                            normal = Self::rotate_about_axis(
+                            normal = super::control::rotate(
                                 normal,
                                 &influence.hinge_axis.normalize(),
                                 deflection * influence.gain,
@@ -356,8 +354,8 @@ impl VortexLatticeSolver {
                         }
                         let axis = influence.hinge_axis.normalize();
                         let angle = deflection * influence.gain;
-                        normal = Self::rotate_about_axis(normal, &axis, angle);
-                        derivative = Self::rotate_about_axis(derivative, &axis, angle);
+                        normal = super::control::rotate(normal, &axis, angle);
+                        derivative = super::control::rotate(derivative, &axis, angle);
                         if name == control_name {
                             derivative += influence.gain * axis.cross(&normal);
                         }
@@ -441,67 +439,58 @@ impl VortexLatticeSolver {
         condition: &FlightCondition,
         control_name: &str,
     ) -> Result<VecX> {
-        if !self.solution.is_valid {
+        let rhs = self.control_residual_derivative(condition, control_name)?;
+        let lu = self
+            .solution_lu
+            .as_ref()
+            .or(self.aic_lu.as_ref())
+            .ok_or(PegasusError::InvalidSolution)?;
+        solve_vector(lu, &rhs)
+    }
+
+    /// Check that derivative inputs describe the solved state.
+    pub(crate) fn check_solved_condition(&self, condition: &FlightCondition) -> Result<()> {
+        if !self.solution.is_valid || self.solved_condition.as_ref() != Some(condition) {
             return Err(PegasusError::InvalidSolution);
         }
-        let (normals, normal_derivatives) =
-            self.effective_normals_with_derivative(condition, control_name);
-        let n = self.mesh.vortex_count();
+        Ok(())
+    }
 
-        // `matrix_derivative` was materialized as a dense N×N only to be used
-        // once, in `matrix_derivative * circulation`. Contracting as we go
-        // keeps the same O(N²) work without the allocation.
-        let circulation = &self.solution.circulation;
-        let mut matrix_derivative_times_circulation = VecX::zeros(n);
-        for row in 0..n {
-            let mut sum = 0.0;
-            for column in 0..n {
-                let entry = normal_derivatives[row].dot(&Vec3::new(
-                    self.collocation_velocity_matrix[(3 * row, column)],
-                    self.collocation_velocity_matrix[(3 * row + 1, column)],
-                    self.collocation_velocity_matrix[(3 * row + 2, column)],
-                ));
-                sum += entry * circulation[column];
-            }
-            matrix_derivative_times_circulation[row] = sum;
+    /// `db/d(delta) - dA/d(delta) Gamma`, for adjoint contractions.
+    pub(crate) fn control_residual_derivative(
+        &self,
+        condition: &FlightCondition,
+        control_name: &str,
+    ) -> Result<VecX> {
+        self.check_solved_condition(condition)?;
+        if !self
+            .mesh
+            .control_surface_names()
+            .iter()
+            .any(|name| name == control_name)
+        {
+            return Err(PegasusError::InvalidFlightCondition(format!(
+                "unknown control '{control_name}'"
+            )));
         }
+        let (_, derivatives) = self.effective_normals_with_derivative(condition, control_name);
+        let induced = &self.collocation_velocity_matrix * &self.solution.circulation;
         let freestream = Self::freestream_direction(condition);
         let omega = Vec3::new(
             condition.roll_rate,
             condition.pitch_rate,
             condition.yaw_rate,
         );
-        let rhs_derivative = VecX::from_iterator(
-            n,
-            self.mesh
-                .vortices()
-                .iter()
-                .zip(normal_derivatives)
-                .map(|(vortex, derivative)| {
-                    if vortex.affected_by_freestream {
-                        -(freestream + omega.cross(&(vortex.control_point - self.reference_point)))
-                            .dot(&derivative)
-                    } else {
-                        0.0
-                    }
-                }),
-        );
-        let rhs = rhs_derivative - matrix_derivative_times_circulation;
-
-        // The system here is the one the primal already solved: this function
-        // requires a valid solution and reads its circulation, so it is only
-        // meaningful at the solved condition, where `effective_normals_with_derivative`
-        // reproduces exactly the normals `solve` used. When that holds the
-        // cached factorization applies and a fresh O(N³) decomposition is pure
-        // waste. The normals are compared rather than assumed, so a caller who
-        // reaches here with a stale cache still gets a correct answer.
-        if self.solution_normals == normals
-            && let Some(lu) = self.solution_lu.as_ref().or(self.aic_lu.as_ref())
-        {
-            return solve_vector(lu, &rhs);
-        }
-        let matrix = self.matrix_for_normals(&normals);
-        solve_vector(&factorize(&matrix), &rhs)
+        Ok(VecX::from_fn(self.mesh.vortex_count(), |row, _| {
+            let vortex = &self.mesh.vortices()[row];
+            let mut velocity =
+                Vec3::new(induced[3 * row], induced[3 * row + 1], induced[3 * row + 2]);
+            if vortex.affected_by_freestream {
+                velocity +=
+                    freestream + omega.cross(&(vortex.control_point - self.reference_point));
+            }
+            -derivatives[row].dot(&velocity)
+        }))
     }
 
     pub fn solve(&mut self, condition: &FlightCondition) -> Result<SolutionState> {
@@ -509,6 +498,13 @@ impl VortexLatticeSolver {
             return Err(PegasusError::InvalidMesh(
                 "cannot solve an empty lattice".into(),
             ));
+        }
+        for (name, _) in &condition.control_deflections {
+            if !self.mesh.control_surface_names().contains(name) {
+                return Err(PegasusError::InvalidFlightCondition(format!(
+                    "unknown control '{name}'"
+                )));
+            }
         }
         // Every scalar that reaches the right-hand side is checked, including
         // the three body rates. They were previously unchecked, so a NaN rate
@@ -568,13 +564,17 @@ impl VortexLatticeSolver {
             )
         } else {
             let normals = self.effective_normals(condition);
-            let matrix = self.matrix_for_normals(&normals);
+            // Geometry/Mach changes invalidate this cache. Angle and rate
+            // updates at fixed controls can reuse the deflected factorization.
+            if self.solution_lu.is_none() || self.solution_normals != normals {
+                let matrix = self.matrix_for_normals(&normals);
+                self.solution_lu = Some(factorize(&matrix));
+                self.solution_aic_matrix = Some(matrix);
+            }
             let rhs = self.rhs_for_normals(condition, &normals);
-            let factorization = factorize(&matrix);
-            let circulation = solve_vector(&factorization, &rhs)?;
-            let units = self.unit_responses_for_normals(&factorization, &normals)?;
-            self.solution_lu = Some(factorization);
-            self.solution_aic_matrix = Some(matrix);
+            let factorization = self.solution_lu.as_ref().expect("deflected factorization");
+            let circulation = solve_vector(factorization, &rhs)?;
+            let units = self.unit_responses_for_normals(factorization, &normals)?;
             self.solution_normals = normals;
             (circulation, units)
         };
@@ -601,6 +601,7 @@ impl VortexLatticeSolver {
             is_valid: true,
         };
         self.solution = state.clone();
+        self.solved_condition = Some(condition.clone());
         Ok(state)
     }
 

@@ -52,6 +52,15 @@ impl AeroGradients {
     }
 }
 
+/// Coefficient derivatives per radian of one named control command.
+#[derive(Clone, Debug, Default)]
+pub struct ControlGradient {
+    /// Command name, shared across matching surface definitions.
+    pub name: String,
+    /// All requested coefficient and Trefftz induced-drag derivatives.
+    pub by_deflection: AeroGradients,
+}
+
 /// Complete flight-condition derivative set.
 #[derive(Clone, Copy, Debug, Default)]
 pub struct FullGradients {
@@ -477,11 +486,10 @@ impl GradientCalculator {
         }
         // The explicit half is the moment-arm change at frozen circulation.
         // `force_geometry_jvp` already expresses exactly that: moving the
-        // reference point by `+e_k` is moving every control point by `-e_k`
-        // relative to it, with the vortex lines held still. Reusing it rather
-        // than rewriting the contraction keeps this tied to the same force
+        // reference point by `+e_k` is translating every force point by `-e_k`
+        // relative to it, with the vortex line vectors held unchanged. Reusing
+        // the contraction keeps this tied to the same force
         // convention and normalization the primal uses.
-        let still = vec![Vec3::zeros(); unknowns];
         let mut explicit_moment_reference = [[0.0; 6]; 3];
         for axis in 0..3 {
             let mut shift = Vec3::zeros();
@@ -491,8 +499,8 @@ impl GradientCalculator {
                 solver.solution(),
                 condition,
                 solver.reference_quantities(),
-                &still,
-                &still,
+                &vec![shift; unknowns],
+                &vec![shift; unknowns],
                 &vec![shift; unknowns],
             )?;
         }
@@ -701,6 +709,71 @@ impl GradientCalculator {
             gradient.set(output, value);
         }
         Ok(gradient)
+    }
+
+    /// Analytical derivatives per radian of each declared control command.
+    /// An omitted command is evaluated at zero; if entries repeat, the
+    /// derivative varies all entries of that name together. Rotations follow
+    /// flight-condition entry order. An omitted command is appended at zero.
+    pub fn compute_control_gradients(
+        &self,
+        condition: &FlightCondition,
+    ) -> Result<Vec<ControlGradient>> {
+        let mut solver = self.configured_solver()?;
+        solver.solve(condition)?;
+        self.control_gradients_at_solution(&solver, condition)
+    }
+
+    pub(crate) fn control_gradients_at_solution(
+        &self,
+        solver: &VortexLatticeSolver,
+        condition: &FlightCondition,
+    ) -> Result<Vec<ControlGradient>> {
+        solver.check_solved_condition(condition)?;
+        let mut outputs: Vec<_> = OUTPUTS
+            .into_iter()
+            .filter(|o| self.output_selection.contains(*o))
+            .collect();
+        if self.output_selection.induced_drag {
+            outputs.push(AeroOutput::InducedDrag);
+        }
+        let mut seeds = MatX::zeros(solver.mesh().vortex_count(), outputs.len());
+        for (column, output) in outputs.iter().enumerate() {
+            let gradient = if *output == AeroOutput::InducedDrag {
+                trefftz_circulation_gradients(
+                    solver.mesh(),
+                    solver.solution(),
+                    solver.reference_quantities().area,
+                    0.01,
+                    0.1,
+                )
+                .induced_drag
+            } else {
+                force_circulation_gradient(solver, condition, *output)
+            };
+            seeds.set_column(column, &gradient);
+        }
+        let adjoints = if outputs.is_empty() {
+            seeds
+        } else {
+            AdjointSolver::new(solver)?.solve_batched(&seeds)?
+        };
+        solver
+            .mesh()
+            .control_surface_names()
+            .iter()
+            .map(|name| {
+                let rhs = solver.control_residual_derivative(condition, name)?;
+                let mut by_deflection = AeroGradients::default();
+                for (column, output) in outputs.iter().enumerate() {
+                    by_deflection.set(*output, adjoints.column(column).dot(&rhs));
+                }
+                Ok(ControlGradient {
+                    name: name.clone(),
+                    by_deflection,
+                })
+            })
+            .collect()
     }
 
     /// Compute gradients with respect to every direct-mesh node coordinate.

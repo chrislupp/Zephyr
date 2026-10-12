@@ -1,5 +1,6 @@
 //! Vortex-lattice generation, influence matrices, and primal solver.
 
+pub(crate) mod control;
 mod influence;
 mod lattice;
 mod types;

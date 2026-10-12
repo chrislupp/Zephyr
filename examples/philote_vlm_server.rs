@@ -16,6 +16,10 @@
 //! {"num_surfaces": 1, "surface_names": "Wing",
 //!  "surface_nx": "4", "surface_ny": "8"}
 //! ```
+//!
+//! The optional `trim` JSON configuration enables an internal trim solve while
+//! retaining the explicit service. Run `philote_trim_client` against a fresh
+//! server for a complete configured wing/tail example and trimmed gradients.
 
 use std::sync::Arc;
 

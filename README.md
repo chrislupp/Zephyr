@@ -13,9 +13,9 @@ crates.io.
 
 The Rust port preserves the numerical conventions and panel ordering of
 Pegasus 0.2.0. The legacy source at tag `v0.2.0` (commit `556b0ea`) is the
-behavioral oracle for parity fixtures. Philote servers and Philote-dependent
-OpenMDAO workflows are intentionally deferred; the crate has no C, C++, or
-Python runtime dependency.
+behavioral oracle for parity fixtures. The optional `philote` feature exposes
+mesh and VLM disciplines for external MDO workflows. The crate has no C, C++,
+or Python runtime dependency.
 
 ## Units and axes
 
@@ -80,6 +80,159 @@ assert!(results.is_valid);
 assert!(results.coefficients.lift > 0.0);
 # Ok::<(), pegasus_vlm::PegasusError>(())
 ```
+
+## Controls in external optimizations and coupled simulations
+
+A `SurfaceMesh` can carry `MeshControlSurface` definitions. Pass the structurally
+deformed mesh **before control actuation** and put each command's deflection in
+`FlightCondition::control_deflections`, in radians. Pegasus rotates the flow
+boundary-condition normals; it does not rotate mesh nodes or the wake. If the
+caller already physically deflected the mesh, omit the corresponding control
+actuation here.
+
+```rust
+use pegasus_vlm::geometry::MeshControlSurface;
+
+// For a 4 x 6 panel mesh: strips 1 through 5, hinge at chordwise node row 3.
+let flap = MeshControlSurface::trailing_edge("flap", 1..6, vec![3.0; 7]);
+// wing.controls.push(flap);
+```
+
+Hinge coordinates are **material mesh coordinates**, not chord fractions:
+`0` is the leading edge, `nx` the trailing edge, and `i + f` interpolates between
+node rows `i` and `i + 1`. Provide `ny + 1` coordinates, including inactive
+stations. The hinge follows mesh bending and twist. Control coverage uses the
+mean panel overlap at the two span stations; mesh derivatives hold those
+material coordinates and the active span interval fixed. Align panel edges with
+the hinge when practical. Hinge placement and span-extent design derivatives are
+not exposed.
+
+`gain` specifies rotation per command using the right-hand rule about the hinge
+from station `j` to `j + 1`. `duplicate_sign` is +1 for symmetric deflection and
+-1 for antisymmetric deflection on a mirrored mesh. Matching names on several
+surfaces share a command. Separate meshes and names give independent left/right
+commands; multiple definitions can also mix flap/aileron commands. Set
+`leading_edge = true` for panels ahead of a hinge. Commands compose in the order
+of the flight-condition list, then definition order on each panel. Keep that
+order fixed during optimization. Omitted commands mean zero; unknown names are
+errors. For legacy repeated names, a named derivative varies all matching
+entries together; the derivative of an omitted command appends it at zero.
+
+- `GradientCalculator::compute_control_gradients` returns derivatives per radian
+  for all named commands, honoring `OutputSelection`, including near-field and
+  Trefftz induced drag.
+- `compute_mesh_node_gradients` and section-geometry gradients support nonzero
+  control deflections. Mesh gradients include the changing hinge direction.
+- `StripLoadAdjoint::control_cotangents` differentiates arbitrary functionals of
+  distributed strip forces and moments. Its `mesh_node_cotangents` and
+  `flight_condition_cotangents` also work with active controls. Load seeds use
+  the existing raw Kutta–Joukowski resultant convention: multiply seeds by
+  dynamic pressure when differentiating dimensional loads. Moment points are
+  held fixed; callers must differentiate their motion separately.
+
+The external application handles structural equilibrium, load transfer, and
+total coupled derivatives. It can supply trim commands or use the optional
+internal trim solve below. Geometry/strip
+adjoints still require explicit mesh duplication rather than symmetry planes,
+and do not support section drag polars. This remains a quasi-steady VLM normal
+rotation model, not a separated-flow or unsteady control model.
+
+Run the complete native example with `cargo run --example control_surfaces`.
+
+With the `philote` feature, the VLM discipline accepts a `controls` option as a
+JSON array (or a JSON-encoded string over the wire):
+
+```json
+[
+  {"surface": "Wing", "name": "flap", "span_start": 1, "span_end": 6,
+   "hinge": 3.0, "gain": 1.0, "duplicate_sign": 1.0}
+]
+```
+
+`hinge` accepts a constant or a `ny + 1` array. Optional `leading_edge` defaults
+to false. Set surface names and dimensions in the same options request. Each
+unique name declares a scalar input `control_<name>` in radians, with analytical
+partials for the selected coefficient outputs. Philote orders commands
+alphabetically. Supply these inputs on every
+evaluation, including zero values. They participate in solution caching and can
+be included in `fixed_inputs`; fixing a command suppresses its partials while
+retaining its deflection and its effect on mesh derivatives. Native callers can
+also populate `SurfaceOption::controls` directly.
+
+## Optional trim in the explicit Philote discipline
+
+`VlmDiscipline` remains an explicit component. Configure its `trim` option
+before setup to solve selected `alpha`, `beta`, and control commands internally.
+Each solved variable becomes an output, while unselected operating variables
+remain inputs. All declared function gradients include the converged trim
+response, including derivatives with respect to deformed mesh nodes, targets,
+external loads, dynamic pressure, and prescribed commands. Trim is off by default.
+
+```json
+{"trim": {
+  "enabled": true,
+  "variables": ["alpha", "control_elevator"],
+  "balances": [{"quantity": "Fz", "scale": 1000.0},
+               {"quantity": "My", "scale": 1000.0}],
+  "initial_guess": {"alpha": 0.03, "control_elevator": 0.0},
+  "bounds": {"alpha": [-0.3, 0.3], "control_elevator": [-0.4, 0.4]}
+}}
+```
+
+For dimensional balances, supply `external_Fx`, `external_Fy`, `external_Fz`,
+`external_Mx`, `external_My`, and `external_Mz`, plus the declared balance target
+inputs (by default `trim_target_Fz` and `trim_target_My` in this example).
+The residual is aerodynamic load plus prescribed external load minus target.
+This example enforces vertical-force and pitching-moment equilibrium only.
+Coefficient targets such as `CL` and `Cm` also work and require no external loads.
+
+`outputs` can select `CL,CD,CY,Cl,Cm,Cn` and dimensional `Fx,Fy,Fz,Mx,My,Mz`.
+Forces use the mesh/body coordinate axes: x has positive drag and z has positive
+lift at zero angle of attack. Dimensional moments follow the right-hand rule
+about the configured reference point; Mx/Mz remove the conventional Cl/Cn sign
+flips. External loads must use the same axes and reference point.
+
+The core `MeshTrimSolver` is available without Philote. Run
+`cargo run --example mesh_trim` for a deformed wing/tail trim and analytical
+sensitivities. For the explicit wire workflow, start
+`cargo run --features philote --example philote_vlm_server`, then run
+`cargo run --features philote --example philote_trim_client` in another terminal.
+The [MDO integration guide](docs/docs/guide/mdo-integration.md) describes control
+mixers, numerical options, gradient semantics, and external coupling.
+
+An optimization demonstration uses SciPy SLSQP through the explicit Philote
+RPCs. It sizes wing halfspan and tail chord; each aerodynamic evaluation solves
+`Fz + external_Fz = 0` and `My = 0` for alpha and elevator. Design-dependent
+weight, deformed mesh coordinates, and reference dimensions enter the analytical
+design gradient. The objective is near-field aerodynamic drag plus a simple
+analytical area cost representing profile drag. Geometry bounds define the
+sizing range. Trim is solved inside the discipline throughout optimization.
+
+Build the optimizer bridge and start a fresh server:
+
+```bash
+cargo build --features philote --example philote_trim_optimization
+cargo run --features philote --example philote_vlm_server
+```
+
+Then, in another terminal, run the Python driver:
+
+```bash
+python3 -m venv /tmp/pegasus-optimization-env
+/tmp/pegasus-optimization-env/bin/python -m pip install --upgrade pip
+/tmp/pegasus-optimization-env/bin/python -m pip install numpy scipy
+/tmp/pegasus-optimization-env/bin/python examples/trim_optimization.py
+```
+
+The script verifies analytical objective and trim-state gradients against
+independent perturbed re-solves at the initial and final designs. It requires
+optimization success, objective improvement, and converged trim throughout all
+evaluations, and writes the result and iteration history to JSON. A recorded
+run converged in 7 iterations, reducing the objective from 32.481917 to
+27.833541 N. Maximum Fz/My residuals were 4.55e-13 N and 1.80e-13 N*m. The
+[recorded results](examples/trim_optimization_results.json) include gradient
+checks and the solved operating states. This is a simple sizing demonstration
+with prescribed deformation and CG, balancing the selected Fz/My components.
 
 ## AVL and mass files
 

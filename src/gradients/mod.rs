@@ -23,8 +23,8 @@ pub use biot_savart::{
     horseshoe_velocity_vjp_field_point,
 };
 pub use calculator::{
-    AeroGradients, FullGradients, GeometryGradients, GeometryVariable, GradientCalculator,
-    MeshNodeGradients, SectionGeometryGradients, SurfaceMeshNodeGradients,
+    AeroGradients, ControlGradient, FullGradients, GeometryGradients, GeometryVariable,
+    GradientCalculator, MeshNodeGradients, SectionGeometryGradients, SurfaceMeshNodeGradients,
 };
 pub use coupled::{MeshNodeCotangent, StripLoadAdjoint, StripLoadCotangent};
 pub use forces::{

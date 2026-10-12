@@ -85,10 +85,9 @@ async fn assert_partials_match<D: ExplicitDiscipline>(
                 let stride = values.len();
                 for (row, expected) in derivative.iter().enumerate() {
                     let exact = block.as_slice().unwrap()[row * stride + index];
-                    assert_abs_diff_eq!(
-                        exact,
-                        expected,
-                        epsilon = tolerance * expected.abs() + NOISE_FLOOR
+                    assert!(
+                        (exact - expected).abs() <= tolerance * expected.abs() + NOISE_FLOOR,
+                        "d{output}/d{name}[{index}], row {row}: {exact} != {expected}"
                     );
                     checked += 1;
                 }
@@ -790,4 +789,79 @@ fn vlm_rejects_unknown_output_and_fixed_input_names() {
         .set_options(&options(&[("fixed_inputs", "typo".into())]))
         .unwrap();
     assert!(discipline.setup().is_err());
+}
+
+#[tokio::test]
+async fn mesh_controls_have_exact_philote_partials_and_invalidate_cache() {
+    let mut discipline = VlmDiscipline::default();
+    discipline.initialize().unwrap();
+    let controls = serde_json::json!([
+        {"surface": "Wing", "name": "elevator", "span_start": 0, "span_end": 3,
+         "hinge": [0.6, 0.8, 0.9, 1.1]},
+        {"surface": "Wing", "name": "aileron", "span_start": 1, "span_end": 3,
+         "hinge": 1.2, "gain": -0.7, "duplicate_sign": -1.0}
+    ]);
+    let configuration = options(&[
+        ("surface_names", "Wing".into()),
+        ("surface_nx", "2".into()),
+        ("surface_ny", "3".into()),
+        ("surface_y_duplicated", "true".into()),
+        ("consistent_forces", true.into()),
+        ("controls", controls.to_string().into()),
+    ]);
+    discipline.set_options(&configuration).unwrap();
+    discipline.setup().unwrap();
+    discipline.setup_partials().unwrap();
+    let mut inputs = vlm_inputs(2, 3, 1.0, 3.0);
+    inputs.insert("mach".into(), array(&[0.3]));
+    inputs.insert("pitch_rate".into(), array(&[0.005]));
+    inputs.insert("control_elevator".into(), array(&[0.13]));
+    inputs.insert("control_aileron".into(), array(&[-0.05]));
+    let original = discipline.compute(&inputs).await.unwrap();
+    let partials = discipline.compute_partials(&inputs).await.unwrap();
+    assert!(partials.contains_key(&("CL".into(), "control_elevator".into())));
+    assert_partials_match(&discipline, &inputs, &partials, 1e-7, 2e-5).await;
+    inputs.get_mut("control_elevator").unwrap()[0] += 0.04;
+    assert_ne!(original, discipline.compute(&inputs).await.unwrap());
+    inputs.get_mut("control_elevator").unwrap()[0] = 0.13;
+    assert_eq!(original, discipline.compute(&inputs).await.unwrap());
+
+    let mut fixed = VlmDiscipline::default();
+    fixed.initialize().unwrap();
+    let mut configuration = configuration.clone();
+    configuration.insert(
+        "fixed_inputs".into(),
+        "control_elevator,control_aileron".into(),
+    );
+    fixed.set_options(&configuration).unwrap();
+    fixed.setup().unwrap();
+    fixed.setup_partials().unwrap();
+    let partials = fixed.compute_partials(&inputs).await.unwrap();
+    assert!(
+        partials
+            .keys()
+            .all(|(_, input)| !input.starts_with("control_"))
+    );
+    assert_eq!(original, fixed.compute(&inputs).await.unwrap());
+}
+
+#[test]
+fn philote_rejects_invalid_control_metadata() {
+    for definition in [
+        serde_json::json!({"surface":"Wing", "name":"e", "span_start":0, "span_end":1, "hinge":0.5, "typo":1}),
+        serde_json::json!({"surface":"missing", "name":"e", "span_start":0, "span_end":1, "hinge":0.5}),
+        serde_json::json!({"surface":"Wing", "name":"e", "span_start":0, "span_end":2, "hinge":0.5}),
+        serde_json::json!({"surface":"Wing", "name":"e", "span_start":0, "span_end":1, "hinge":2.0}),
+    ] {
+        let mut discipline = VlmDiscipline::default();
+        discipline.initialize().unwrap();
+        assert!(
+            discipline
+                .set_options(&options(&[
+                    ("surface_names", "Wing".into()),
+                    ("controls", serde_json::json!([definition]))
+                ]))
+                .is_err()
+        );
+    }
 }

@@ -106,8 +106,8 @@ impl LatticeCotangents {
 /// # Restrictions
 ///
 /// The same ones the mesh-node coefficient gradients carry, for the same
-/// reasons: deflected control normals, symmetry planes and section drag polars
-/// each add a geometry path this module does not represent, and returning a
+/// reasons: symmetry planes and section drag polars each add a geometry path
+/// this module does not represent, and returning a
 /// derivative that silently omits one is worse than refusing. Mirror a wing
 /// explicitly rather than through a symmetry plane.
 pub struct StripLoadAdjoint<'a> {
@@ -146,11 +146,7 @@ impl<'a> StripLoadAdjoint<'a> {
         if !solver.solution().is_valid {
             return Err(PegasusError::InvalidSolution);
         }
-        if !condition.control_deflections.is_empty() {
-            return Err(PegasusError::InvalidFlightCondition(
-                "strip load adjoints with deflected control normals are not supported".into(),
-            ));
-        }
+        solver.check_solved_condition(condition)?;
         if solver.symmetry().y_symmetry != SymmetryType::None
             || solver.symmetry().z_symmetry != SymmetryType::None
         {
@@ -237,6 +233,11 @@ impl<'a> StripLoadAdjoint<'a> {
         input: &MeshInput,
         columns: &[StripLoadCotangent],
     ) -> Result<Vec<MeshNodeCotangent>> {
+        if self.mesh().mesh_input() != Some(input) {
+            return Err(PegasusError::InvalidMesh(
+                "mesh input does not describe the solved lattice".into(),
+            ));
+        }
         let mesh = self.mesh();
         for column in columns {
             if column.force.len() != mesh.strip_count() || column.moment.len() != mesh.strip_count()
@@ -345,6 +346,40 @@ impl<'a> StripLoadAdjoint<'a> {
             }
         }
         Ok(out)
+    }
+
+    /// Derivatives of each strip-load functional with respect to every named
+    /// command, in radians. Names are sorted like the lattice's control list.
+    /// Includes induced velocity and uses the solved, deflected AIC.
+    pub fn control_cotangents(
+        &self,
+        columns: &[StripLoadCotangent],
+    ) -> Result<Vec<Vec<(String, Scalar)>>> {
+        for column in columns {
+            if column.force.len() != self.mesh().strip_count()
+                || column.moment.len() != self.mesh().strip_count()
+            {
+                return Err(PegasusError::InvalidGeometry(
+                    "strip load cotangent length does not match the solved lattice".into(),
+                ));
+            }
+        }
+        if columns.is_empty() {
+            return Ok(Vec::new());
+        }
+        let (panel_seed, velocity_seed) = self.panel_cotangents(columns);
+        let gradients = self.circulation_gradients(&panel_seed, &velocity_seed);
+        let adjoints = AdjointSolver::new(self.solver)?.solve_batched(&gradients)?;
+        let mut result = vec![Vec::new(); columns.len()];
+        for name in self.mesh().control_surface_names() {
+            let rhs = self
+                .solver
+                .control_residual_derivative(self.condition, name)?;
+            for (column, values) in result.iter_mut().enumerate() {
+                values.push((name.clone(), adjoints.column(column).dot(&rhs)));
+            }
+        }
+        Ok(result)
     }
 
     // ========================================================================
@@ -527,7 +562,7 @@ impl<'a> StripLoadAdjoint<'a> {
 
         for row in rows {
             let target = &mesh.vortices()[row];
-            let normal = target.normal_at_control_point;
+            let normal = self.solver.linearized_normals()[row];
             let seed_rows = velocity_seed.rows(3 * row, 3);
             let adjoint_row = adjoints.row(row);
 
@@ -703,7 +738,12 @@ impl<'a> StripLoadAdjoint<'a> {
                         let mut bound_left = read(&cotangents.bound_left, index, column);
                         let mut bound_right = read(&cotangents.bound_right, index, column);
                         let mut control_point = read(&cotangents.control_point, index, column);
-                        let mut normal = read(&cotangents.normal, index, column);
+                        let (mut normal, mut axes) = crate::solver::control::normal_vjp(
+                            lattice.vortices()[index].normal_at_control_point,
+                            read(&cotangents.normal, index, column),
+                            &lattice.control_influences()[index],
+                            self.condition,
+                        );
 
                         // A duplicated surface has no nodes of its own; its
                         // lattice is a reflection of this one's, so its
@@ -729,8 +769,37 @@ impl<'a> StripLoadAdjoint<'a> {
                                 mirrored,
                                 column,
                             ));
-                            normal +=
-                                reflected_direction(read(&cotangents.normal, mirrored, column));
+                            let (mirror_normal, mirror_axes) = crate::solver::control::normal_vjp(
+                                lattice.vortices()[mirrored].normal_at_control_point,
+                                read(&cotangents.normal, mirrored, column),
+                                &lattice.control_influences()[mirrored],
+                                self.condition,
+                            );
+                            normal += reflected_direction(mirror_normal);
+                            for (axis, mirrored_axis) in axes.iter_mut().zip(mirror_axes) {
+                                *axis += reflected_direction(mirrored_axis);
+                            }
+                        }
+
+                        // Hinges follow the incoming deformed mesh. Pull the
+                        // normalized axis seed back onto its material nodes.
+                        let mut influence = 0;
+                        for control in &surface.controls {
+                            if control.panel_gain(chord_offset, strip_offset).abs()
+                                <= crate::core::EPSILON
+                            {
+                                continue;
+                            }
+                            let seed = normalized_direction(
+                                &control.hinge_vector(surface, strip_offset),
+                                &axes[influence],
+                            );
+                            for (j, sign) in [(strip_offset, -1.0), (strip_offset + 1, 1.0)] {
+                                for (k, weight) in control.weights(surface, j) {
+                                    nodes[k] += sign * weight * seed;
+                                }
+                            }
+                            influence += 1;
                         }
 
                         let node = |i: usize, j: usize| -> usize { i * (surface.ny + 1) + j };
