@@ -30,12 +30,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   Alpha-only requests bypass unused Mach/rate/reference derivative calculations.
 
 ### Added
+- Optional internal trim in the explicit Philote VLM discipline and a
+  transport-independent `MeshTrimSolver`: selected operating-variable outputs,
+  dimensional force/moment balances or coefficient targets, linked controls,
+  scaled damped Newton with bounds and conditioning diagnostics, and exact
+  direct/adjoint sensitivities through the converged trim solution.
+- Dimensional Philote body resultants `Fx,Fy,Fz,Mx,My,Mz`, including analytical
+  scaling and frame-conversion partials; native and explicit-client trim examples.
 - `MeshControlSurface` definitions on structured meshes: material hinge
   coordinates, span intervals, leading/trailing-edge coverage, gains and mirrored
   signs. Hinges follow the incoming deformed mesh; commands rotate normals.
 - Analytical `GradientCalculator::compute_control_gradients` for coefficients
   and induced drag, and `StripLoadAdjoint::control_cotangents` for distributed
-  force/moment functionals. External applications own trim and coupled solves.
+  force/moment functionals. External applications own coupled solves and can
+  supply commands directly or use internal trim.
 - Philote `controls` metadata and per-command `control_<name>` inputs with exact
   partials, cache invalidation and `fixed_inputs` support; native usage example
   and independent re-solve checks for controls and deformed geometry.

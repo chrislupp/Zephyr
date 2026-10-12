@@ -130,8 +130,9 @@ entries together; the derivative of an omitted command appends it at zero.
   dynamic pressure when differentiating dimensional loads. Moment points are
   held fixed; callers must differentiate their motion separately.
 
-The external application handles structural equilibrium, trim, control laws,
-load transfer, actuator bounds and total coupled derivatives. Geometry/strip
+The external application handles structural equilibrium, load transfer, and
+total coupled derivatives. It can supply trim commands or use the optional
+internal trim solve below. Geometry/strip
 adjoints still require explicit mesh duplication rather than symmetry planes,
 and do not support section drag polars. This remains a quasi-steady VLM normal
 rotation model, not a separated-flow or unsteady control model.
@@ -157,6 +158,47 @@ evaluation, including zero values. They participate in solution caching and can
 be included in `fixed_inputs`; fixing a command suppresses its partials while
 retaining its deflection and its effect on mesh derivatives. Native callers can
 also populate `SurfaceOption::controls` directly.
+
+## Optional trim in the explicit Philote discipline
+
+`VlmDiscipline` remains an explicit component. Configure its `trim` option
+before setup to solve selected `alpha`, `beta`, and control commands internally.
+Each solved variable becomes an output, while unselected operating variables
+remain inputs. All declared function gradients include the converged trim
+response, including derivatives with respect to deformed mesh nodes, targets,
+external loads, dynamic pressure, and prescribed commands. Trim is off by default.
+
+```json
+{"trim": {
+  "enabled": true,
+  "variables": ["alpha", "control_elevator"],
+  "balances": [{"quantity": "Fz", "scale": 1000.0},
+               {"quantity": "My", "scale": 1000.0}],
+  "initial_guess": {"alpha": 0.03, "control_elevator": 0.0},
+  "bounds": {"alpha": [-0.3, 0.3], "control_elevator": [-0.4, 0.4]}
+}}
+```
+
+For dimensional balances, supply `external_Fx`, `external_Fy`, `external_Fz`,
+`external_Mx`, `external_My`, and `external_Mz`, plus the declared balance target
+inputs (by default `trim_target_Fz` and `trim_target_My` in this example).
+The residual is aerodynamic load plus prescribed external load minus target.
+This example enforces vertical-force and pitching-moment equilibrium only.
+Coefficient targets such as `CL` and `Cm` also work and require no external loads.
+
+`outputs` can select `CL,CD,CY,Cl,Cm,Cn` and dimensional `Fx,Fy,Fz,Mx,My,Mz`.
+Forces use the mesh/body coordinate axes: x has positive drag and z has positive
+lift at zero angle of attack. Dimensional moments follow the right-hand rule
+about the configured reference point; Mx/Mz remove the conventional Cl/Cn sign
+flips. External loads must use the same axes and reference point.
+
+The core `MeshTrimSolver` is available without Philote. Run
+`cargo run --example mesh_trim` for a deformed wing/tail trim and analytical
+sensitivities. For the explicit wire workflow, start
+`cargo run --features philote --example philote_vlm_server`, then run
+`cargo run --features philote --example philote_trim_client` in another terminal.
+The [MDO integration guide](docs/docs/guide/mdo-integration.md) describes control
+mixers, numerical options, gradient semantics, and external coupling.
 
 ## AVL and mass files
 

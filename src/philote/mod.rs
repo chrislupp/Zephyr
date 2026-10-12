@@ -4,7 +4,9 @@
 //! provided, and they chain: [`MeshDiscipline`] turns a section-based
 //! parameterization into a node mesh plus reference quantities, and
 //! [`VlmDiscipline`] takes that mesh and returns the six force and moment
-//! coefficients.
+//! coefficients, optionally dimensional loads and solved trim variables.
+//! Internal trim keeps the service explicit, with analytical derivatives through
+//! the converged operating condition.
 //!
 //! Both supply analytical partials. The VLM discipline's node partials come
 //! from the adjoint, so a gradient-based optimizer pays one transposed solve
@@ -34,7 +36,9 @@
 use ndarray::{ArrayD, IxDyn};
 use philote_mdo::{PhiloteError, Result};
 
+mod aero_evaluation;
 mod mesh;
+mod trim;
 mod vlm;
 
 pub use mesh::MeshDiscipline;

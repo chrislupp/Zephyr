@@ -18,6 +18,7 @@ use philote_mdo::{
     traits::{Discipline, ExplicitDiscipline},
 };
 
+use super::aero_evaluation::SolvedState;
 use super::{
     flat, invalid, option_tokens, option_usize, parse_bool, rejected, scalar, scalar_input,
     sized_input,
@@ -27,6 +28,9 @@ use crate::core::Vec3;
 use crate::geometry::{MeshControlSurface, MeshInput, SurfaceMesh};
 use crate::gradients::GradientCalculator;
 use crate::solver::{FlightCondition, VortexLatticeSolver};
+use crate::trim::{
+    AeroQuantity, MeshTrimProblem, MeshTrimSolver, aerodynamic_values, linearize_aerodynamics,
+};
 
 /// Per-surface configuration supplied through discipline options.
 #[derive(Clone, Debug)]
@@ -77,16 +81,6 @@ impl SurfaceOption {
 /// The six coefficient outputs, in the order the C++ discipline used.
 const OUTPUTS: [&str; 6] = ["CL", "CD", "CY", "Cl", "Cm", "Cn"];
 
-/// Flight-condition inputs that carry a nonzero derivative.
-const FLIGHT_INPUTS: [&str; 6] = [
-    "alpha",
-    "beta",
-    "mach",
-    "roll_rate",
-    "pitch_rate",
-    "yaw_rate",
-];
-
 /// Explicit discipline mapping a node mesh and flight condition to loads.
 ///
 /// `outputs` selects coefficient names (comma-separated, default all six).
@@ -98,6 +92,11 @@ const FLIGHT_INPUTS: [&str; 6] = [
 /// One solved state is cached using exact equality of all input arrays. Option
 /// changes clear the cache. Function and derivative requests share that state;
 /// no approximate matching or numerical differentiation is used.
+///
+/// `trim` optionally configures an internal square root solve. Selected operating
+/// variables become outputs; coefficient and dimensional load partials include
+/// their converged trim response. Configure trim before setup. `Fx,Fy,Fz` are
+/// dimensional mesh-axis forces; `Mx,My,Mz` are right-hand mesh-axis moments.
 #[derive(Debug)]
 pub struct VlmDiscipline {
     registry: VariableRegistry,
@@ -105,15 +104,9 @@ pub struct VlmDiscipline {
     consistent_forces: bool,
     outputs: Vec<String>,
     fixed_inputs: Vec<String>,
+    trim: Option<MeshTrimProblem>,
+    setup_complete: bool,
     cache: Mutex<Option<SolvedState>>,
-}
-
-#[derive(Debug)]
-struct SolvedState {
-    inputs: ArrayMap,
-    mesh: MeshInput,
-    condition: FlightCondition,
-    solver: VortexLatticeSolver,
 }
 
 impl Default for VlmDiscipline {
@@ -124,6 +117,8 @@ impl Default for VlmDiscipline {
             consistent_forces: false,
             outputs: OUTPUTS.iter().map(|s| (*s).into()).collect(),
             fixed_inputs: Vec::new(),
+            trim: None,
+            setup_complete: false,
             cache: Mutex::new(None),
         }
     }
@@ -139,6 +134,8 @@ impl VlmDiscipline {
             consistent_forces: false,
             outputs: OUTPUTS.iter().map(|s| (*s).into()).collect(),
             fixed_inputs: Vec::new(),
+            trim: None,
+            setup_complete: false,
             cache: Mutex::new(None),
         }
     }
@@ -150,20 +147,48 @@ impl VlmDiscipline {
             .map_err(|_| rejected("cache", "poisoned solution cache"))?;
         if cache.as_ref().is_none_or(|state| state.inputs != *inputs) {
             *cache = None;
+            if self.trim.is_some() {
+                for name in self.physical_inputs() {
+                    if !self.surfaces.iter().any(|s| s.name == name) {
+                        let value = sized_input(inputs, &name, 1)?[0];
+                        if !value.is_finite() {
+                            return Err(rejected("trim_input", format!("{name} must be finite")));
+                        }
+                    }
+                }
+            }
             let mesh = self.build_mesh(inputs)?;
             let condition = self.build_condition(inputs)?;
             let mut solver = VortexLatticeSolver::new();
-            solver
-                .set_mesh(&mesh)
-                .map_err(|e| rejected("set_mesh", e.to_string()))?;
-            solver
-                .solve(&condition)
-                .map_err(|e| rejected("solve", e.to_string()))?;
+            let trim = if let Some(problem) = &self.trim {
+                Some(
+                    MeshTrimSolver
+                        .solve(
+                            &mesh,
+                            &condition,
+                            problem,
+                            &super::trim::targets(inputs, problem)?,
+                            &super::trim::external(inputs, problem)?,
+                        )
+                        .map_err(|e| rejected("trim", e.to_string()))?,
+                )
+            } else {
+                solver
+                    .set_mesh(&mesh)
+                    .map_err(|e| rejected("set_mesh", e.to_string()))?;
+                solver
+                    .solve(&condition)
+                    .map_err(|e| rejected("solve", e.to_string()))?;
+                None
+            };
+            let condition = trim.as_ref().map_or(condition, |t| t.condition.clone());
             *cache = Some(SolvedState {
                 inputs: inputs.clone(),
                 mesh,
                 condition,
                 solver,
+                trim,
+                partials: None,
             });
         }
         Ok(cache)
@@ -171,6 +196,74 @@ impl VlmDiscipline {
 
     fn active(&self, input: &str) -> bool {
         !self.fixed_inputs.iter().any(|name| name == input)
+    }
+
+    fn owned(&self, name: &str) -> bool {
+        self.trim.as_ref().is_some_and(|p| p.owns(name))
+    }
+
+    fn output_names(&self) -> Vec<String> {
+        let mut names = self.outputs.clone();
+        if let Some(problem) = &self.trim {
+            names.extend(problem.variables.iter().map(|v| v.name.clone()));
+            if let Some(mixer) = &problem.mixer {
+                names.extend(mixer.surfaces.iter().map(|s| format!("control_{s}")));
+            }
+        }
+        names.sort();
+        names.dedup();
+        names
+    }
+
+    fn physical_inputs(&self) -> Vec<String> {
+        let mut names: Vec<_> = self.surfaces.iter().map(|s| s.name.clone()).collect();
+        names.extend(
+            [
+                "reference_area",
+                "reference_chord",
+                "reference_span",
+                "moment_ref_x",
+                "moment_ref_y",
+                "moment_ref_z",
+                "dynamic_pressure",
+                "alpha",
+                "beta",
+                "mach",
+                "roll_rate",
+                "pitch_rate",
+                "yaw_rate",
+            ]
+            .map(String::from),
+        );
+        names.extend(
+            self.control_names()
+                .into_iter()
+                .map(|n| format!("control_{n}")),
+        );
+        names.retain(|n| !self.owned(n));
+        if let Some(problem) = &self.trim {
+            names.extend(problem.balances.iter().map(|b| b.target_input.clone()));
+            if problem.balances.iter().any(|b| b.quantity as usize >= 6) {
+                names.extend(
+                    AeroQuantity::ALL[6..]
+                        .iter()
+                        .map(|q| format!("external_{}", q.name())),
+                );
+            }
+        }
+        names
+    }
+
+    /// Diagnostics from the cached successful trim, if trim is enabled and solved.
+    pub fn trim_diagnostics(&self) -> Result<Option<crate::trim::TrimDiagnostics>> {
+        let cache = self
+            .cache
+            .lock()
+            .map_err(|_| rejected("cache", "poisoned solution cache"))?;
+        Ok(cache
+            .as_ref()
+            .and_then(|s| s.trim.as_ref())
+            .map(|t| t.diagnostics.clone()))
     }
 
     /// The configured surfaces.
@@ -221,9 +314,16 @@ impl VlmDiscipline {
 
     /// Assemble a [`FlightCondition`] from the incoming scalars.
     fn build_condition(&self, inputs: &ArrayMap) -> Result<FlightCondition> {
+        let value = |name: &str| -> Result<f64> {
+            if self.owned(name) {
+                Ok(0.0)
+            } else {
+                scalar_input(inputs, name)
+            }
+        };
         Ok(FlightCondition {
-            alpha: scalar_input(inputs, "alpha")?,
-            beta: scalar_input(inputs, "beta")?,
+            alpha: value("alpha")?,
+            beta: value("beta")?,
             mach: scalar_input(inputs, "mach")?,
             dynamic_pressure: scalar_input(inputs, "dynamic_pressure")?,
             roll_rate: scalar_input(inputs, "roll_rate")?,
@@ -233,8 +333,8 @@ impl VlmDiscipline {
                 .control_names()
                 .into_iter()
                 .map(|name| {
-                    let value = scalar_input(inputs, &format!("control_{name}"))?;
-                    Ok((name, value))
+                    let command = value(&format!("control_{name}"))?;
+                    Ok((name, command))
                 })
                 .collect::<Result<_>>()?,
         })
@@ -282,6 +382,7 @@ impl Discipline for VlmDiscipline {
         self.add_option("outputs", "str")?;
         self.add_option("fixed_inputs", "str")?;
         self.add_option("controls", "str")?;
+        self.add_option("trim", "str")?;
         for key in [
             "surface_names",
             "surface_nx",
@@ -301,14 +402,39 @@ impl Discipline for VlmDiscipline {
     }
 
     fn set_options(&mut self, options: &HashMap<String, serde_json::Value>) -> Result<()> {
+        if self.setup_complete && self.trim.is_some() {
+            if options.keys().any(|name| name != "consistent_forces") {
+                return Err(invalid(
+                    "trim configuration and registry options must be set before setup; create a new discipline to reconfigure",
+                ));
+            }
+            if let Some(value) = options.get("consistent_forces") {
+                self.consistent_forces = super::option_bool(value);
+            }
+            *self
+                .cache
+                .get_mut()
+                .map_err(|_| rejected("cache", "poisoned solution cache"))? = None;
+            return Ok(());
+        }
         *self
             .cache
             .get_mut()
             .map_err(|_| rejected("cache", "poisoned solution cache"))? = None;
+        if options.contains_key("trim") {
+            if self.setup_complete {
+                return Err(invalid(
+                    "configure trim before setup; create a new discipline to rebuild variable ownership",
+                ));
+            }
+            self.trim = super::trim::selected(options)?;
+        }
         if let Some(value) = options.get("outputs") {
             let outputs = option_tokens(value, "outputs")?;
-            if outputs.is_empty() || outputs.iter().any(|s| !OUTPUTS.contains(&s.as_str())) {
-                return Err(invalid("outputs must select from CL,CD,CY,Cl,Cm,Cn"));
+            if outputs.is_empty() || outputs.iter().any(|s| AeroQuantity::from_name(s).is_none()) {
+                return Err(invalid(
+                    "outputs must select coefficients or Fx,Fy,Fz,Mx,My,Mz",
+                ));
             }
             self.outputs = outputs;
         }
@@ -484,98 +610,85 @@ impl Discipline for VlmDiscipline {
     }
 
     fn setup(&mut self) -> Result<()> {
-        for surface in self.surfaces.clone() {
-            for control in &surface.controls {
+        if self.setup_complete && !self.registry.var_meta().is_empty() {
+            return Err(invalid("discipline is already set up"));
+        }
+        let mut layout = MeshInput::default();
+        for surface in &self.surfaces {
+            let mut mesh = SurfaceMesh::new(&surface.name, surface.nx, surface.ny);
+            for i in 0..=surface.nx {
+                for j in 0..=surface.ny {
+                    mesh.set_node(i, j, Vec3::new(i as f64, j as f64, 0.0))
+                        .map_err(|e| invalid(e.to_string()))?;
+                }
+            }
+            mesh.controls = surface.controls.clone();
+            for control in &mesh.controls {
                 control
                     .validate_layout(surface.nx, surface.ny)
                     .map_err(|e| invalid(e.to_string()))?;
             }
-            self.add_input(&surface.name, &[surface.node_values()], "m")?;
+            layout.surfaces.push(mesh);
         }
-        self.add_input("reference_area", &[1], "m**2")?;
-        self.add_input("reference_chord", &[1], "m")?;
-        self.add_input("reference_span", &[1], "m")?;
-        self.add_input("moment_ref_x", &[1], "m")?;
-        self.add_input("moment_ref_y", &[1], "m")?;
-        self.add_input("moment_ref_z", &[1], "m")?;
-
-        self.add_input("alpha", &[1], "rad")?;
-        self.add_input("beta", &[1], "rad")?;
-        self.add_input("mach", &[1], "")?;
-        self.add_input("dynamic_pressure", &[1], "Pa")?;
-        self.add_input("roll_rate", &[1], "")?;
-        self.add_input("pitch_rate", &[1], "")?;
-        self.add_input("yaw_rate", &[1], "")?;
-
-        for name in self.control_names() {
-            let input = format!("control_{name}");
-            if self.surfaces.iter().any(|surface| surface.name == input) {
-                return Err(invalid(format!(
-                    "control input '{input}' conflicts with a mesh input"
-                )));
+        if let Some(problem) = &self.trim {
+            problem
+                .validate(&layout)
+                .map_err(|e| invalid(e.to_string()))?;
+        }
+        let inputs = self.physical_inputs();
+        let outputs = self.output_names();
+        let mut unique = std::collections::BTreeSet::new();
+        for name in inputs.iter().chain(&outputs) {
+            if !unique.insert(name) {
+                return Err(invalid(format!("input/output name collision '{name}'")));
             }
-            self.add_input(&input, &[1], "rad")?;
         }
         for input in &self.fixed_inputs {
-            let known = self
-                .control_names()
-                .iter()
-                .any(|name| format!("control_{name}") == *input)
-                || self.surfaces.iter().any(|s| s.name == *input)
-                || FLIGHT_INPUTS.contains(&input.as_str())
-                || [
-                    "reference_area",
-                    "reference_chord",
-                    "reference_span",
-                    "moment_ref_x",
-                    "moment_ref_y",
-                    "moment_ref_z",
-                    "dynamic_pressure",
-                ]
-                .contains(&input.as_str());
-            if !known {
-                return Err(invalid(format!("unknown fixed input {input}")));
+            if !inputs.contains(input) {
+                return Err(invalid(format!(
+                    "unknown or internally solved fixed input {input}"
+                )));
             }
         }
-        for output in self.outputs.clone() {
-            self.add_output(&output, &[1], "")?;
+        for name in inputs {
+            if let Some(surface) = self.surfaces.iter().find(|s| s.name == name) {
+                self.add_input(&name, &[surface.node_values()], "m")?;
+                continue;
+            }
+            let units = match name.as_str() {
+                "reference_area" => "m**2",
+                "reference_chord" | "reference_span" | "moment_ref_x" | "moment_ref_y"
+                | "moment_ref_z" => "m",
+                "alpha" | "beta" => "rad",
+                "dynamic_pressure" => "Pa",
+                n if n.starts_with("control_") => "rad",
+                _ => self
+                    .trim
+                    .as_ref()
+                    .and_then(|p| p.balances.iter().find(|b| b.target_input == name))
+                    .map(|b| b.quantity.units())
+                    .or_else(|| {
+                        name.strip_prefix("external_")
+                            .and_then(AeroQuantity::from_name)
+                            .map(AeroQuantity::units)
+                    })
+                    .unwrap_or(""),
+            };
+            self.add_input(&name, &[1], units)?;
         }
+        for name in outputs {
+            let units = AeroQuantity::from_name(&name).map_or("rad", AeroQuantity::units);
+            self.add_output(&name, &[1], units)?;
+        }
+        self.setup_complete = true;
         Ok(())
     }
 
     fn setup_partials(&mut self) -> Result<()> {
-        let names: Vec<String> = self
-            .surfaces
-            .iter()
-            .map(|s| s.name.clone())
-            .chain(
-                self.control_names()
-                    .into_iter()
-                    .map(|name| format!("control_{name}")),
-            )
-            .collect();
-        for output in self.outputs.clone() {
-            for name in &names {
-                if self.active(name) {
-                    self.declare_partials(&output, name)?;
-                }
-            }
-            for input in [
-                "reference_area",
-                "reference_chord",
-                "reference_span",
-                "moment_ref_x",
-                "moment_ref_y",
-                "moment_ref_z",
-                "dynamic_pressure",
-            ] {
-                if self.active(input) {
-                    self.declare_partials(&output, input)?;
-                }
-            }
-            for input in FLIGHT_INPUTS {
-                if self.active(input) {
-                    self.declare_partials(&output, input)?;
+        for output in self.output_names() {
+            for input in self.physical_inputs() {
+                if self.active(&input) {
+                    self.declare_partials(&output, &input)?;
                 }
             }
         }
@@ -588,35 +701,88 @@ impl ExplicitDiscipline for VlmDiscipline {
     async fn compute(&self, inputs: &ArrayMap) -> Result<ArrayMap> {
         let cache = self.solved(inputs)?;
         let state = cache.as_ref().expect("solved state");
-        let (mesh, condition, solver) = (&state.mesh, &state.condition, &state.solver);
-        let solution = solver.solution();
-        let results = ForceCalculator::new().compute_with_references(
-            &mesh.reference,
-            solver.mesh(),
-            solution,
-            condition,
+        let values = state.trim.as_ref().map_or_else(
+            || aerodynamic_values(&state.mesh, state.solver(), &state.condition),
+            |trim| trim.values,
         );
-
         let mut outputs = HashMap::new();
-        for (name, value) in [
-            ("CL", results.coefficients.lift),
-            ("CD", results.coefficients.drag),
-            ("CY", results.coefficients.side),
-            ("Cl", results.coefficients.roll),
-            ("Cm", results.coefficients.pitch),
-            ("Cn", results.coefficients.yaw),
-        ] {
-            if self.outputs.iter().any(|s| s == name) {
-                outputs.insert(name.to_string(), scalar(value));
+        for name in &self.outputs {
+            let q = AeroQuantity::from_name(name).expect("validated output");
+            outputs.insert(name.clone(), scalar(values[q as usize]));
+        }
+        if let Some(trim) = &state.trim {
+            for (variable, value) in trim.problem.variables.iter().zip(trim.states.iter()) {
+                outputs.insert(variable.name.clone(), scalar(*value));
+            }
+            if let Some(mixer) = &trim.problem.mixer {
+                for surface in &mixer.surfaces {
+                    let value = trim
+                        .condition
+                        .control_deflections
+                        .iter()
+                        .find(|(n, _)| n == surface)
+                        .expect("realized control")
+                        .1;
+                    outputs.insert(format!("control_{surface}"), scalar(value));
+                }
             }
         }
         Ok(outputs)
     }
 
     async fn compute_partials(&self, inputs: &ArrayMap) -> Result<PartialMap> {
+        if self.trim.is_some()
+            || self
+                .outputs
+                .iter()
+                .any(|n| AeroQuantity::from_name(n).is_some_and(|q| q as usize >= 6))
+        {
+            let mut cache = self.solved(inputs)?;
+            let state = cache.as_mut().expect("solved state");
+            if let Some(partials) = &state.partials {
+                return Ok(partials.clone());
+            }
+            let quantities: Vec<_> = self
+                .outputs
+                .iter()
+                .map(|n| AeroQuantity::from_name(n).expect("validated output"))
+                .collect();
+            let nodes = self.surfaces.iter().any(|s| self.active(&s.name));
+            let partials: PartialMap = if let Some(trim) = &state.trim {
+                trim.compute_partials(&state.mesh, &quantities, nodes)
+                    .map_err(|e| rejected("trim_partials", e.to_string()))?
+                    .into_iter()
+                    .filter(|((_, input), _)| self.active(input))
+                    .map(|(key, values)| (key, flat(values)))
+                    .collect()
+            } else {
+                let aero = linearize_aerodynamics(
+                    &state.mesh,
+                    state.solver(),
+                    &state.condition,
+                    &quantities,
+                    nodes,
+                )
+                .map_err(|e| rejected("load_partials", e.to_string()))?;
+                let mut partials = HashMap::new();
+                for (input, block) in aero.partials {
+                    if self.active(&input) {
+                        for output in &quantities {
+                            let values = (0..block.ncols())
+                                .map(|c| block[(*output as usize, c)])
+                                .collect();
+                            partials.insert((output.name().into(), input.clone()), flat(values));
+                        }
+                    }
+                }
+                partials
+            };
+            state.partials = Some(partials.clone());
+            return Ok(partials);
+        }
         let cache = self.solved(inputs)?;
         let state = cache.as_ref().expect("solved state");
-        let (mesh, condition, solver) = (&state.mesh, &state.condition, &state.solver);
+        let (mesh, condition, solver) = (&state.mesh, &state.condition, state.solver());
         let solution = solver.solution();
         let results = ForceCalculator::new().compute_with_references(
             &mesh.reference,
