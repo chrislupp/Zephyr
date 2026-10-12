@@ -4,7 +4,7 @@ use crate::core::{Scalar, Vec3};
 use crate::error::{PegasusError, Result};
 
 /// Coefficient-normalization quantities.
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct ReferenceQuantities {
     /// Reference area.
     pub area: Scalar,
@@ -39,8 +39,10 @@ impl From<&super::Aircraft> for ReferenceQuantities {
 }
 
 /// Structured `(nx+1) × (ny+1)` node grid.
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct SurfaceMesh {
+    /// Controls attached to this mesh before control actuation.
+    pub controls: Vec<super::MeshControlSurface>,
     /// Surface name.
     pub name: String,
     /// Chordwise panel count.
@@ -66,6 +68,7 @@ impl SurfaceMesh {
     #[must_use]
     pub fn new(name: impl Into<String>, nx: usize, ny: usize) -> Self {
         Self {
+            controls: Vec::new(),
             name: name.into(),
             nx,
             ny,
@@ -116,6 +119,9 @@ impl SurfaceMesh {
                 self.name
             )));
         }
+        for control in &self.controls {
+            control.validate(self)?;
+        }
         Ok(())
     }
 
@@ -141,7 +147,7 @@ impl SurfaceMesh {
 }
 
 /// Complete direct-mesh analysis input.
-#[derive(Clone, Debug, Default)]
+#[derive(Clone, Debug, Default, PartialEq)]
 pub struct MeshInput {
     /// Use full collocation self influence and bound-vortex force evaluation.
     /// False retains the historical v0.2 coefficient convention.

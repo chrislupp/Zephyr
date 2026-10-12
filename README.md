@@ -13,9 +13,9 @@ crates.io.
 
 The Rust port preserves the numerical conventions and panel ordering of
 Pegasus 0.2.0. The legacy source at tag `v0.2.0` (commit `556b0ea`) is the
-behavioral oracle for parity fixtures. Philote servers and Philote-dependent
-OpenMDAO workflows are intentionally deferred; the crate has no C, C++, or
-Python runtime dependency.
+behavioral oracle for parity fixtures. The optional `philote` feature exposes
+mesh and VLM disciplines for external MDO workflows. The crate has no C, C++,
+or Python runtime dependency.
 
 ## Units and axes
 
@@ -80,6 +80,83 @@ assert!(results.is_valid);
 assert!(results.coefficients.lift > 0.0);
 # Ok::<(), pegasus_vlm::PegasusError>(())
 ```
+
+## Controls in external optimizations and coupled simulations
+
+A `SurfaceMesh` can carry `MeshControlSurface` definitions. Pass the structurally
+deformed mesh **before control actuation** and put each command's deflection in
+`FlightCondition::control_deflections`, in radians. Pegasus rotates the flow
+boundary-condition normals; it does not rotate mesh nodes or the wake. If the
+caller already physically deflected the mesh, omit the corresponding control
+actuation here.
+
+```rust
+use pegasus_vlm::geometry::MeshControlSurface;
+
+// For a 4 x 6 panel mesh: strips 1 through 5, hinge at chordwise node row 3.
+let flap = MeshControlSurface::trailing_edge("flap", 1..6, vec![3.0; 7]);
+// wing.controls.push(flap);
+```
+
+Hinge coordinates are **material mesh coordinates**, not chord fractions:
+`0` is the leading edge, `nx` the trailing edge, and `i + f` interpolates between
+node rows `i` and `i + 1`. Provide `ny + 1` coordinates, including inactive
+stations. The hinge follows mesh bending and twist. Control coverage uses the
+mean panel overlap at the two span stations; mesh derivatives hold those
+material coordinates and the active span interval fixed. Align panel edges with
+the hinge when practical. Hinge placement and span-extent design derivatives are
+not exposed.
+
+`gain` specifies rotation per command using the right-hand rule about the hinge
+from station `j` to `j + 1`. `duplicate_sign` is +1 for symmetric deflection and
+-1 for antisymmetric deflection on a mirrored mesh. Matching names on several
+surfaces share a command. Separate meshes and names give independent left/right
+commands; multiple definitions can also mix flap/aileron commands. Set
+`leading_edge = true` for panels ahead of a hinge. Commands compose in the order
+of the flight-condition list, then definition order on each panel. Keep that
+order fixed during optimization. Omitted commands mean zero; unknown names are
+errors. For legacy repeated names, a named derivative varies all matching
+entries together; the derivative of an omitted command appends it at zero.
+
+- `GradientCalculator::compute_control_gradients` returns derivatives per radian
+  for all named commands, honoring `OutputSelection`, including near-field and
+  Trefftz induced drag.
+- `compute_mesh_node_gradients` and section-geometry gradients support nonzero
+  control deflections. Mesh gradients include the changing hinge direction.
+- `StripLoadAdjoint::control_cotangents` differentiates arbitrary functionals of
+  distributed strip forces and moments. Its `mesh_node_cotangents` and
+  `flight_condition_cotangents` also work with active controls. Load seeds use
+  the existing raw Kutta–Joukowski resultant convention: multiply seeds by
+  dynamic pressure when differentiating dimensional loads. Moment points are
+  held fixed; callers must differentiate their motion separately.
+
+The external application handles structural equilibrium, trim, control laws,
+load transfer, actuator bounds and total coupled derivatives. Geometry/strip
+adjoints still require explicit mesh duplication rather than symmetry planes,
+and do not support section drag polars. This remains a quasi-steady VLM normal
+rotation model, not a separated-flow or unsteady control model.
+
+Run the complete native example with `cargo run --example control_surfaces`.
+
+With the `philote` feature, the VLM discipline accepts a `controls` option as a
+JSON array (or a JSON-encoded string over the wire):
+
+```json
+[
+  {"surface": "Wing", "name": "flap", "span_start": 1, "span_end": 6,
+   "hinge": 3.0, "gain": 1.0, "duplicate_sign": 1.0}
+]
+```
+
+`hinge` accepts a constant or a `ny + 1` array. Optional `leading_edge` defaults
+to false. Set surface names and dimensions in the same options request. Each
+unique name declares a scalar input `control_<name>` in radians, with analytical
+partials for the selected coefficient outputs. Philote orders commands
+alphabetically. Supply these inputs on every
+evaluation, including zero values. They participate in solution caching and can
+be included in `fixed_inputs`; fixing a command suppresses its partials while
+retaining its deflection and its effect on mesh derivatives. Native callers can
+also populate `SurfaceOption::controls` directly.
 
 ## AVL and mass files
 

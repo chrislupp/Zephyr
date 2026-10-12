@@ -18,6 +18,8 @@ pub(crate) struct LatticeDirections {
     pub bound_right: Vec<Vec3>,
     pub control_point: Vec<Vec3>,
     pub normal: Vec<Vec3>,
+    pub control_axes: Vec<Vec<Vec3>>,
+    pub control_gains: Vec<Vec<Scalar>>,
     pub local_chord: Vec<Scalar>,
     pub strip_chord: Vec<Scalar>,
 }
@@ -29,6 +31,16 @@ impl LatticeDirections {
             bound_right: vec![Vec3::zeros(); mesh.vortex_count()],
             control_point: vec![Vec3::zeros(); mesh.vortex_count()],
             normal: vec![Vec3::zeros(); mesh.vortex_count()],
+            control_axes: mesh
+                .control_influences()
+                .iter()
+                .map(|v| vec![Vec3::zeros(); v.len()])
+                .collect(),
+            control_gains: mesh
+                .control_influences()
+                .iter()
+                .map(|v| vec![0.0; v.len()])
+                .collect(),
             local_chord: vec![0.0; mesh.vortex_count()],
             strip_chord: vec![0.0; mesh.strip_count()],
         }
@@ -51,11 +63,7 @@ impl<'a> GeometryAdjointContext<'a> {
         if !solver.solution().is_valid {
             return Err(PegasusError::InvalidSolution);
         }
-        if !condition.control_deflections.is_empty() {
-            return Err(PegasusError::InvalidFlightCondition(
-                "geometry adjoints with deflected control normals are not supported".into(),
-            ));
-        }
+        solver.check_solved_condition(condition)?;
         if solver.symmetry().y_symmetry != SymmetryType::None
             || solver.symmetry().z_symmetry != SymmetryType::None
         {
@@ -218,13 +226,20 @@ impl<'a> GeometryAdjointContext<'a> {
         );
         VecX::from_fn(mesh.vortex_count(), |row, _| {
             let target = &mesh.vortices()[row];
+            let normal = self.solver.linearized_normals()[row];
+            let normal_direction = crate::solver::control::normal_jvp(
+                target.normal_at_control_point,
+                direction.normal[row],
+                &mesh.control_influences()[row],
+                &direction.control_axes[row],
+                &direction.control_gains[row],
+                self.condition,
+            );
             let local_velocity =
                 freestream + omega.cross(&(target.control_point - self.solver.reference_point()));
             let rhs_direction = if target.affected_by_freestream {
-                -omega
-                    .cross(&direction.control_point[row])
-                    .dot(&target.normal_at_control_point)
-                    - local_velocity.dot(&direction.normal[row])
+                -omega.cross(&direction.control_point[row]).dot(&normal)
+                    - local_velocity.dot(&normal_direction)
             } else {
                 0.0
             };
@@ -235,7 +250,7 @@ impl<'a> GeometryAdjointContext<'a> {
                     &source.bound_vortex_left,
                     &source.bound_vortex_right,
                     &target.control_point,
-                    &target.normal_at_control_point,
+                    &normal,
                     core,
                     pg,
                     mesh.consistent_forces() || row != column,
@@ -243,7 +258,7 @@ impl<'a> GeometryAdjointContext<'a> {
                 let entry_direction = gradient.bound_left.dot(&direction.bound_left[column])
                     + gradient.bound_right.dot(&direction.bound_right[column])
                     + gradient.control_point.dot(&direction.control_point[row])
-                    + gradient.normal.dot(&direction.normal[row]);
+                    + gradient.normal.dot(&normal_direction);
                 matrix_product += entry_direction * solution.circulation[column];
             }
             rhs_direction - matrix_product
@@ -409,6 +424,25 @@ pub(crate) fn direct_mesh_node_direction(
             let cross = diagonal_a.cross(&diagonal_b);
             let cross_direction = (d11 - d00).cross(&diagonal_b) + diagonal_a.cross(&(d10 - d01));
             result.normal[vortex_index] = normalized_direction(&cross, &cross_direction);
+            let mut slot = 0;
+            for control in &surface.controls {
+                if control.panel_gain(chord_offset, strip_offset).abs() <= EPSILON {
+                    continue;
+                }
+                let mut hinge_direction = Vec3::zeros();
+                for (j, sign) in [(strip_offset, -1.0), (strip_offset + 1, 1.0)] {
+                    for (index, weight) in control.weights(surface, j) {
+                        if index == node_i * (surface.ny + 1) + node_j {
+                            hinge_direction += sign * weight * basis;
+                        }
+                    }
+                }
+                result.control_axes[vortex_index][slot] = normalized_direction(
+                    &control.hinge_vector(surface, strip_offset),
+                    &hinge_direction,
+                );
+                slot += 1;
+            }
             result.local_chord[vortex_index] = chord_direction;
         }
     }
@@ -431,6 +465,11 @@ pub(crate) fn direct_mesh_node_direction(
                 result.control_point[duplicate_index] =
                     reflected_direction(result.control_point[original_index]);
                 result.normal[duplicate_index] = reflected_direction(result.normal[original_index]);
+                result.control_axes[duplicate_index] = result.control_axes[original_index]
+                    .iter()
+                    .copied()
+                    .map(reflected_direction)
+                    .collect();
                 result.local_chord[duplicate_index] = result.local_chord[original_index];
             }
         }

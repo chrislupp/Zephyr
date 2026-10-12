@@ -24,13 +24,15 @@ use super::{
 };
 use crate::aero::ForceCalculator;
 use crate::core::Vec3;
-use crate::geometry::{MeshInput, SurfaceMesh};
+use crate::geometry::{MeshControlSurface, MeshInput, SurfaceMesh};
 use crate::gradients::GradientCalculator;
 use crate::solver::{FlightCondition, VortexLatticeSolver};
 
 /// Per-surface configuration supplied through discipline options.
 #[derive(Clone, Debug)]
 pub struct SurfaceOption {
+    /// Controls attached to material locations in this surface mesh.
+    pub controls: Vec<MeshControlSurface>,
     /// Variable name carrying this surface's nodes.
     pub name: String,
     /// Chordwise panel count.
@@ -52,6 +54,7 @@ pub struct SurfaceOption {
 impl Default for SurfaceOption {
     fn default() -> Self {
         Self {
+            controls: Vec::new(),
             name: "Wing".into(),
             nx: 1,
             ny: 1,
@@ -176,6 +179,15 @@ impl VlmDiscipline {
         &self.surfaces
     }
 
+    fn control_names(&self) -> Vec<String> {
+        self.surfaces
+            .iter()
+            .flat_map(|s| s.controls.iter().map(|c| c.name.clone()))
+            .collect::<std::collections::BTreeSet<_>>()
+            .into_iter()
+            .collect()
+    }
+
     /// Assemble a [`MeshInput`] from the incoming node arrays.
     fn build_mesh(&self, inputs: &ArrayMap) -> Result<MeshInput> {
         let mut mesh = MeshInput {
@@ -185,6 +197,7 @@ impl VlmDiscipline {
         for surface in &self.surfaces {
             let nodes = sized_input(inputs, &surface.name, surface.node_values())?;
             let mut generated = SurfaceMesh::new(&surface.name, surface.nx, surface.ny);
+            generated.controls = surface.controls.clone();
             generated.component_index = surface.component_index;
             generated.affected_by_freestream = surface.affected_by_freestream;
             generated.has_wake = surface.has_wake;
@@ -216,7 +229,14 @@ impl VlmDiscipline {
             roll_rate: scalar_input(inputs, "roll_rate")?,
             pitch_rate: scalar_input(inputs, "pitch_rate")?,
             yaw_rate: scalar_input(inputs, "yaw_rate")?,
-            ..FlightCondition::default()
+            control_deflections: self
+                .control_names()
+                .into_iter()
+                .map(|name| {
+                    let value = scalar_input(inputs, &format!("control_{name}"))?;
+                    Ok((name, value))
+                })
+                .collect::<Result<_>>()?,
         })
     }
 }
@@ -261,6 +281,7 @@ impl Discipline for VlmDiscipline {
         self.add_option("consistent_forces", "bool")?;
         self.add_option("outputs", "str")?;
         self.add_option("fixed_inputs", "str")?;
+        self.add_option("controls", "str")?;
         for key in [
             "surface_names",
             "surface_nx",
@@ -368,11 +389,107 @@ impl Discipline for VlmDiscipline {
                 },
             )?;
         }
+        if let Some(value) = options.get("controls") {
+            let decoded = if let Some(text) = value.as_str() {
+                serde_json::from_str(text)
+                    .map_err(|e| invalid(format!("invalid controls JSON: {e}")))?
+            } else {
+                value.clone()
+            };
+            let definitions = decoded
+                .as_array()
+                .ok_or_else(|| invalid("controls must be a JSON array"))?;
+            for definition in definitions {
+                let object = definition
+                    .as_object()
+                    .ok_or_else(|| invalid("control must be an object"))?;
+                for key in object.keys() {
+                    if ![
+                        "surface",
+                        "name",
+                        "span_start",
+                        "span_end",
+                        "hinge",
+                        "gain",
+                        "duplicate_sign",
+                        "leading_edge",
+                    ]
+                    .contains(&key.as_str())
+                    {
+                        return Err(invalid(format!("unknown control field '{key}'")));
+                    }
+                }
+                let text = |key| {
+                    object
+                        .get(key)
+                        .and_then(|v| v.as_str())
+                        .ok_or_else(|| invalid(format!("control requires string '{key}'")))
+                };
+                let surface_name = text("surface")?;
+                let surface = self
+                    .surfaces
+                    .iter_mut()
+                    .find(|s| s.name == surface_name)
+                    .ok_or_else(|| invalid(format!("unknown control surface '{surface_name}'")))?;
+                let index = |key: &str| -> Result<usize> {
+                    let value = object
+                        .get(key)
+                        .and_then(|v| v.as_u64())
+                        .ok_or_else(|| invalid(format!("control requires integer '{key}'")))?;
+                    usize::try_from(value).map_err(|_| invalid("control index is too large"))
+                };
+                let hinge = object
+                    .get("hinge")
+                    .ok_or_else(|| invalid("control requires hinge"))?;
+                let hinge = if let Some(value) = hinge.as_f64() {
+                    vec![value; surface.ny + 1]
+                } else {
+                    hinge
+                        .as_array()
+                        .ok_or_else(|| invalid("hinge must be a number or array"))?
+                        .iter()
+                        .map(|v| {
+                            v.as_f64()
+                                .ok_or_else(|| invalid("hinge must contain numbers"))
+                        })
+                        .collect::<Result<Vec<_>>>()?
+                };
+                let mut control = MeshControlSurface::trailing_edge(
+                    text("name")?,
+                    index("span_start")?..index("span_end")?,
+                    hinge,
+                );
+                for (key, target) in [
+                    ("gain", &mut control.gain),
+                    ("duplicate_sign", &mut control.duplicate_sign),
+                ] {
+                    if let Some(value) = object.get(key) {
+                        *target = value
+                            .as_f64()
+                            .ok_or_else(|| invalid(format!("{key} must be numeric")))?;
+                    }
+                }
+                if let Some(value) = object.get("leading_edge") {
+                    control.leading_edge = value
+                        .as_bool()
+                        .ok_or_else(|| invalid("leading_edge must be boolean"))?;
+                }
+                control
+                    .validate_layout(surface.nx, surface.ny)
+                    .map_err(|e| invalid(e.to_string()))?;
+                surface.controls.push(control);
+            }
+        }
         Ok(())
     }
 
     fn setup(&mut self) -> Result<()> {
         for surface in self.surfaces.clone() {
+            for control in &surface.controls {
+                control
+                    .validate_layout(surface.nx, surface.ny)
+                    .map_err(|e| invalid(e.to_string()))?;
+            }
             self.add_input(&surface.name, &[surface.node_values()], "m")?;
         }
         self.add_input("reference_area", &[1], "m**2")?;
@@ -390,8 +507,21 @@ impl Discipline for VlmDiscipline {
         self.add_input("pitch_rate", &[1], "")?;
         self.add_input("yaw_rate", &[1], "")?;
 
+        for name in self.control_names() {
+            let input = format!("control_{name}");
+            if self.surfaces.iter().any(|surface| surface.name == input) {
+                return Err(invalid(format!(
+                    "control input '{input}' conflicts with a mesh input"
+                )));
+            }
+            self.add_input(&input, &[1], "rad")?;
+        }
         for input in &self.fixed_inputs {
-            let known = self.surfaces.iter().any(|s| s.name == *input)
+            let known = self
+                .control_names()
+                .iter()
+                .any(|name| format!("control_{name}") == *input)
+                || self.surfaces.iter().any(|s| s.name == *input)
                 || FLIGHT_INPUTS.contains(&input.as_str())
                 || [
                     "reference_area",
@@ -414,7 +544,16 @@ impl Discipline for VlmDiscipline {
     }
 
     fn setup_partials(&mut self) -> Result<()> {
-        let names: Vec<String> = self.surfaces.iter().map(|s| s.name.clone()).collect();
+        let names: Vec<String> = self
+            .surfaces
+            .iter()
+            .map(|s| s.name.clone())
+            .chain(
+                self.control_names()
+                    .into_iter()
+                    .map(|name| format!("control_{name}")),
+            )
+            .collect();
         for output in self.outputs.clone() {
             for name in &names {
                 if self.active(name) {
@@ -563,6 +702,30 @@ impl ExplicitDiscipline for VlmDiscipline {
                 ("Cn", gradients.coefficients.yaw),
             ] {
                 insert(output, input, vec![value]);
+            }
+        }
+
+        if self
+            .control_names()
+            .iter()
+            .any(|name| self.active(&format!("control_{name}")))
+        {
+            let controls = calculator
+                .control_gradients_at_solution(solver, condition)
+                .map_err(|error| rejected("compute_control_gradients", error.to_string()))?;
+            for control in controls {
+                let input = format!("control_{}", control.name);
+                let values = control.by_deflection.coefficients;
+                for (output, value) in [
+                    ("CL", values.lift),
+                    ("CD", values.drag),
+                    ("CY", values.side),
+                    ("Cl", values.roll),
+                    ("Cm", values.pitch),
+                    ("Cn", values.yaw),
+                ] {
+                    insert(output, &input, vec![value]);
+                }
             }
         }
 
