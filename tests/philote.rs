@@ -700,3 +700,94 @@ async fn disciplines_declare_every_partial_that_is_not_identically_zero() {
         }
     }
 }
+
+fn selected_vlm() -> VlmDiscipline {
+    let mut discipline = VlmDiscipline::default();
+    discipline.initialize().unwrap();
+    discipline.set_options(&options(&[
+        ("surface_names", "Wing".into()),
+        ("surface_nx", "2".into()), ("surface_ny", "3".into()),
+        ("consistent_forces", true.into()),
+        ("outputs", "CL,CD,Cm".into()),
+        ("fixed_inputs", "beta,mach,roll_rate,pitch_rate,yaw_rate,moment_ref_x,moment_ref_y,moment_ref_z,reference_area,reference_chord,reference_span,dynamic_pressure".into()),
+    ])).unwrap();
+    discipline.setup().unwrap();
+    discipline.setup_partials().unwrap();
+    discipline
+}
+
+#[tokio::test]
+async fn selected_vlm_partials_match_full_derivatives_and_independent_oracle() {
+    let selected = selected_vlm();
+    let mut full = vlm_discipline(2, 3);
+    full.set_options(&options(&[
+        ("consistent_forces", true.into()),
+        ("surface_names", "Wing".into()),
+        ("surface_nx", "2".into()),
+        ("surface_ny", "3".into()),
+    ]))
+    .unwrap();
+    let inputs = vlm_inputs(2, 3, 1.0, 3.0);
+    let forward = selected.compute(&inputs).await.unwrap();
+    assert_eq!(forward.len(), 3);
+    let partials = selected.compute_partials(&inputs).await.unwrap();
+    let reference = full.compute_partials(&inputs).await.unwrap();
+    assert_eq!(partials.len(), 6); // Three outputs, mesh and alpha only.
+    for (key, values) in &partials {
+        for (a, b) in values.iter().zip(reference[key].iter()) {
+            assert_abs_diff_eq!(a, b, epsilon = 1e-12);
+        }
+    }
+    for input in ["Wing", "alpha"] {
+        for (index, _) in inputs[input].iter().enumerate() {
+            let differences = difference(&selected, &inputs, input, index, 1e-6).await;
+            for (output, values) in differences {
+                let analytic = partials[&(output, input.into())][index];
+                assert_abs_diff_eq!(analytic, values[0], epsilon = 1e-7);
+            }
+        }
+    }
+}
+
+#[tokio::test]
+async fn vlm_cache_tracks_all_inputs_and_option_changes() {
+    let mut cached = selected_vlm();
+    let inputs = vlm_inputs(2, 3, 1.0, 3.0);
+    let original = cached.compute(&inputs).await.unwrap();
+    assert_eq!(original, cached.compute(&inputs).await.unwrap());
+    for name in ["Wing", "alpha", "mach", "reference_area", "moment_ref_x"] {
+        let mut changed = inputs.clone();
+        changed.get_mut(name).unwrap()[0] += 0.01;
+        let expected = selected_vlm().compute(&changed).await.unwrap();
+        assert_eq!(expected, cached.compute(&changed).await.unwrap());
+        assert_eq!(original, cached.compute(&inputs).await.unwrap());
+    }
+    cached
+        .set_options(&options(&[
+            ("consistent_forces", false.into()),
+            ("surface_names", "Wing".into()),
+            ("surface_nx", "2".into()),
+            ("surface_ny", "3".into()),
+        ]))
+        .unwrap();
+    let reference = vlm_discipline(2, 3).compute(&inputs).await.unwrap();
+    let changed = cached.compute(&inputs).await.unwrap();
+    for (name, value) in changed {
+        assert_eq!(value, reference[&name]);
+    }
+}
+
+#[test]
+fn vlm_rejects_unknown_output_and_fixed_input_names() {
+    let mut discipline = VlmDiscipline::default();
+    discipline.initialize().unwrap();
+    assert!(
+        discipline
+            .set_options(&options(&[("outputs", "CD,typo".into())]))
+            .is_err()
+    );
+    discipline
+        .set_options(&options(&[("fixed_inputs", "typo".into())]))
+        .unwrap();
+    assert!(discipline.setup().is_err());
+}

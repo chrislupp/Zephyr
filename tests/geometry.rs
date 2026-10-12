@@ -208,6 +208,7 @@ fn mesh_input_rejects_empty_and_nonpositive_references() {
     let mut surface = SurfaceMesh::new("mesh", 1, 1);
     surface.nodes = vec![Vec3::zeros(); 4];
     let input = MeshInput {
+        consistent_forces: false,
         surfaces: vec![surface],
         ..MeshInput::default()
     };

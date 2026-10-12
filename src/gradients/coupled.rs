@@ -378,7 +378,7 @@ impl<'a> StripLoadAdjoint<'a> {
             for offset in 0..strip.num_vortices {
                 let index = strip.first_vortex_index + offset;
                 let vortex = &mesh.vortices()[index];
-                let arm = vortex.control_point - point;
+                let arm = mesh.force_point(vortex) - point;
                 let line = vortex.bound_vortex_right - vortex.bound_vortex_left;
                 for (column, cotangent) in columns.iter().enumerate() {
                     let seed =
@@ -449,7 +449,12 @@ impl<'a> StripLoadAdjoint<'a> {
                     for d in 0..3 {
                         out.bound_right[(3 * index + d, column)] += line[d];
                         out.bound_left[(3 * index + d, column)] -= line[d];
-                        out.control_point[(3 * index + d, column)] += arm[d];
+                        if mesh.consistent_forces() {
+                            out.bound_left[(3 * index + d, column)] += 0.5 * arm[d];
+                            out.bound_right[(3 * index + d, column)] += 0.5 * arm[d];
+                        } else {
+                            out.control_point[(3 * index + d, column)] += arm[d];
+                        }
                     }
                 }
             }
@@ -471,6 +476,46 @@ impl<'a> StripLoadAdjoint<'a> {
         adjoints: &MatX,
         out: &mut LatticeCotangents,
     ) {
+        let n = self.mesh().vortex_count();
+        if !self.mesh().consistent_forces() || n < 128 {
+            self.accumulate_pairwise_rows(velocity_seed, adjoints, out, 0..n);
+            return;
+        }
+        // Fixed blocks and ordered reduction make the arithmetic independent
+        // of the pool size (and of whether the parallel feature is enabled).
+        // Bound scratch storage to 16 O(N * outputs) blocks, not O(N^2).
+        let block_size = n.div_ceil(16);
+        let blocks: Vec<_> = (0..n)
+            .step_by(block_size)
+            .map(|start| start..(start + block_size).min(n))
+            .collect();
+        let evaluate = |rows: &std::ops::Range<usize>| {
+            let mut local = LatticeCotangents::zeros(n, adjoints.ncols());
+            self.accumulate_pairwise_rows(velocity_seed, adjoints, &mut local, rows.clone());
+            local
+        };
+        #[cfg(feature = "parallel")]
+        let partials: Vec<_> = {
+            use rayon::prelude::*;
+            blocks.par_iter().map(evaluate).collect()
+        };
+        #[cfg(not(feature = "parallel"))]
+        let partials: Vec<_> = blocks.iter().map(evaluate).collect();
+        for local in partials {
+            out.bound_left += local.bound_left;
+            out.bound_right += local.bound_right;
+            out.control_point += local.control_point;
+            out.normal += local.normal;
+        }
+    }
+
+    fn accumulate_pairwise_rows(
+        &self,
+        velocity_seed: &MatX,
+        adjoints: &MatX,
+        out: &mut LatticeCotangents,
+        rows: std::ops::Range<usize>,
+    ) {
         let mesh = self.mesh();
         let solution = self.solver.solution();
         let freestream = VortexLatticeSolver::freestream_direction(self.condition);
@@ -480,7 +525,8 @@ impl<'a> StripLoadAdjoint<'a> {
             self.condition.yaw_rate,
         );
 
-        for (row, target) in mesh.vortices().iter().enumerate() {
+        for row in rows {
+            let target = &mesh.vortices()[row];
             let normal = target.normal_at_control_point;
             let seed_rows = velocity_seed.rows(3 * row, 3);
             let adjoint_row = adjoints.row(row);
@@ -491,7 +537,7 @@ impl<'a> StripLoadAdjoint<'a> {
                     continue;
                 }
                 let core = core_radius(mesh, column, target.component_index);
-                let include_bound = row != column;
+                let include_bound = mesh.consistent_forces() || row != column;
                 let jacobians = horseshoe_velocity_jacobians(
                     &target.control_point,
                     &source.bound_vortex_left,
@@ -544,6 +590,18 @@ impl<'a> StripLoadAdjoint<'a> {
 
                 // Load path: the induced velocity at this control point moves
                 // when either the target or the source moves.
+                let jacobians = if mesh.consistent_forces() {
+                    horseshoe_velocity_jacobians(
+                        &mesh.force_point(target),
+                        &source.bound_vortex_left,
+                        &source.bound_vortex_right,
+                        self.prandtl_glauert,
+                        core,
+                        row != column,
+                    )
+                } else {
+                    jacobians
+                };
                 out.bound_left.rows_mut(3 * column, 3).gemm_tr(
                     gamma,
                     &jacobians.bound_left,
@@ -556,12 +614,27 @@ impl<'a> StripLoadAdjoint<'a> {
                     &seed_rows,
                     1.0,
                 );
-                out.control_point.rows_mut(3 * row, 3).gemm_tr(
-                    gamma,
-                    &jacobians.field_point,
-                    &seed_rows,
-                    1.0,
-                );
+                if mesh.consistent_forces() {
+                    out.bound_left.rows_mut(3 * row, 3).gemm_tr(
+                        0.5 * gamma,
+                        &jacobians.field_point,
+                        &seed_rows,
+                        1.0,
+                    );
+                    out.bound_right.rows_mut(3 * row, 3).gemm_tr(
+                        0.5 * gamma,
+                        &jacobians.field_point,
+                        &seed_rows,
+                        1.0,
+                    );
+                } else {
+                    out.control_point.rows_mut(3 * row, 3).gemm_tr(
+                        gamma,
+                        &jacobians.field_point,
+                        &seed_rows,
+                        1.0,
+                    );
+                }
             }
 
             // The right-hand side is the freestream and rotation normalwash,

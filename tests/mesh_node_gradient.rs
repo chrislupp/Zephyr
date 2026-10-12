@@ -237,3 +237,117 @@ fn the_panel_normal_jvp_matches_a_centered_difference() {
         );
     }
 }
+
+#[test]
+fn consistent_single_horseshoe_exact_force_and_moment() {
+    let mut input = mesh_input(1, 1, 1.0, 10.0, false);
+    input.consistent_forces = true;
+    let condition = FlightCondition {
+        alpha: 0.05,
+        ..FlightCondition::default()
+    };
+    let mut solver = VortexLatticeSolver::new();
+    solver.set_mesh(&input).unwrap();
+    let solution = solver.solve(&condition).unwrap();
+    let result = ForceCalculator::new().compute_with_references(
+        &input.reference,
+        solver.mesh(),
+        &solution,
+        &condition,
+    );
+    let s: f64 = 5.0;
+    let d: f64 = 0.5;
+    let w = (1.0 + (d * d + s * s).sqrt() / d) / (2.0 * std::f64::consts::PI * s);
+    let gamma = condition.alpha.sin() / w;
+    let vz = -gamma / (2.0 * std::f64::consts::PI * s);
+    let fx = -2.0 * gamma * (condition.alpha.sin() + vz);
+    let fz = 2.0 * gamma * condition.alpha.cos();
+    assert!(
+        (result.coefficients.lift - (fz * condition.alpha.cos() - fx * condition.alpha.sin()))
+            .abs()
+            < 1e-10
+    );
+    assert!(
+        (result.coefficients.drag - (fx * condition.alpha.cos() + fz * condition.alpha.sin()))
+            .abs()
+            < 1e-10
+    );
+    assert!(result.coefficients.pitch.abs() < 1e-12);
+}
+
+#[test]
+fn consistent_node_gradients_match_independent_oracle() {
+    let mut input = mesh_input(2, 3, 1.0, 3.0, true);
+    input.consistent_forces = true;
+    let (fraction, worst) = validate(&input, 2, 3);
+    assert_eq!(fraction, 1.0);
+    assert!(worst < 0.02, "{worst}");
+}
+
+#[test]
+fn consistent_batched_gradients_match_geometry_adjoints() {
+    use pegasus_vlm::gradients::OutputSelection;
+    let mut input = mesh_input(2, 3, 1.0, 3.0, true);
+    input.consistent_forces = true;
+    let mut calculator = GradientCalculator::new();
+    calculator.set_mesh(&input).unwrap();
+    let generic = calculator
+        .compute_mesh_node_gradients(&condition())
+        .unwrap();
+    calculator.set_output_selection(OutputSelection {
+        induced_drag: false,
+        ..OutputSelection::all()
+    });
+    let batched = calculator
+        .compute_mesh_node_gradients(&condition())
+        .unwrap();
+    for (a, b) in [
+        (&generic[0].lift, &batched[0].lift),
+        (&generic[0].drag, &batched[0].drag),
+        (&generic[0].side, &batched[0].side),
+        (&generic[0].roll, &batched[0].roll),
+        (&generic[0].pitch, &batched[0].pitch),
+        (&generic[0].yaw, &batched[0].yaw),
+    ] {
+        for (x, y) in a.nodes.iter().zip(&b.nodes) {
+            assert!((x - y).norm() < 1e-11, "{x:?} != {y:?}");
+        }
+    }
+}
+
+#[test]
+fn consistent_mach_gradient_matches_independent_resolves() {
+    let mut input = mesh_input(2, 3, 1.0, 3.0, true);
+    input.consistent_forces = true;
+    let flight = FlightCondition {
+        mach: 0.45,
+        ..condition()
+    };
+    let mut calculator = GradientCalculator::new();
+    calculator.set_mesh(&input).unwrap();
+    let gradient = calculator
+        .compute_flight_condition_gradients(&flight)
+        .unwrap();
+    let evaluate = |mach| {
+        let flight = FlightCondition {
+            mach,
+            ..flight.clone()
+        };
+        let mut solver = VortexLatticeSolver::new();
+        solver.set_mesh(&input).unwrap();
+        let solution = solver.solve(&flight).unwrap();
+        ForceCalculator::new()
+            .compute_with_references(&input.reference, solver.mesh(), &solution, &flight)
+            .coefficients
+    };
+    let h = 1e-6;
+    let plus = evaluate(flight.mach + h);
+    let minus = evaluate(flight.mach - h);
+    for (analytic, p, m) in [
+        (gradient.by_mach.coefficients.lift, plus.lift, minus.lift),
+        (gradient.by_mach.coefficients.drag, plus.drag, minus.drag),
+        (gradient.by_mach.coefficients.pitch, plus.pitch, minus.pitch),
+    ] {
+        assert!((analytic - (p - m) / (2.0 * h)).abs() < 1e-8);
+    }
+}

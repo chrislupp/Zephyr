@@ -90,6 +90,7 @@ pub struct VortexLatticeSolver {
     reference_quantities: ReferenceQuantities,
     aic_matrix: MatX,
     velocity_influence_matrix: MatX,
+    collocation_velocity_matrix: MatX,
     solution_aic_matrix: Option<MatX>,
     aic_lu: Option<DynamicLu>,
     solution_lu: Option<DynamicLu>,
@@ -111,6 +112,7 @@ impl Default for VortexLatticeSolver {
             reference_quantities: ReferenceQuantities::default(),
             aic_matrix: MatX::zeros(0, 0),
             velocity_influence_matrix: MatX::zeros(0, 0),
+            collocation_velocity_matrix: MatX::zeros(0, 0),
             solution_aic_matrix: None,
             aic_lu: None,
             solution_lu: None,
@@ -220,7 +222,12 @@ impl VortexLatticeSolver {
             return Err(PegasusError::SingularSystem);
         }
         self.aic_matrix = aic_matrix;
-        self.velocity_influence_matrix = velocity_influence_matrix;
+        self.velocity_influence_matrix = if self.mesh.consistent_forces() {
+            builder.force_velocity_matrix()
+        } else {
+            velocity_influence_matrix.clone()
+        };
+        self.collocation_velocity_matrix = velocity_influence_matrix;
         self.aic_lu = Some(factorize(&self.aic_matrix));
         self.aic_valid = true;
         self.unit_responses_valid = false;
@@ -373,9 +380,9 @@ impl VortexLatticeSolver {
         let n = self.mesh.vortex_count();
         MatX::from_fn(n, n, |row, column| {
             normals[row].dot(&Vec3::new(
-                self.velocity_influence_matrix[(3 * row, column)],
-                self.velocity_influence_matrix[(3 * row + 1, column)],
-                self.velocity_influence_matrix[(3 * row + 2, column)],
+                self.collocation_velocity_matrix[(3 * row, column)],
+                self.collocation_velocity_matrix[(3 * row + 1, column)],
+                self.collocation_velocity_matrix[(3 * row + 2, column)],
             ))
         })
     }
@@ -450,9 +457,9 @@ impl VortexLatticeSolver {
             let mut sum = 0.0;
             for column in 0..n {
                 let entry = normal_derivatives[row].dot(&Vec3::new(
-                    self.velocity_influence_matrix[(3 * row, column)],
-                    self.velocity_influence_matrix[(3 * row + 1, column)],
-                    self.velocity_influence_matrix[(3 * row + 2, column)],
+                    self.collocation_velocity_matrix[(3 * row, column)],
+                    self.collocation_velocity_matrix[(3 * row + 1, column)],
+                    self.collocation_velocity_matrix[(3 * row + 2, column)],
                 ));
                 sum += entry * circulation[column];
             }

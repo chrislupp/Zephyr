@@ -7,6 +7,31 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+- The `parallel` feature also threads the corrected-force mesh-adjoint pairwise
+  geometry sweep at 128 or more panels. Sixteen fixed blocks and an ordered
+  reduction preserve reproducibility across thread counts and serial/parallel
+  builds, with bounded O(N * outputs) scratch storage. Legacy-force and small
+  meshes retain their existing serial accumulation.
+- Philote VLM function and derivative requests reuse one solved state, keyed by
+  all input arrays and invalidated when options change. Node and flight
+  derivatives reuse that factorization instead of rebuilding separate solvers.
+- Optional Philote `outputs` and `fixed_inputs` selections restrict returned
+  coefficients and declared partials. Defaults retain the complete interface.
+  Alpha-only requests bypass unused Mach/rate/reference derivative calculations.
+
+### Added
+- Opt-in `MeshInput::consistent_forces` and Philote `consistent_forces` option:
+  include the self bound leg in collocation, evaluate Kutta–Joukowski induced
+  velocity at bound centers, and take moments at those same centers. Defaults
+  remain unchanged for frozen legacy parity. Mesh, alpha, and Mach derivatives
+  use separate collocation and force influence matrices in this mode.
+- Batched strip-adjoint calculation of the six mesh-node coefficient gradients
+  in corrected-force mode when Trefftz induced drag is not requested. Philote
+  uses this path to avoid one aerodynamic geometry sweep per mesh node.
+- Exact single-horseshoe force/moment and corrected mesh-gradient regression
+  checks for the new force convention.
+
 ## [0.5.0] - 2026-09-05
 
 ### Added
