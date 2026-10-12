@@ -30,6 +30,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   Alpha-only requests bypass unused Mach/rate/reference derivative calculations.
 
 ### Added
+- A runnable SciPy sizing optimization through explicit Philote RPCs, with
+  analytical gradients through internal trim, independent gradient checks,
+  and a recorded optimization maintaining Fz/My equilibrium at every evaluation.
 - Optional internal trim in the explicit Philote VLM discipline and a
   transport-independent `MeshTrimSolver`: selected operating-variable outputs,
   dimensional force/moment balances or coefficient targets, linked controls,

@@ -13,6 +13,8 @@ include = [
     "/src/**",
     "/tests/**",
     "/examples/*.rs",
+    "/examples/trim_optimization.py",
+    "/examples/trim_optimization_results.json",
     "/benches/**",
     "/Cargo.toml",
     "/Cargo.lock",
@@ -87,6 +89,10 @@ required-features = ["philote"]
 
 [[example]]
 name = "philote_trim_client"
+required-features = ["philote"]
+
+[[example]]
+name = "philote_trim_optimization"
 required-features = ["philote"]
 
 [[bench]]

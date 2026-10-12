@@ -200,6 +200,40 @@ sensitivities. For the explicit wire workflow, start
 The [MDO integration guide](docs/docs/guide/mdo-integration.md) describes control
 mixers, numerical options, gradient semantics, and external coupling.
 
+An optimization demonstration uses SciPy SLSQP through the explicit Philote
+RPCs. It sizes wing halfspan and tail chord; each aerodynamic evaluation solves
+`Fz + external_Fz = 0` and `My = 0` for alpha and elevator. Design-dependent
+weight, deformed mesh coordinates, and reference dimensions enter the analytical
+design gradient. The objective is near-field aerodynamic drag plus a simple
+analytical area cost representing profile drag. Geometry bounds define the
+sizing range. Trim is solved inside the discipline throughout optimization.
+
+Build the optimizer bridge and start a fresh server:
+
+```bash
+cargo build --features philote --example philote_trim_optimization
+cargo run --features philote --example philote_vlm_server
+```
+
+Then, in another terminal, run the Python driver:
+
+```bash
+python3 -m venv /tmp/pegasus-optimization-env
+/tmp/pegasus-optimization-env/bin/python -m pip install --upgrade pip
+/tmp/pegasus-optimization-env/bin/python -m pip install numpy scipy
+/tmp/pegasus-optimization-env/bin/python examples/trim_optimization.py
+```
+
+The script verifies analytical objective and trim-state gradients against
+independent perturbed re-solves at the initial and final designs. It requires
+optimization success, objective improvement, and converged trim throughout all
+evaluations, and writes the result and iteration history to JSON. A recorded
+run converged in 7 iterations, reducing the objective from 32.481917 to
+27.833541 N. Maximum Fz/My residuals were 4.55e-13 N and 1.80e-13 N*m. The
+[recorded results](examples/trim_optimization_results.json) include gradient
+checks and the solved operating states. This is a simple sizing demonstration
+with prescribed deformation and CG, balancing the selected Fz/My components.
+
 ## AVL and mass files
 
 `AvlReader::read_path` and `AvlReader::read_str` load AVL geometry. Relative
