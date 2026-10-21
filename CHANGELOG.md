@@ -61,6 +61,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- Strip-load mesh adjoints now differentiate the geometry-dependent vortex-core radius through panel width and, for cross-component interactions, local chord. Previously this radius was treated as constant.
+
 - Control-point normalwash includes each panel's own bound vortex, as in AVL.
   Force velocities are evaluated at the bound-force points with the self-bound
   leg excluded, and moments use those same force points. The previous port
