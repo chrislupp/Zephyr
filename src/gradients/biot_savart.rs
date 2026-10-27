@@ -260,6 +260,46 @@ pub fn horseshoe_velocity_pg_derivative(
     })
 }
 
+/// Partial derivative with respect to the regularization radius, holding geometry fixed.
+/// The mesh pullback must also differentiate the panel-size-dependent radius.
+pub(crate) fn horseshoe_velocity_core_derivative(
+    field_point: &Vec3,
+    bound_left: &Vec3,
+    bound_right: &Vec3,
+    pg: Scalar,
+    core: Scalar,
+    include_bound: bool,
+) -> Vec3 {
+    let g = Geometry::new(field_point, bound_left, bound_right, pg);
+    let c4 = core_four(core);
+    let c3 = core * core * core;
+    let mut result = Vec3::zeros();
+    if include_bound && g.bound_is_active() {
+        let dot = g.a.dot(&g.b);
+        let length_sq = (g.a - g.b).norm_squared();
+        let a4 = g.a_sq * g.a_sq + c4;
+        let b4 = g.b_sq * g.b_sq + c4;
+        let ra = a4.sqrt().sqrt();
+        let rb = b4.sqrt().sqrt();
+        let numerator = (g.a_sq - dot) / ra + (g.b_sq - dot) / rb;
+        let derivative = -c3 * ((g.a_sq - dot) / (a4 * ra) + (g.b_sq - dot) / (b4 * rb));
+        let denominator = (g.cross_sq * g.cross_sq + length_sq * length_sq * c4).sqrt();
+        result += g.cross_ab
+            * (derivative / denominator
+                - 2.0 * numerator * length_sq * length_sq * c3 / denominator.powi(3));
+    }
+    for (p, mag, sign) in [(&g.a, g.a_mag, -1.0), (&g.b, g.b_mag, 1.0)] {
+        if mag > 0.0 {
+            let axis_sq = p.y * p.y + p.z * p.z;
+            let denominator = (axis_sq * axis_sq + c4).sqrt();
+            let factor = -2.0 * c3 * sign * (1.0 - p.x / mag) / denominator.powi(3);
+            result += Vec3::new(0.0, p.z, -p.y) * factor;
+        }
+    }
+    result.x /= pg;
+    result * INV_4_PI
+}
+
 fn core_four(core_radius: Scalar) -> Scalar {
     let core_sq = core_radius * core_radius;
     core_sq * core_sq
@@ -437,4 +477,51 @@ fn trailing_leg_vjp(p: &Vec3, p_mag: Scalar, core_4: Scalar, sign: Scalar, seed:
         seed.y * p.z * d_t_y + seed.z * (-t - p.y * d_t_y),
         seed.y * (t + p.z * d_t_z) + seed.z * (-p.y * d_t_z),
     )
+}
+
+#[cfg(test)]
+mod core_tests {
+    use super::*;
+    use crate::solver::horseshoe_vortex_velocity;
+
+    #[test]
+    fn core_radius_partial_matches_finite_difference() {
+        let left = Vec3::new(0.1, -0.6, 0.04);
+        let right = Vec3::new(0.3, 0.7, 0.12);
+        for field in [Vec3::new(0.22, 0.1, 0.09), Vec3::new(0.8, 0.72, 0.13)] {
+            for include_bound in [false, true] {
+                for pg in [1.0, 0.8] {
+                    let core = 0.05;
+                    let h = 1e-6;
+                    let exact = horseshoe_velocity_core_derivative(
+                        &field,
+                        &left,
+                        &right,
+                        pg,
+                        core,
+                        include_bound,
+                    );
+                    let fd = (horseshoe_vortex_velocity(
+                        &field,
+                        &left,
+                        &right,
+                        pg,
+                        core + h,
+                        include_bound,
+                    ) - horseshoe_vortex_velocity(
+                        &field,
+                        &left,
+                        &right,
+                        pg,
+                        core - h,
+                        include_bound,
+                    )) / (2.0 * h);
+                    assert!(
+                        (exact - fd).norm() < 1e-7 * (1.0 + fd.norm()),
+                        "core derivative: {exact:?} vs {fd:?}"
+                    );
+                }
+            }
+        }
+    }
 }

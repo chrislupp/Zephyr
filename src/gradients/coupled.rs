@@ -27,6 +27,7 @@ use crate::solver::{
     FlightCondition, VortexLattice, VortexLatticeSolver, horseshoe_vortex_velocity,
 };
 
+use super::biot_savart::horseshoe_velocity_core_derivative;
 use super::geometry_adjoint::{normalized_direction, reflected_direction};
 use super::{AdjointSolver, TotalDerivative, horseshoe_velocity_jacobians};
 
@@ -83,6 +84,7 @@ struct LatticeCotangents {
     bound_right: MatX,
     control_point: MatX,
     normal: MatX,
+    local_chord: MatX,
 }
 
 impl LatticeCotangents {
@@ -92,6 +94,7 @@ impl LatticeCotangents {
             bound_right: MatX::zeros(3 * vortex_count, columns),
             control_point: MatX::zeros(3 * vortex_count, columns),
             normal: MatX::zeros(3 * vortex_count, columns),
+            local_chord: MatX::zeros(vortex_count, columns),
         }
     }
 }
@@ -492,6 +495,43 @@ impl<'a> StripLoadAdjoint<'a> {
                     continue;
                 }
                 let core = core_radius(mesh, column, target.component_index);
+                // The primal core radius follows the source panel's width (or
+                // chord for interactions across components). Fixed-core geometry
+                // Jacobians omit this path, which matters near collinear legs.
+                let dc_aic = horseshoe_velocity_core_derivative(
+                    &target.control_point,
+                    &source.bound_vortex_left,
+                    &source.bound_vortex_right,
+                    self.prandtl_glauert,
+                    core,
+                    true,
+                );
+                let dc_force = horseshoe_velocity_core_derivative(
+                    &target.bound_vortex_center,
+                    &source.bound_vortex_left,
+                    &source.bound_vortex_right,
+                    self.prandtl_glauert,
+                    core,
+                    row != column,
+                );
+                let line = source.bound_vortex_right - source.bound_vortex_left;
+                let width = line.y.hypot(line.z);
+                let chord_controls =
+                    source.component_index != target.component_index && source.local_chord > width;
+                for functional in 0..velocity_seed.ncols() {
+                    let core_bar = gamma
+                        * (read(velocity_seed, row, functional).dot(&dc_force)
+                            - adjoints[(row, functional)] * normal.dot(&dc_aic));
+                    if chord_controls {
+                        out.local_chord[(column, functional)] += 0.0001 * core_bar;
+                    } else if width > 0.0 {
+                        let d = Vec3::new(0.0, line.y, line.z) * (0.0001 * core_bar / width);
+                        for k in 0..3 {
+                            out.bound_right[(3 * column + k, functional)] += d[k];
+                            out.bound_left[(3 * column + k, functional)] -= d[k];
+                        }
+                    }
+                }
                 let include_bound = true;
                 let jacobians = horseshoe_velocity_jacobians(
                     &target.control_point,
@@ -646,6 +686,7 @@ impl<'a> StripLoadAdjoint<'a> {
                         let mut bound_right = read(&cotangents.bound_right, index, column);
                         let mut control_point = read(&cotangents.control_point, index, column);
                         let mut normal = read(&cotangents.normal, index, column);
+                        let mut chord_bar = cotangents.local_chord[(index, column)];
 
                         // A duplicated surface has no nodes of its own; its
                         // lattice is a reflection of this one's, so its
@@ -673,6 +714,7 @@ impl<'a> StripLoadAdjoint<'a> {
                             ));
                             normal +=
                                 reflected_direction(read(&cotangents.normal, mirrored, column));
+                            chord_bar += cotangents.local_chord[(mirrored, column)];
                         }
 
                         let node = |i: usize, j: usize| -> usize { i * (surface.ny + 1) + j };
@@ -691,6 +733,18 @@ impl<'a> StripLoadAdjoint<'a> {
                         nodes[n01] += 0.125 * control_point;
                         nodes[n11] += 0.375 * control_point;
 
+                        // local_chord is the average of the two section chord
+                        // lengths, shared by all panels in this spanwise strip.
+                        for station in [strip_offset, strip_offset + 1] {
+                            let le = node(0, station);
+                            let te = node(surface.nx, station);
+                            let chord = surface.nodes[te] - surface.nodes[le];
+                            if chord.norm() > 0.0 {
+                                let d = chord * (0.5 * chord_bar / chord.norm());
+                                nodes[te] += d;
+                                nodes[le] -= d;
+                            }
+                        }
                         let position = |index: usize| surface.nodes[index];
                         let diagonal_a = position(n11) - position(n00);
                         let diagonal_b = position(n10) - position(n01);
