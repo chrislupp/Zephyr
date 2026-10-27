@@ -65,6 +65,27 @@ impl StripLoadCotangent {
     }
 }
 
+/// Load-functional derivatives with respect to normalized local incident
+/// velocities at bound-force points and flow-tangency collocation points.
+/// Geometry and moment references are held fixed. Physical velocity derivatives
+/// require division by the reference speed used to normalize the primal flow.
+#[derive(Clone, Debug)]
+pub struct FlowVelocityCotangent {
+    /// Explicit Kutta–Joukowski velocity derivative at each bound-force point.
+    pub force_points: Vec<Vec3>,
+    /// Implicit circulation derivative at each collocation point.
+    pub collocation_points: Vec<Vec3>,
+}
+
+/// Analytical geometry and local-velocity derivatives of panel-force functionals.
+#[derive(Clone, Debug)]
+pub struct PanelForceDerivatives {
+    /// Cotangents on the input mesh, including reflected-image dependence.
+    pub mesh: Vec<MeshNodeCotangent>,
+    /// Incident-velocity cotangents at force and collocation points.
+    pub velocity: Vec<FlowVelocityCotangent>,
+}
+
 /// Cotangents of a mesh's node coordinates.
 #[derive(Clone, Debug, Default)]
 pub struct MeshNodeCotangent {
@@ -261,6 +282,142 @@ impl<'a> StripLoadAdjoint<'a> {
         self.accumulate_explicit(columns, &panel_seed, &mut cotangents);
         self.accumulate_pairwise(&velocity_seed, &adjoints, &mut cotangents);
         self.to_mesh_nodes(input, &cotangents)
+    }
+
+    /// Raw incompressible panel forces, to be multiplied by dynamic pressure.
+    pub fn panel_forces(&self) -> Result<&[Vec3]> {
+        if self.solver.current_mach() != 0.0
+            || self.condition.roll_rate != 0.0
+            || self.condition.pitch_rate != 0.0
+            || self.condition.yaw_rate != 0.0
+        {
+            return Err(PegasusError::InvalidFlightCondition(
+                "panel-force coupling requires incompressible stationary flow".into(),
+            ));
+        }
+        Ok(&self.panel_force)
+    }
+
+    /// Derivatives for arbitrary panel-force functionals at fixed seeds.
+    /// Unlike a strip-wrench functional, this supports exact virtual work on
+    /// a deforming lattice, including chord deformation between beam stations.
+    /// Geometry-dependent seeds must be differentiated by the caller.
+    pub fn panel_force_derivatives(
+        &self,
+        input: &MeshInput,
+        columns: &[Vec<Vec3>],
+    ) -> Result<PanelForceDerivatives> {
+        self.panel_forces()?;
+        let count = self.mesh().vortex_count();
+        if columns
+            .iter()
+            .any(|c| c.len() != count || !c.iter().flat_map(|v| v.iter()).all(|v| v.is_finite()))
+        {
+            return Err(PegasusError::InvalidGeometry(
+                "invalid panel force seeds".into(),
+            ));
+        }
+        if columns.is_empty() {
+            return Ok(PanelForceDerivatives {
+                mesh: Vec::new(),
+                velocity: Vec::new(),
+            });
+        }
+        let mut panel_seed = MatX::zeros(3 * count, columns.len());
+        let mut velocity_seed = panel_seed.clone();
+        let mut geometry = LatticeCotangents::zeros(count, columns.len());
+        for (i, v) in self.mesh().vortices().iter().enumerate() {
+            let line = v.bound_vortex_right - v.bound_vortex_left;
+            let gamma = self.solver.solution().circulation[i];
+            for (c, seeds) in columns.iter().enumerate() {
+                let velocity = 2.0 * gamma * line.cross(&seeds[i]);
+                let line_bar = 2.0 * gamma * seeds[i].cross(&self.velocity[i]);
+                for k in 0..3 {
+                    panel_seed[(3 * i + k, c)] = seeds[i][k];
+                    velocity_seed[(3 * i + k, c)] = velocity[k];
+                    geometry.bound_right[(3 * i + k, c)] = line_bar[k];
+                    geometry.bound_left[(3 * i + k, c)] = -line_bar[k];
+                }
+            }
+        }
+        let gradients = self.circulation_gradients(&panel_seed, &velocity_seed);
+        let adjoints = AdjointSolver::new(self.solver)?.solve_batched(&gradients)?;
+        self.accumulate_pairwise(&velocity_seed, &adjoints, &mut geometry);
+        let mesh = self.to_mesh_nodes(input, &geometry)?;
+        let velocity = (0..columns.len())
+            .map(|c| FlowVelocityCotangent {
+                force_points: (0..count)
+                    .map(|i| {
+                        Vec3::new(
+                            velocity_seed[(3 * i, c)],
+                            velocity_seed[(3 * i + 1, c)],
+                            velocity_seed[(3 * i + 2, c)],
+                        )
+                    })
+                    .collect(),
+                collocation_points: self
+                    .solver
+                    .linearized_normals()
+                    .iter()
+                    .enumerate()
+                    .map(|(i, n)| -adjoints[(i, c)] * n)
+                    .collect(),
+            })
+            .collect();
+        Ok(PanelForceDerivatives { mesh, velocity })
+    }
+
+    /// Analytical response to an arbitrary spatial incident-velocity field.
+    /// The base solution must be stationary and incompressible.
+    /// Both the direct force velocity and the flow-tangency/circulation path
+    /// are included. These cotangents can be contracted with rigid or elastic
+    /// surface velocities without finite differences or aerodynamic re-solves.
+    pub fn velocity_cotangents(
+        &self,
+        columns: &[StripLoadCotangent],
+    ) -> Result<Vec<FlowVelocityCotangent>> {
+        self.panel_forces()?;
+        let mesh = self.mesh();
+        if columns.iter().any(|c| {
+            c.force.len() != mesh.strip_count()
+                || c.moment.len() != mesh.strip_count()
+                || !c
+                    .force
+                    .iter()
+                    .chain(c.moment.iter())
+                    .flat_map(|v| v.iter())
+                    .all(|v| v.is_finite())
+        }) {
+            return Err(PegasusError::InvalidGeometry(
+                "invalid strip velocity cotangent seeds".into(),
+            ));
+        }
+        if columns.is_empty() {
+            return Ok(Vec::new());
+        }
+        let (panel_seed, velocity_seed) = self.panel_cotangents(columns);
+        let gradients = self.circulation_gradients(&panel_seed, &velocity_seed);
+        let adjoints = AdjointSolver::new(self.solver)?.solve_batched(&gradients)?;
+        Ok((0..columns.len())
+            .map(|c| FlowVelocityCotangent {
+                force_points: (0..mesh.vortex_count())
+                    .map(|i| {
+                        Vec3::new(
+                            velocity_seed[(3 * i, c)],
+                            velocity_seed[(3 * i + 1, c)],
+                            velocity_seed[(3 * i + 2, c)],
+                        )
+                    })
+                    .collect(),
+                collocation_points: self
+                    .solver
+                    .linearized_normals()
+                    .iter()
+                    .enumerate()
+                    .map(|(i, n)| -adjoints[(i, c)] * n)
+                    .collect(),
+            })
+            .collect())
     }
 
     /// Derivatives of the same functionals with respect to the flight

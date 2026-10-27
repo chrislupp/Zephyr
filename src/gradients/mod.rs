@@ -26,7 +26,10 @@ pub use calculator::{
     AeroGradients, FullGradients, GeometryGradients, GeometryVariable, GradientCalculator,
     MeshNodeGradients, SectionGeometryGradients, SurfaceMeshNodeGradients,
 };
-pub use coupled::{MeshNodeCotangent, StripLoadAdjoint, StripLoadCotangent};
+pub use coupled::{
+    FlowVelocityCotangent, MeshNodeCotangent, PanelForceDerivatives, StripLoadAdjoint,
+    StripLoadCotangent,
+};
 pub use forces::{
     ForceCoefficientGradients, force_alpha_gradient, force_beta_gradient,
     force_circulation_gradient, force_geometry_jvp, force_induced_velocity_gradient,
