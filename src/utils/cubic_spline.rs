@@ -1,7 +1,31 @@
+/*
+    Project Zephyr
+
+    Copyright 2024-2026, Christopher A. Lupp
+
+    This program is free software: you can redistribute it and/or modify
+    it under the terms of the GNU General Public License as published by
+    the Free Software Foundation, either version 3 of the License, or
+    (at your option) any later version.
+
+    This work has been cleared for public release, distribution unlimited, case
+    number: AFRL-2026-2198.
+
+    The views expressed are those of the authors and do not reflect the
+    official guidance or position of the United States Government, the
+    Department of Defense or of the United States Air Force.
+
+    Statement from DoD: The Appearance of external hyperlinks does not
+    constitute endorsement by the United States Department of Defense (DoD) of
+    the linked websites, of the information, products, or services contained
+    therein. The DoD does not exercise any editorial, security, or other
+    control over the information you may find at these locations.
+*/
+
 //! Cubic Hermite spline compatible with AVL's `spline.f`.
 
 use crate::core::Scalar;
-use crate::error::{PegasusError, Result};
+use crate::error::{Result, ZephyrError};
 
 /// Endpoint boundary condition.
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
@@ -46,17 +70,17 @@ impl CubicSpline {
         right_slope: Scalar,
     ) -> Result<Self> {
         if parameters.len() != values.len() {
-            return Err(PegasusError::InvalidGeometry(
+            return Err(ZephyrError::InvalidGeometry(
                 "spline parameters and values must have equal length".into(),
             ));
         }
         if parameters.len() < 2 {
-            return Err(PegasusError::InvalidGeometry(
+            return Err(ZephyrError::InvalidGeometry(
                 "a spline needs at least two points".into(),
             ));
         }
         if parameters.windows(2).any(|window| window[1] <= window[0]) {
-            return Err(PegasusError::InvalidGeometry(
+            return Err(ZephyrError::InvalidGeometry(
                 "spline parameters must be strictly increasing".into(),
             ));
         }
@@ -163,7 +187,7 @@ impl CubicSpline {
     /// Evaluate value, first derivative, and second derivative.
     pub fn evaluate_all(&self, parameter: Scalar) -> Result<(Scalar, Scalar, Scalar)> {
         if !self.is_valid() {
-            return Err(PegasusError::InvalidGeometry(
+            return Err(ZephyrError::InvalidGeometry(
                 "spline has not been built".into(),
             ));
         }

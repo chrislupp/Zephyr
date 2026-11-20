@@ -1,29 +1,53 @@
+/*
+    Project Zephyr
+
+    Copyright 2024-2026, Christopher A. Lupp
+
+    This program is free software: you can redistribute it and/or modify
+    it under the terms of the GNU General Public License as published by
+    the Free Software Foundation, either version 3 of the License, or
+    (at your option) any later version.
+
+    This work has been cleared for public release, distribution unlimited, case
+    number: AFRL-2026-2198.
+
+    The views expressed are those of the authors and do not reflect the
+    official guidance or position of the United States Government, the
+    Department of Defense or of the United States Air Force.
+
+    Statement from DoD: The Appearance of external hyperlinks does not
+    constitute endorsement by the United States Department of Defense (DoD) of
+    the linked websites, of the information, products, or services contained
+    therein. The DoD does not exercise any editorial, security, or other
+    control over the information you may find at these locations.
+*/
+
 mod common;
 
-use pegasus_vlm::aero::{
+use zephyr_vlm::aero::{
     AerodynamicResults, BodyAxisDerivatives, ForceCalculator, StabilityDerivativeCalculator,
 };
-use pegasus_vlm::core::{DEGREES_TO_RADIANS, SpacingType, SymmetryType, Vec3, VecX};
-use pegasus_vlm::geometry::{
+use zephyr_vlm::core::{DEGREES_TO_RADIANS, SpacingType, SymmetryType, Vec3, VecX};
+use zephyr_vlm::geometry::{
     Airfoil, MeshInput, ReferenceQuantities, Section, Surface, SurfaceMesh,
 };
-use pegasus_vlm::gradients::{
+use zephyr_vlm::gradients::{
     AdjointSolver, AeroOutput, ForceCoefficientGradients, GradientCalculator, OutputSelection,
     aic_column_gradient, aic_row_gradient, force_geometry_jvp, force_induced_velocity_gradient,
     selected_force_circulation_gradients, velocity_column_gradient, velocity_row_gradient,
 };
-use pegasus_vlm::solver::{
+use zephyr_vlm::solver::{
     FlightCondition, InfluenceMatrixBuilder, SymmetryConfig, VortexLatticeSolver,
 };
-use pegasus_vlm::trim::{ConstraintType, TrimPresets};
-use pegasus_vlm::utils::{
+use zephyr_vlm::trim::{ConstraintType, TrimPresets};
+use zephyr_vlm::utils::{
     CubicSpline, SplineBoundaryCondition, cosine_spacing, prandtl_glauert_factor, sine_spacing,
     trailing_vortex_velocity, uniform_spacing, vortex_segment_velocity,
 };
-use pegasus_vlm::{PegasusError, Result};
+use zephyr_vlm::{Result, ZephyrError};
 
 fn solved_wing() -> (
-    pegasus_vlm::geometry::Aircraft,
+    zephyr_vlm::geometry::Aircraft,
     FlightCondition,
     VortexLatticeSolver,
 ) {
@@ -146,7 +170,7 @@ fn analytical_row_column_and_force_paths_are_finite() {
         .is_err()
     );
 
-    let invalid = pegasus_vlm::solver::SolutionState::default();
+    let invalid = zephyr_vlm::solver::SolutionState::default();
     assert!(
         force_induced_velocity_gradient(
             solver.mesh(),
@@ -293,14 +317,14 @@ fn utility_geometry_and_error_branches_have_typed_behavior() -> Result<()> {
     std::fs::write(&bad_path, "bad\n0 0\n1 0\n").unwrap();
     assert!(Airfoil::from_coordinate_file(&bad_path).is_err());
 
-    let io_error = PegasusError::io(
+    let io_error = ZephyrError::io(
         "missing",
         std::io::Error::new(std::io::ErrorKind::NotFound, "not found"),
     );
     assert!(io_error.to_string().contains("missing"));
-    assert!(PegasusError::parse(7, "bad").to_string().contains("line 7"));
+    assert!(ZephyrError::parse(7, "bad").to_string().contains("line 7"));
     assert!(
-        PegasusError::parse_path(&coordinate_path, 9, "bad")
+        ZephyrError::parse_path(&coordinate_path, 9, "bad")
             .to_string()
             .contains("line 9")
     );
@@ -386,7 +410,7 @@ fn geometry_accessors_validation_and_gradient_configuration_are_checked() {
     assert!(adjoint.solve(&VecX::zeros(1)).is_err());
     assert!(
         adjoint
-            .solve_batched(&pegasus_vlm::core::MatX::zeros(1, 2))
+            .solve_batched(&zephyr_vlm::core::MatX::zeros(1, 2))
             .is_err()
     );
 }

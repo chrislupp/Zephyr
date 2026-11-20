@@ -1,7 +1,31 @@
+/*
+    Project Zephyr
+
+    Copyright 2024-2026, Christopher A. Lupp
+
+    This program is free software: you can redistribute it and/or modify
+    it under the terms of the GNU General Public License as published by
+    the Free Software Foundation, either version 3 of the License, or
+    (at your option) any later version.
+
+    This work has been cleared for public release, distribution unlimited, case
+    number: AFRL-2026-2198.
+
+    The views expressed are those of the authors and do not reflect the
+    official guidance or position of the United States Government, the
+    Department of Defense or of the United States Air Force.
+
+    Statement from DoD: The Appearance of external hyperlinks does not
+    constitute endorsement by the United States Department of Defense (DoD) of
+    the linked websites, of the information, products, or services contained
+    therein. The DoD does not exercise any editorial, security, or other
+    control over the information you may find at these locations.
+*/
+
 //! Aircraft and structured-grid discretization.
 
 use crate::core::{DEGREES_TO_RADIANS, EPSILON, Scalar, SpacingType, Vec3};
-use crate::error::{PegasusError, Result};
+use crate::error::{Result, ZephyrError};
 use crate::geometry::{Aircraft, MeshInput, Surface, SurfaceMesh};
 use crate::utils::spacing;
 
@@ -64,7 +88,7 @@ impl VortexLattice {
     fn generate_surface(&mut self, surface: &Surface) -> Result<()> {
         let sections = surface.sections();
         if sections.len() < 2 {
-            return Err(PegasusError::InvalidGeometry(format!(
+            return Err(ZephyrError::InvalidGeometry(format!(
                 "surface '{}' needs at least two sections",
                 surface.name()
             )));
@@ -75,7 +99,7 @@ impl VortexLattice {
         let surface_slot = self.surface_info.len();
         let nx = surface.chordwise_panel_count();
         if nx == 0 {
-            return Err(PegasusError::InvalidGeometry(format!(
+            return Err(ZephyrError::InvalidGeometry(format!(
                 "surface '{}' needs at least one chordwise panel",
                 surface.name()
             )));
@@ -86,7 +110,7 @@ impl VortexLattice {
         // accumulation and the per-interval rounding in a second place is how
         // the aircraft counting helpers drifted out of step with the mesher.
         let layout = surface.spanwise_layout().ok_or_else(|| {
-            PegasusError::InvalidGeometry(format!("surface '{}' has zero span", surface.name()))
+            ZephyrError::InvalidGeometry(format!("surface '{}' has zero span", surface.name()))
         })?;
         let arc = &layout.arc;
         let per_interval = &layout.per_interval;
@@ -641,12 +665,12 @@ fn validate_sections(surface: &Surface) -> Result<()> {
             || !section.chord().is_finite()
             || !section.twist_degrees().is_finite()
         {
-            return Err(PegasusError::InvalidGeometry(format!(
+            return Err(ZephyrError::InvalidGeometry(format!(
                 "surface '{name}' section {index} has non-finite geometry"
             )));
         }
         if section.chord() <= 0.0 {
-            return Err(PegasusError::InvalidGeometry(format!(
+            return Err(ZephyrError::InvalidGeometry(format!(
                 "surface '{name}' section {index} has chord {}; chord must be positive",
                 section.chord()
             )));
@@ -662,14 +686,14 @@ fn validate_sections(surface: &Surface) -> Result<()> {
         .map(|delta| delta.yz().norm())
         .fold(0.0, Scalar::max);
     if longest <= 0.0 {
-        return Err(PegasusError::InvalidGeometry(format!(
+        return Err(ZephyrError::InvalidGeometry(format!(
             "surface '{name}' has zero span"
         )));
     }
 
     for (index, delta) in deltas.iter().enumerate() {
         if delta.yz().norm() <= MIN_STATION_SEPARATION * longest {
-            return Err(PegasusError::InvalidGeometry(format!(
+            return Err(ZephyrError::InvalidGeometry(format!(
                 "surface '{name}' sections {index} and {} share a spanwise station; \
                  use a single section, or separate them to define a break",
                 index + 1
@@ -680,7 +704,7 @@ fn validate_sections(surface: &Surface) -> Result<()> {
     // A reversal in the y-z plane means the surface doubles back on itself.
     for (index, pair) in deltas.windows(2).enumerate() {
         if pair[0].yz().dot(&pair[1].yz()) < 0.0 {
-            return Err(PegasusError::InvalidGeometry(format!(
+            return Err(ZephyrError::InvalidGeometry(format!(
                 "surface '{name}' reverses spanwise direction at section {}; \
                  sections must be ordered monotonically along the span",
                 index + 1

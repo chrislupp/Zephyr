@@ -4,7 +4,7 @@ sidebar_position: 4
 
 # Analytical and Adjoint Gradients
 
-Pegasus provides safe analytical VJPs for the regularized Biot–Savart kernel,
+Zephyr provides safe analytical VJPs for the regularized Biot–Savart kernel,
 AIC rows and columns, near-field forces, and Trefftz induced drag.
 `TotalDerivative` solves the transposed aerodynamic system for an `AeroOutput`.
 

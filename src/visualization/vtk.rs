@@ -1,3 +1,27 @@
+/*
+    Project Zephyr
+
+    Copyright 2024-2026, Christopher A. Lupp
+
+    This program is free software: you can redistribute it and/or modify
+    it under the terms of the GNU General Public License as published by
+    the Free Software Foundation, either version 3 of the License, or
+    (at your option) any later version.
+
+    This work has been cleared for public release, distribution unlimited, case
+    number: AFRL-2026-2198.
+
+    The views expressed are those of the authors and do not reflect the
+    official guidance or position of the United States Government, the
+    Department of Defense or of the United States Air Force.
+
+    Statement from DoD: The Appearance of external hyperlinks does not
+    constitute endorsement by the United States Department of Defense (DoD) of
+    the linked websites, of the information, products, or services contained
+    therein. The DoD does not exercise any editorial, security, or other
+    control over the information you may find at these locations.
+*/
+
 //! Atomic `.vtu` and `.vtp` export with optional `vtkio` support.
 
 use std::fmt::Write as _;
@@ -5,7 +29,7 @@ use std::path::{Path, PathBuf};
 
 use crate::aero::AerodynamicResults;
 use crate::core::{Scalar, Vec3};
-use crate::error::{PegasusError, Result};
+use crate::error::{Result, ZephyrError};
 use crate::solver::{FlightCondition, SolutionState, VortexLattice, VortexLatticeSolver};
 
 /// Fields and products included in visualization output.
@@ -56,7 +80,7 @@ impl VtkExporter {
     ) -> Result<()> {
         ensure_available()?;
         if !solution.is_valid || mesh.vortex_count() == 0 {
-            return Err(PegasusError::InvalidSolution);
+            return Err(ZephyrError::InvalidSolution);
         }
         let mut product = Product::unstructured();
         for (surface_index, info) in mesh.surface_info().iter().enumerate() {
@@ -113,7 +137,7 @@ impl VtkExporter {
     ) -> Result<()> {
         ensure_available()?;
         if !results.is_valid {
-            return Err(PegasusError::InvalidSolution);
+            return Err(ZephyrError::InvalidSolution);
         }
         let mut product = Product::poly();
         for surface in &results.surface_loads {
@@ -153,7 +177,7 @@ impl VtkExporter {
     ) -> Result<()> {
         ensure_available()?;
         if !solution.is_valid || mesh.strip_count() == 0 {
-            return Err(PegasusError::InvalidSolution);
+            return Err(ZephyrError::InvalidSolution);
         }
         let mut product = Product::poly();
         let direction = VortexLatticeSolver::freestream_direction(condition);
@@ -197,7 +221,7 @@ impl VtkExporter {
     ) -> Result<()> {
         ensure_available()?;
         if !solution.is_valid || mesh.vortex_count() == 0 {
-            return Err(PegasusError::InvalidSolution);
+            return Err(ZephyrError::InvalidSolution);
         }
         let mut product = Product::poly();
         let freestream = VortexLatticeSolver::freestream_direction(condition);
@@ -234,7 +258,7 @@ impl VtkExporter {
     ) -> Result<()> {
         ensure_available()?;
         let directory = directory.as_ref();
-        std::fs::create_dir_all(directory).map_err(|error| PegasusError::io(directory, error))?;
+        std::fs::create_dir_all(directory).map_err(|error| ZephyrError::io(directory, error))?;
         Self::export_surface_mesh(directory.join("surface_mesh.vtu"), mesh, solution, options)?;
         if options.export_spanwise_distributions {
             Self::export_spanwise_loads(
@@ -271,7 +295,7 @@ fn ensure_available() -> Result<()> {
     if is_available() {
         Ok(())
     } else {
-        Err(PegasusError::FeatureDisabled("vtk"))
+        Err(ZephyrError::FeatureDisabled("vtk"))
     }
 }
 
@@ -387,13 +411,13 @@ fn temporary_sibling(path: &Path) -> Result<PathBuf> {
         .file_stem()
         .and_then(|value| value.to_str())
         .ok_or_else(|| {
-            PegasusError::InvalidGeometry("VTK output path needs a UTF-8 file name".into())
+            ZephyrError::InvalidGeometry("VTK output path needs a UTF-8 file name".into())
         })?;
     let extension = path
         .extension()
         .and_then(|value| value.to_str())
         .ok_or_else(|| {
-            PegasusError::InvalidGeometry("VTK output path needs .vtu or .vtp extension".into())
+            ZephyrError::InvalidGeometry("VTK output path needs .vtu or .vtp extension".into())
         })?;
     Ok(parent.join(format!(".{stem}.{}.tmp.{extension}", std::process::id())))
 }
@@ -404,13 +428,13 @@ fn write_product(path: &Path, product: Product, binary: bool) -> Result<()> {
         write_binary(&temporary, product)
     } else {
         let xml = ascii_xml(&product);
-        std::fs::write(&temporary, xml).map_err(|error| PegasusError::io(&temporary, error))
+        std::fs::write(&temporary, xml).map_err(|error| ZephyrError::io(&temporary, error))
     };
     if let Err(error) = result {
         let _ = std::fs::remove_file(&temporary);
         return Err(error);
     }
-    std::fs::rename(&temporary, path).map_err(|error| PegasusError::io(path, error))
+    std::fs::rename(&temporary, path).map_err(|error| ZephyrError::io(path, error))
 }
 
 #[cfg(feature = "vtk")]
@@ -463,18 +487,18 @@ fn write_binary(path: &Path, product: Product) -> Result<()> {
     };
     Vtk {
         version: Version::new((1, 0)),
-        title: "Pegasus VLM".into(),
+        title: "Zephyr VLM".into(),
         byte_order: ByteOrder::LittleEndian,
         file_path: None,
         data,
     }
     .export(path)
-    .map_err(|error| PegasusError::io(path, std::io::Error::other(error)))
+    .map_err(|error| ZephyrError::io(path, std::io::Error::other(error)))
 }
 
 #[cfg(not(feature = "vtk"))]
 fn write_binary(_path: &Path, _product: Product) -> Result<()> {
-    Err(PegasusError::FeatureDisabled("vtk"))
+    Err(ZephyrError::FeatureDisabled("vtk"))
 }
 
 fn connectivity(cells: &[Vec<u64>]) -> (Vec<u64>, Vec<u64>) {

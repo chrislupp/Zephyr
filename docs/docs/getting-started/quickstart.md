@@ -5,10 +5,10 @@ sidebar_position: 2
 # Quick Start
 
 ```rust
-use pegasus_vlm::aero::ForceCalculator;
-use pegasus_vlm::core::{DEGREES_TO_RADIANS, Vec3};
-use pegasus_vlm::geometry::{Aircraft, Section, Surface};
-use pegasus_vlm::solver::{FlightCondition, VortexLatticeSolver};
+use zephyr_vlm::aero::ForceCalculator;
+use zephyr_vlm::core::{DEGREES_TO_RADIANS, Vec3};
+use zephyr_vlm::geometry::{Aircraft, Section, Surface};
+use zephyr_vlm::solver::{FlightCondition, VortexLatticeSolver};
 
 let mut wing = Surface::new("Wing");
 wing.set_chordwise_panel_count(4);
@@ -33,7 +33,7 @@ let result = ForceCalculator::new().compute_for_aircraft(
     &aircraft, solver.mesh(), &solution, &condition,
 );
 println!("CL = {}", result.coefficients.lift);
-# Ok::<(), pegasus_vlm::PegasusError>(())
+# Ok::<(), zephyr_vlm::ZephyrError>(())
 ```
 
 Geometry incidence and section twist use degrees. Flight angles, rates,

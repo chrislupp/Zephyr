@@ -9,4 +9,4 @@ The solver exposes read-only mesh, AIC, velocity matrix, reference quantities,
 cache validity, and current solution accessors. Scoped mesh mutation
 invalidates all dependent state.
 
-See the [`VortexLatticeSolver` rustdoc](https://docs.rs/pegasus-vlm/latest/pegasus_vlm/solver/struct.VortexLatticeSolver.html).
+See the [`VortexLatticeSolver` rustdoc](https://docs.rs/zephyr-vlm/latest/zephyr_vlm/solver/struct.VortexLatticeSolver.html).

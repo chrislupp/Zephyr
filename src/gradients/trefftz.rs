@@ -1,7 +1,31 @@
+/*
+    Project Zephyr
+
+    Copyright 2024-2026, Christopher A. Lupp
+
+    This program is free software: you can redistribute it and/or modify
+    it under the terms of the GNU General Public License as published by
+    the Free Software Foundation, either version 3 of the License, or
+    (at your option) any later version.
+
+    This work has been cleared for public release, distribution unlimited, case
+    number: AFRL-2026-2198.
+
+    The views expressed are those of the authors and do not reflect the
+    official guidance or position of the United States Government, the
+    Department of Defense or of the United States Air Force.
+
+    Statement from DoD: The Appearance of external hyperlinks does not
+    constitute endorsement by the United States Department of Defense (DoD) of
+    the linked websites, of the information, products, or services contained
+    therein. The DoD does not exercise any editorial, security, or other
+    control over the information you may find at these locations.
+*/
+
 //! Analytical circulation derivatives of Trefftz-plane outputs.
 
 use crate::core::{EPSILON, PI, Scalar, Vec3, VecX};
-use crate::error::{PegasusError, Result};
+use crate::error::{Result, ZephyrError};
 use crate::solver::{SolutionState, VortexLattice};
 
 const INV_2_PI: Scalar = 1.0 / (2.0 * PI);
@@ -144,7 +168,7 @@ pub fn trefftz_geometry_jvp(
         || bound_right_direction.len() != mesh.vortex_count()
         || strip_chord_direction.len() != mesh.strip_count()
     {
-        return Err(PegasusError::InvalidGeometry(
+        return Err(ZephyrError::InvalidGeometry(
             "geometry direction slices must match the lattice dimensions".into(),
         ));
     }

@@ -1,3 +1,27 @@
+/*
+    Project Zephyr
+
+    Copyright 2024-2026, Christopher A. Lupp
+
+    This program is free software: you can redistribute it and/or modify
+    it under the terms of the GNU General Public License as published by
+    the Free Software Foundation, either version 3 of the License, or
+    (at your option) any later version.
+
+    This work has been cleared for public release, distribution unlimited, case
+    number: AFRL-2026-2198.
+
+    The views expressed are those of the authors and do not reflect the
+    official guidance or position of the United States Government, the
+    Department of Defense or of the United States Air Force.
+
+    Statement from DoD: The Appearance of external hyperlinks does not
+    constitute endorsement by the United States Department of Defense (DoD) of
+    the linked websites, of the information, products, or services contained
+    therein. The DoD does not exercise any editorial, security, or other
+    control over the information you may find at these locations.
+*/
+
 //! Ported from the frozen v0.2.0 `analytical_forces_test.cpp`.
 //!
 //! Near-field force and moment derivatives with respect to alpha, beta,
@@ -21,14 +45,14 @@
 //! reference at `(0.25, 0, 0)` so the arms come out as the frozen values.
 
 use approx::assert_abs_diff_eq;
-use pegasus_vlm::core::{PI, SpacingType, Vec3, VecX};
-use pegasus_vlm::geometry::{Aircraft, ReferenceQuantities, Section, Surface};
-use pegasus_vlm::gradients::{
+use zephyr_vlm::core::{PI, SpacingType, Vec3, VecX};
+use zephyr_vlm::geometry::{Aircraft, ReferenceQuantities, Section, Surface};
+use zephyr_vlm::gradients::{
     AeroOutput, force_alpha_gradient, force_beta_gradient, force_circulation_gradient,
     force_geometry_jvp, force_induced_velocity_gradient,
 };
-use pegasus_vlm::solver::{FlightCondition, SolutionState, VortexLattice, VortexLatticeSolver};
-use pegasus_vlm::utils::body_to_stability_rotation;
+use zephyr_vlm::solver::{FlightCondition, SolutionState, VortexLattice, VortexLatticeSolver};
+use zephyr_vlm::utils::body_to_stability_rotation;
 
 const FD_STEP: f64 = 1.0e-7;
 const FD_TOL: f64 = 1.0e-4;
@@ -63,7 +87,7 @@ fn lattice() -> VortexLattice {
 }
 
 fn solution(circulation: &[f64], induced: &[[f64; 3]]) -> SolutionState {
-    let mut matrix = pegasus_vlm::core::MatX::zeros(induced.len(), 3);
+    let mut matrix = zephyr_vlm::core::MatX::zeros(induced.len(), 3);
     for (row, values) in induced.iter().enumerate() {
         for (column, value) in values.iter().enumerate() {
             matrix[(row, column)] = *value;

@@ -4,7 +4,7 @@ sidebar_position: 5
 
 # MDO Integration
 
-The unreleased Pegasus implementation is a Rust library. Geometry and mesh
+The unreleased Zephyr implementation is a Rust library. Geometry and mesh
 gradients can be consumed directly by a Rust optimizer through
 `GradientCalculator`.
 

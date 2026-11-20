@@ -1,22 +1,46 @@
+/*
+    Project Zephyr
+
+    Copyright 2024-2026, Christopher A. Lupp
+
+    This program is free software: you can redistribute it and/or modify
+    it under the terms of the GNU General Public License as published by
+    the Free Software Foundation, either version 3 of the License, or
+    (at your option) any later version.
+
+    This work has been cleared for public release, distribution unlimited, case
+    number: AFRL-2026-2198.
+
+    The views expressed are those of the authors and do not reflect the
+    official guidance or position of the United States Government, the
+    Department of Defense or of the United States Air Force.
+
+    Statement from DoD: The Appearance of external hyperlinks does not
+    constitute endorsement by the United States Department of Defense (DoD) of
+    the linked websites, of the information, products, or services contained
+    therein. The DoD does not exercise any editorial, security, or other
+    control over the information you may find at these locations.
+*/
+
 mod common;
 
 use approx::assert_abs_diff_eq;
-use pegasus_vlm::aero::ForceCalculator;
-use pegasus_vlm::core::{DEGREES_TO_RADIANS, Vec3, VecX};
-use pegasus_vlm::gradients::{
+use zephyr_vlm::aero::ForceCalculator;
+use zephyr_vlm::core::{DEGREES_TO_RADIANS, Vec3, VecX};
+use zephyr_vlm::gradients::{
     AeroOutput, GeometryVariable, GradientCalculator, OutputSelection, TotalDerivative,
     aic_element_gradient, horseshoe_velocity_pg_derivative, horseshoe_velocity_vjp_bound_left,
     horseshoe_velocity_vjp_bound_right, horseshoe_velocity_vjp_field_point,
     trefftz_circulation_gradients,
 };
-use pegasus_vlm::solver::{
+use zephyr_vlm::solver::{
     FlightCondition, SolutionState, VortexLatticeSolver, horseshoe_vortex_velocity,
 };
 
 use common::{rectangular_mesh, rectangular_wing};
 
 fn coefficient(
-    aircraft: &pegasus_vlm::geometry::Aircraft,
+    aircraft: &zephyr_vlm::geometry::Aircraft,
     condition: &FlightCondition,
     output: AeroOutput,
 ) -> f64 {
@@ -37,7 +61,7 @@ fn coefficient(
 }
 
 fn mesh_coefficient(
-    mesh: &pegasus_vlm::geometry::MeshInput,
+    mesh: &zephyr_vlm::geometry::MeshInput,
     condition: &FlightCondition,
     output: AeroOutput,
 ) -> f64 {
@@ -350,7 +374,7 @@ fn direct_mesh_node_gradient_matches_external_resolve() {
     let mut minus = mesh.clone();
     plus.surfaces[0].nodes[0].z += step;
     minus.surfaces[0].nodes[0].z -= step;
-    let solve = |input: &pegasus_vlm::geometry::MeshInput| {
+    let solve = |input: &zephyr_vlm::geometry::MeshInput| {
         let mut solver = VortexLatticeSolver::new();
         solver.set_mesh(input).unwrap();
         let solution = solver.solve(&condition).unwrap();
@@ -433,7 +457,7 @@ fn adjoint_batched_transpose_identity() {
     solver.set_aircraft(&aircraft).unwrap();
     solver.solve(&FlightCondition::default()).unwrap();
     let rhs = VecX::from_element(solver.mesh().vortex_count(), 0.25);
-    let lambda = pegasus_vlm::gradients::AdjointSolver::new(&solver)
+    let lambda = zephyr_vlm::gradients::AdjointSolver::new(&solver)
         .unwrap()
         .solve(&rhs)
         .unwrap();
@@ -456,12 +480,12 @@ fn invalid_solution_is_rejected_by_adjoint() {
 
 /// Perturbs one section design variable on a clone.
 fn perturbed(
-    aircraft: &pegasus_vlm::geometry::Aircraft,
+    aircraft: &zephyr_vlm::geometry::Aircraft,
     surface_index: usize,
     section_index: usize,
     variable: GeometryVariable,
     delta: f64,
-) -> pegasus_vlm::geometry::Aircraft {
+) -> zephyr_vlm::geometry::Aircraft {
     let mut clone = aircraft.clone();
     let section = &mut clone.surfaces_mut()[surface_index].sections_mut()[section_index];
     match variable {
@@ -514,7 +538,7 @@ fn rich_condition() -> FlightCondition {
 }
 
 fn check_section_gradients(
-    aircraft: &pegasus_vlm::geometry::Aircraft,
+    aircraft: &zephyr_vlm::geometry::Aircraft,
     outputs: &[AeroOutput],
     label: &str,
 ) {
@@ -594,7 +618,7 @@ fn section_gradients_handle_a_design_dependent_cl_alpha_factor() {
 /// the primal `atan2`.
 #[test]
 fn interpolated_twist_jvp_matches_centered_differences() {
-    use pegasus_vlm::gradients::interpolated_twist_jvp;
+    use zephyr_vlm::gradients::interpolated_twist_jvp;
 
     let (fc, cl, cr) = (0.37, 1.6, 0.5);
     let (tl, tr) = (6.0f64.to_radians(), (-5.0f64).to_radians());
@@ -636,7 +660,7 @@ fn interpolated_twist_jvp_matches_centered_differences() {
 /// of percent, which no tolerance would absorb.
 #[test]
 fn interpolated_twist_jvp_is_not_the_small_angle_linearization() {
-    use pegasus_vlm::gradients::interpolated_twist_jvp;
+    use zephyr_vlm::gradients::interpolated_twist_jvp;
 
     let fc = 0.5;
     let (cl, cr) = (1.6, 0.5);
@@ -654,7 +678,7 @@ fn interpolated_twist_jvp_is_not_the_small_angle_linearization() {
 /// endpoint sensitivities must sum to exactly one whatever the chords are.
 #[test]
 fn interpolated_twist_jvp_sums_to_one_for_uniform_twist() {
-    use pegasus_vlm::gradients::interpolated_twist_jvp;
+    use zephyr_vlm::gradients::interpolated_twist_jvp;
 
     for fc in [0.0, 0.25, 0.5, 0.75, 1.0] {
         for (cl, cr) in [(1.0, 1.0), (1.6, 0.5), (0.3, 2.2)] {
@@ -679,7 +703,7 @@ fn interpolated_twist_jvp_sums_to_one_for_uniform_twist() {
 /// gradients silently going wrong.
 #[test]
 fn twist_perturbation_leaves_panel_vertices_exactly_unchanged() {
-    use pegasus_vlm::solver::VortexLattice;
+    use zephyr_vlm::solver::VortexLattice;
 
     let aircraft = common::tapered_twisted_wing();
     let mut twisted = aircraft.clone();
@@ -832,7 +856,7 @@ fn geometry_gradients_reject_a_viscous_mesh() {
         .compute_geometry_gradients(&rich_condition())
         .unwrap_err();
     assert!(
-        matches!(error, pegasus_vlm::PegasusError::InvalidGeometry(_)),
+        matches!(error, zephyr_vlm::ZephyrError::InvalidGeometry(_)),
         "expected a typed refusal, got {error:?}"
     );
 

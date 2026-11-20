@@ -1,7 +1,7 @@
-# AI Agent Guidelines for Project Pegasus
+# AI Agent Guidelines for Project Zephyr
 
-Pegasus is a safe Rust 2024 vortex-lattice-method library. The crate package is
-`pegasus-vlm`, its import name is `pegasus_vlm`, and the pinned toolchain is
+Zephyr is a safe Rust 2024 vortex-lattice-method library. The crate package is
+`zephyr-vlm`, its import name is `zephyr_vlm`, and the pinned toolchain is
 Rust 1.93.1.
 
 ## Required checks

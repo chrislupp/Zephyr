@@ -1,10 +1,34 @@
+/*
+    Project Zephyr
+
+    Copyright 2024-2026, Christopher A. Lupp
+
+    This program is free software: you can redistribute it and/or modify
+    it under the terms of the GNU General Public License as published by
+    the Free Software Foundation, either version 3 of the License, or
+    (at your option) any later version.
+
+    This work has been cleared for public release, distribution unlimited, case
+    number: AFRL-2026-2198.
+
+    The views expressed are those of the authors and do not reflect the
+    official guidance or position of the United States Government, the
+    Department of Defense or of the United States Air Force.
+
+    Statement from DoD: The Appearance of external hyperlinks does not
+    constitute endorsement by the United States Department of Defense (DoD) of
+    the linked websites, of the information, products, or services contained
+    therein. The DoD does not exercise any editorial, security, or other
+    control over the information you may find at these locations.
+*/
+
 mod common;
 
 use approx::assert_abs_diff_eq;
 use num_complex::Complex64;
-use pegasus_vlm::aero::{Coefficients, StabilityDerivatives};
-use pegasus_vlm::core::{Mat3, Vec3};
-use pegasus_vlm::dynamics::{Eigenmode, EigenmodeAnalysis, FlightState, MassProperties, ModeType};
+use zephyr_vlm::aero::{Coefficients, StabilityDerivatives};
+use zephyr_vlm::core::{Mat3, Vec3};
+use zephyr_vlm::dynamics::{Eigenmode, EigenmodeAnalysis, FlightState, MassProperties, ModeType};
 
 use common::rectangular_wing;
 
@@ -258,7 +282,7 @@ fn longitudinal_matrix_scales_with_the_real_mass() {
 
 #[test]
 fn mode_filters_and_stability_helpers_are_safe_when_empty() {
-    let result = pegasus_vlm::dynamics::EigenmodeResults::default();
+    let result = zephyr_vlm::dynamics::EigenmodeResults::default();
     assert!(result.short_period().is_none());
     assert!(result.phugoid().is_none());
     assert!(result.dutch_roll().is_none());

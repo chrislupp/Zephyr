@@ -1,8 +1,32 @@
+/*
+    Project Zephyr
+
+    Copyright 2024-2026, Christopher A. Lupp
+
+    This program is free software: you can redistribute it and/or modify
+    it under the terms of the GNU General Public License as published by
+    the Free Software Foundation, either version 3 of the License, or
+    (at your option) any later version.
+
+    This work has been cleared for public release, distribution unlimited, case
+    number: AFRL-2026-2198.
+
+    The views expressed are those of the authors and do not reflect the
+    official guidance or position of the United States Government, the
+    Department of Defense or of the United States Air Force.
+
+    Statement from DoD: The Appearance of external hyperlinks does not
+    constitute endorsement by the United States Department of Defense (DoD) of
+    the linked websites, of the information, products, or services contained
+    therein. The DoD does not exercise any editorial, security, or other
+    control over the information you may find at these locations.
+*/
+
 //! High-level aerodynamic, geometry, and structured-node gradients.
 
 use crate::aero::Coefficients;
 use crate::core::{MatX, Scalar, Vec3, VecX};
-use crate::error::{PegasusError, Result};
+use crate::error::{Result, ZephyrError};
 use crate::geometry::{Aircraft, MeshInput};
 use crate::solver::{FlightCondition, VortexLatticeSolver};
 
@@ -288,7 +312,7 @@ impl GradientCalculator {
                 mesh.reference.moment_reference_point = point;
                 Ok(())
             }
-            None => Err(PegasusError::InvalidGeometry(
+            None => Err(ZephyrError::InvalidGeometry(
                 "set aircraft or mesh before setting the reference point".into(),
             )),
         }
@@ -305,7 +329,7 @@ impl GradientCalculator {
             Some(GeometrySource::Aircraft(aircraft)) => solver.set_aircraft(aircraft)?,
             Some(GeometrySource::Mesh(mesh)) => solver.set_mesh(mesh)?,
             None => {
-                return Err(PegasusError::InvalidGeometry(
+                return Err(ZephyrError::InvalidGeometry(
                     "no aircraft or mesh has been set".into(),
                 ));
             }
@@ -562,7 +586,7 @@ impl GradientCalculator {
         condition: &FlightCondition,
     ) -> Result<GeometryGradients> {
         let Some(GeometrySource::Aircraft(aircraft)) = self.source.as_ref() else {
-            return Err(PegasusError::InvalidGeometry(
+            return Err(ZephyrError::InvalidGeometry(
                 "section gradients require an aircraft source".into(),
             ));
         };
@@ -620,7 +644,7 @@ impl GradientCalculator {
         variable: GeometryVariable,
     ) -> Result<AeroGradients> {
         let Some(GeometrySource::Aircraft(aircraft)) = self.source.as_ref() else {
-            return Err(PegasusError::InvalidGeometry(
+            return Err(ZephyrError::InvalidGeometry(
                 "section gradients require an aircraft source".into(),
             ));
         };
@@ -679,7 +703,7 @@ impl GradientCalculator {
         condition: &FlightCondition,
     ) -> Result<Vec<SurfaceMeshNodeGradients>> {
         let Some(GeometrySource::Mesh(mesh)) = self.source.as_ref() else {
-            return Err(PegasusError::InvalidMesh(
+            return Err(ZephyrError::InvalidMesh(
                 "node gradients require a direct mesh source".into(),
             ));
         };

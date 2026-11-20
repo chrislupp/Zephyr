@@ -8,6 +8,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- The public release statement (case number AFRL-2026-2198) and the
+  accompanying DoD disclaimers, in the README and in the header of every Rust
+  and Python source file. Source headers now also carry the GPL notice, which
+  only `src/lib.rs` had before.
+- A Distribution Statement page in the documentation site, outside the
+  versioned docs so it applies to every version, linked from the docs sidebar
+  and footer.
 - `GradientCalculator::mesh_node_gradients_from` and
   `flight_condition_gradients_from`, which take a solver that already holds a
   solution instead of building and solving their own. `VlmDiscipline`'s
@@ -16,6 +23,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   expensive half of a solve.
 
 ### Changed
+- **Breaking:** the project is now named Zephyr. The package is `zephyr-vlm`
+  and the import name `zephyr_vlm` (previously `pegasus-vlm` / `pegasus_vlm`),
+  the error type is `ZephyrError`, the Philote disciplines report themselves as
+  `ZephyrVLM` and `ZephyrMesh`, and the repository and documentation site live
+  under `chrislupp/Zephyr`.
+- The documentation site footer credits Christopher A. Lupp as copyright
+  holder instead of "VLM Authors" and notes the public release case number.
 - The geometry reverse sweep evaluates one horseshoe kernel per vortex pair
   rather than five. An influence coefficient is `normal . velocity`, so its
   geometry gradient is the velocity Jacobians contracted with the target normal;
@@ -498,5 +512,5 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 [0.2.0]: https://github.com/chrislupp/Pegasus/releases/tag/v0.2.0
 [0.3.0]: https://github.com/chrislupp/Pegasus/releases/tag/v0.3.0
 [0.4.0]: https://github.com/chrislupp/Pegasus/releases/tag/v0.4.0
-[Unreleased]: https://github.com/chrislupp/Pegasus/compare/v0.5.0...HEAD
+[Unreleased]: https://github.com/chrislupp/Zephyr/compare/v0.5.0...HEAD
 [0.5.0]: https://github.com/chrislupp/Pegasus/releases/tag/v0.5.0

@@ -1,7 +1,31 @@
+/*
+    Project Zephyr
+
+    Copyright 2024-2026, Christopher A. Lupp
+
+    This program is free software: you can redistribute it and/or modify
+    it under the terms of the GNU General Public License as published by
+    the Free Software Foundation, either version 3 of the License, or
+    (at your option) any later version.
+
+    This work has been cleared for public release, distribution unlimited, case
+    number: AFRL-2026-2198.
+
+    The views expressed are those of the authors and do not reflect the
+    official guidance or position of the United States Government, the
+    Department of Defense or of the United States Air Force.
+
+    Statement from DoD: The Appearance of external hyperlinks does not
+    constitute endorsement by the United States Department of Defense (DoD) of
+    the linked websites, of the information, products, or services contained
+    therein. The DoD does not exercise any editorial, security, or other
+    control over the information you may find at these locations.
+*/
+
 //! Direct structured-surface mesh input.
 
 use crate::core::{Scalar, Vec3};
-use crate::error::{PegasusError, Result};
+use crate::error::{Result, ZephyrError};
 
 /// Coefficient-normalization quantities.
 #[derive(Clone, Debug, PartialEq)]
@@ -93,13 +117,13 @@ impl SurfaceMesh {
     /// Validate dimensions and finite coordinates.
     pub fn validate(&self) -> Result<()> {
         if self.nx == 0 || self.ny == 0 {
-            return Err(PegasusError::InvalidMesh(format!(
+            return Err(ZephyrError::InvalidMesh(format!(
                 "surface '{}' needs positive nx and ny",
                 self.name
             )));
         }
         if self.nodes.len() != self.node_count() {
-            return Err(PegasusError::InvalidMesh(format!(
+            return Err(ZephyrError::InvalidMesh(format!(
                 "surface '{}' has {} nodes, expected {}",
                 self.name,
                 self.nodes.len(),
@@ -111,7 +135,7 @@ impl SurfaceMesh {
             .iter()
             .any(|node| !node.iter().all(|x| x.is_finite()))
         {
-            return Err(PegasusError::InvalidMesh(format!(
+            return Err(ZephyrError::InvalidMesh(format!(
                 "surface '{}' contains non-finite coordinates",
                 self.name
             )));
@@ -128,7 +152,7 @@ impl SurfaceMesh {
     /// Set one node.
     pub fn set_node(&mut self, i: usize, j: usize, point: Vec3) -> Result<()> {
         if i > self.nx || j > self.ny {
-            return Err(PegasusError::InvalidMesh(format!(
+            return Err(ZephyrError::InvalidMesh(format!(
                 "node ({i},{j}) is outside {} × {} surface '{}'",
                 self.nx + 1,
                 self.ny + 1,
@@ -153,7 +177,7 @@ impl MeshInput {
     /// Validate all surfaces and reference values.
     pub fn validate(&self) -> Result<()> {
         if self.surfaces.is_empty() {
-            return Err(PegasusError::InvalidMesh(
+            return Err(ZephyrError::InvalidMesh(
                 "at least one surface is required".into(),
             ));
         }
@@ -161,7 +185,7 @@ impl MeshInput {
             surface.validate()?;
         }
         if self.reference.area <= 0.0 || self.reference.chord <= 0.0 || self.reference.span <= 0.0 {
-            return Err(PegasusError::InvalidMesh(
+            return Err(ZephyrError::InvalidMesh(
                 "reference area, chord, and span must be positive".into(),
             ));
         }

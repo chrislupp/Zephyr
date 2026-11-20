@@ -31,6 +31,11 @@ const sidebars: SidebarsConfig = {
                 "examples/vtk-visualization",
             ],
         },
+        {
+            type: "link",
+            label: "Distribution Statement",
+            href: "/public-release",
+        },
     ],
     apiSidebar: [
         "api/index",

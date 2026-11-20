@@ -1,3 +1,27 @@
+/*
+    Project Zephyr
+
+    Copyright 2024-2026, Christopher A. Lupp
+
+    This program is free software: you can redistribute it and/or modify
+    it under the terms of the GNU General Public License as published by
+    the Free Software Foundation, either version 3 of the License, or
+    (at your option) any later version.
+
+    This work has been cleared for public release, distribution unlimited, case
+    number: AFRL-2026-2198.
+
+    The views expressed are those of the authors and do not reflect the
+    official guidance or position of the United States Government, the
+    Department of Defense or of the United States Air Force.
+
+    Statement from DoD: The Appearance of external hyperlinks does not
+    constitute endorsement by the United States Department of Defense (DoD) of
+    the linked websites, of the information, products, or services contained
+    therein. The DoD does not exercise any editorial, security, or other
+    control over the information you may find at these locations.
+*/
+
 //! Cached primal vortex-lattice solver.
 
 use faer::{
@@ -6,7 +30,7 @@ use faer::{
 };
 
 use crate::core::{EPSILON, MatX, Scalar, Vec3, VecX};
-use crate::error::{PegasusError, Result};
+use crate::error::{Result, ZephyrError};
 use crate::geometry::{Aircraft, MeshInput, ReferenceQuantities};
 
 use super::{
@@ -31,7 +55,7 @@ fn solve_matrix(factorization: &DynamicLu, rhs: &MatX) -> Result<MatX> {
     if solution.iter().all(|value| value.is_finite()) {
         Ok(solution)
     } else {
-        Err(PegasusError::SingularSystem)
+        Err(ZephyrError::SingularSystem)
     }
 }
 
@@ -46,7 +70,7 @@ fn solve_vector(factorization: &DynamicLu, rhs: &VecX) -> Result<VecX> {
     if solution.iter().all(|value| value.is_finite()) {
         Ok(solution)
     } else {
-        Err(PegasusError::SingularSystem)
+        Err(ZephyrError::SingularSystem)
     }
 }
 
@@ -61,7 +85,7 @@ fn solve_transpose_matrix(factorization: &DynamicLu, rhs: &MatX) -> Result<MatX>
     if solution.iter().all(|value| value.is_finite()) {
         Ok(solution)
     } else {
-        Err(PegasusError::SingularSystem)
+        Err(ZephyrError::SingularSystem)
     }
 }
 
@@ -76,7 +100,7 @@ fn solve_transpose_vector(factorization: &DynamicLu, rhs: &VecX) -> Result<VecX>
     if solution.iter().all(|value| value.is_finite()) {
         Ok(solution)
     } else {
-        Err(PegasusError::SingularSystem)
+        Err(ZephyrError::SingularSystem)
     }
 }
 
@@ -195,7 +219,7 @@ impl VortexLatticeSolver {
     pub fn rebuild_aic(&mut self) -> Result<()> {
         if self.mesh.vortex_count() == 0 {
             self.aic_valid = false;
-            return Err(PegasusError::InvalidMesh(
+            return Err(ZephyrError::InvalidMesh(
                 "cannot build an AIC for an empty lattice".into(),
             ));
         }
@@ -217,7 +241,7 @@ impl VortexLatticeSolver {
             self.aic_valid = false;
             self.unit_responses_valid = false;
             self.aic_lu = None;
-            return Err(PegasusError::SingularSystem);
+            return Err(ZephyrError::SingularSystem);
         }
         self.aic_matrix = aic_matrix;
         self.velocity_influence_matrix = velocity_influence_matrix;
@@ -274,7 +298,7 @@ impl VortexLatticeSolver {
         // without testing the residual's magnitude, so it never established
         // any accuracy property the other two checks did not already cover.
         self.unit_circulation = solve_matrix(
-            self.aic_lu.as_ref().ok_or(PegasusError::SingularSystem)?,
+            self.aic_lu.as_ref().ok_or(ZephyrError::SingularSystem)?,
             &rhs,
         )?;
         self.unit_responses_valid = true;
@@ -435,7 +459,7 @@ impl VortexLatticeSolver {
         control_name: &str,
     ) -> Result<VecX> {
         if !self.solution.is_valid {
-            return Err(PegasusError::InvalidSolution);
+            return Err(ZephyrError::InvalidSolution);
         }
         let (normals, normal_derivatives) =
             self.effective_normals_with_derivative(condition, control_name);
@@ -535,7 +559,7 @@ impl VortexLatticeSolver {
                 };
             if !matrix.iter().all(|v| v.is_finite()) {
                 self.invalidate();
-                return Err(PegasusError::SingularSystem);
+                return Err(ZephyrError::SingularSystem);
             }
             self.aic_matrix = matrix;
             self.velocity_influence_matrix = velocities;
@@ -560,7 +584,7 @@ impl VortexLatticeSolver {
         if matrix_changed || !reuse_solution || !self.solution.is_valid {
             let rhs = self.rhs_for_normals(condition, &self.solution_normals);
             let gamma = solve_vector(
-                self.aic_lu.as_ref().ok_or(PegasusError::InvalidSolution)?,
+                self.aic_lu.as_ref().ok_or(ZephyrError::InvalidSolution)?,
                 &rhs,
             )?;
             self.solution = SolutionState {
@@ -580,7 +604,7 @@ impl VortexLatticeSolver {
 
     pub fn solve(&mut self, condition: &FlightCondition) -> Result<SolutionState> {
         if self.mesh.vortex_count() == 0 {
-            return Err(PegasusError::InvalidMesh(
+            return Err(ZephyrError::InvalidMesh(
                 "cannot solve an empty lattice".into(),
             ));
         }
@@ -605,7 +629,7 @@ impl VortexLatticeSolver {
             || !condition.dynamic_pressure.is_finite()
             || condition.dynamic_pressure < 0.0
         {
-            return Err(PegasusError::InvalidFlightCondition(
+            return Err(ZephyrError::InvalidFlightCondition(
                 "angles, body rates, Mach, and dynamic pressure must be finite; \
                  Mach and dynamic pressure must be nonnegative"
                     .into(),
@@ -615,7 +639,7 @@ impl VortexLatticeSolver {
         // incompressible answer silently, as clamping beta to 1 did, hands back
         // plausible numbers for a condition the method cannot model.
         if condition.mach >= 1.0 {
-            return Err(PegasusError::InvalidFlightCondition(format!(
+            return Err(ZephyrError::InvalidFlightCondition(format!(
                 "Mach {} is not subsonic; the vortex-lattice method requires Mach < 1",
                 condition.mach
             )));
@@ -730,7 +754,7 @@ impl VortexLatticeSolver {
             .solution_lu
             .as_ref()
             .or(self.aic_lu.as_ref())
-            .ok_or(PegasusError::InvalidSolution)?;
+            .ok_or(ZephyrError::InvalidSolution)?;
         solve_transpose_vector(factorization, rhs)
     }
 
@@ -739,7 +763,7 @@ impl VortexLatticeSolver {
             .solution_lu
             .as_ref()
             .or(self.aic_lu.as_ref())
-            .ok_or(PegasusError::InvalidSolution)?;
+            .ok_or(ZephyrError::InvalidSolution)?;
         solve_transpose_matrix(factorization, rhs)
     }
 

@@ -1,9 +1,33 @@
-//! Error types returned by Pegasus.
+/*
+    Project Zephyr
+
+    Copyright 2024-2026, Christopher A. Lupp
+
+    This program is free software: you can redistribute it and/or modify
+    it under the terms of the GNU General Public License as published by
+    the Free Software Foundation, either version 3 of the License, or
+    (at your option) any later version.
+
+    This work has been cleared for public release, distribution unlimited, case
+    number: AFRL-2026-2198.
+
+    The views expressed are those of the authors and do not reflect the
+    official guidance or position of the United States Government, the
+    Department of Defense or of the United States Air Force.
+
+    Statement from DoD: The Appearance of external hyperlinks does not
+    constitute endorsement by the United States Department of Defense (DoD) of
+    the linked websites, of the information, products, or services contained
+    therein. The DoD does not exercise any editorial, security, or other
+    control over the information you may find at these locations.
+*/
+
+//! Error types returned by Zephyr.
 
 use std::path::PathBuf;
 
 /// Crate result type.
-pub type Result<T> = std::result::Result<T, PegasusError>;
+pub type Result<T> = std::result::Result<T, ZephyrError>;
 
 /// Where a parse failure occurred.
 ///
@@ -32,7 +56,7 @@ impl std::fmt::Display for ParseLocation {
 /// Failures produced while constructing, solving, parsing, or exporting.
 #[derive(Debug, thiserror::Error)]
 #[non_exhaustive]
-pub enum PegasusError {
+pub enum ZephyrError {
     /// Underlying filesystem error.
     #[error("I/O error for {path}: {source}")]
     Io {
@@ -73,7 +97,7 @@ pub enum PegasusError {
     FeatureDisabled(&'static str),
 }
 
-impl PegasusError {
+impl ZephyrError {
     /// Construct an I/O error carrying its path.
     #[must_use]
     pub fn io(path: impl Into<PathBuf>, source: std::io::Error) -> Self {

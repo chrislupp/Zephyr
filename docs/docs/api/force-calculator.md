@@ -9,4 +9,4 @@ sidebar_position: 6
 body-axis forces/moments, grouped coefficients, near- and far-field induced
 drag, viscous drag, span efficiency, and strip/surface loads.
 
-See the [`ForceCalculator` rustdoc](https://docs.rs/pegasus-vlm/latest/pegasus_vlm/aero/struct.ForceCalculator.html).
+See the [`ForceCalculator` rustdoc](https://docs.rs/zephyr-vlm/latest/zephyr_vlm/aero/struct.ForceCalculator.html).

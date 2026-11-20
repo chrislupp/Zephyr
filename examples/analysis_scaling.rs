@@ -1,3 +1,27 @@
+/*
+    Project Zephyr
+
+    Copyright 2024-2026, Christopher A. Lupp
+
+    This program is free software: you can redistribute it and/or modify
+    it under the terms of the GNU General Public License as published by
+    the Free Software Foundation, either version 3 of the License, or
+    (at your option) any later version.
+
+    This work has been cleared for public release, distribution unlimited, case
+    number: AFRL-2026-2198.
+
+    The views expressed are those of the authors and do not reflect the
+    official guidance or position of the United States Government, the
+    Department of Defense or of the United States Air Force.
+
+    Statement from DoD: The Appearance of external hyperlinks does not
+    constitute endorsement by the United States Department of Defense (DoD) of
+    the linked websites, of the information, products, or services contained
+    therein. The DoD does not exercise any editorial, security, or other
+    control over the information you may find at these locations.
+*/
+
 //! Scaling sweep, mirroring the v0.2.0 C++ `benchmark_analysis` harness
 //! iteration for iteration: one untimed warm-up, then 50 timed repetitions of
 //! solver construction, `set_mesh`, `rebuild_aic`, `solve`, and the force
@@ -7,10 +31,10 @@
 use std::hint::black_box;
 use std::time::Instant;
 
-use pegasus_vlm::aero::ForceCalculator;
-use pegasus_vlm::core::{DEGREES_TO_RADIANS, Vec3};
-use pegasus_vlm::geometry::{MeshInput, ReferenceQuantities, SurfaceMesh};
-use pegasus_vlm::solver::{FlightCondition, VortexLatticeSolver};
+use zephyr_vlm::aero::ForceCalculator;
+use zephyr_vlm::core::{DEGREES_TO_RADIANS, Vec3};
+use zephyr_vlm::geometry::{MeshInput, ReferenceQuantities, SurfaceMesh};
+use zephyr_vlm::solver::{FlightCondition, VortexLatticeSolver};
 
 fn mesh(ny: usize) -> MeshInput {
     let nx = 6;
@@ -39,7 +63,7 @@ fn mesh(ny: usize) -> MeshInput {
     }
 }
 
-fn main() -> pegasus_vlm::Result<()> {
+fn main() -> zephyr_vlm::Result<()> {
     let condition = FlightCondition {
         alpha: 5.0 * DEGREES_TO_RADIANS,
         dynamic_pressure: 0.5 * 1.225 * 25.0_f64.powi(2),

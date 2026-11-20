@@ -1,3 +1,27 @@
+/*
+    Project Zephyr
+
+    Copyright 2024-2026, Christopher A. Lupp
+
+    This program is free software: you can redistribute it and/or modify
+    it under the terms of the GNU General Public License as published by
+    the Free Software Foundation, either version 3 of the License, or
+    (at your option) any later version.
+
+    This work has been cleared for public release, distribution unlimited, case
+    number: AFRL-2026-2198.
+
+    The views expressed are those of the authors and do not reflect the
+    official guidance or position of the United States Government, the
+    Department of Defense or of the United States Air Force.
+
+    Statement from DoD: The Appearance of external hyperlinks does not
+    constitute endorsement by the United States Department of Defense (DoD) of
+    the linked websites, of the information, products, or services contained
+    therein. The DoD does not exercise any editorial, security, or other
+    control over the information you may find at these locations.
+*/
+
 //! Reverse-mode sensitivities of per-strip loads to the lattice geometry.
 //!
 //! The aerodynamic coefficient adjoints behind [`GradientCalculator`] answer
@@ -21,7 +45,7 @@
 //! [`GradientCalculator`]: super::GradientCalculator
 
 use crate::core::{MatX, Scalar, SymmetryType, Vec3};
-use crate::error::{PegasusError, Result};
+use crate::error::{Result, ZephyrError};
 use crate::geometry::MeshInput;
 use crate::solver::{
     FlightCondition, VortexLattice, VortexLatticeSolver, horseshoe_vortex_velocity,
@@ -134,9 +158,9 @@ impl<'a> StripLoadAdjoint<'a> {
     ///
     /// # Errors
     ///
-    /// Returns [`PegasusError::InvalidSolution`] when the solution is stale, and
-    /// [`PegasusError::InvalidGeometry`] or
-    /// [`PegasusError::InvalidFlightCondition`] for the unsupported cases listed
+    /// Returns [`ZephyrError::InvalidSolution`] when the solution is stale, and
+    /// [`ZephyrError::InvalidGeometry`] or
+    /// [`ZephyrError::InvalidFlightCondition`] for the unsupported cases listed
     /// above or a moment-point count that does not match the lattice.
     pub fn new(
         solver: &'a VortexLatticeSolver,
@@ -144,17 +168,17 @@ impl<'a> StripLoadAdjoint<'a> {
         moment_points: &[Vec3],
     ) -> Result<Self> {
         if !solver.solution().is_valid {
-            return Err(PegasusError::InvalidSolution);
+            return Err(ZephyrError::InvalidSolution);
         }
         if !condition.control_deflections.is_empty() {
-            return Err(PegasusError::InvalidFlightCondition(
+            return Err(ZephyrError::InvalidFlightCondition(
                 "strip load adjoints with deflected control normals are not supported".into(),
             ));
         }
         if solver.symmetry().y_symmetry != SymmetryType::None
             || solver.symmetry().z_symmetry != SymmetryType::None
         {
-            return Err(PegasusError::InvalidGeometry(
+            return Err(ZephyrError::InvalidGeometry(
                 "strip load adjoints require explicit mirrored lattice geometry".into(),
             ));
         }
@@ -164,7 +188,7 @@ impl<'a> StripLoadAdjoint<'a> {
             .iter()
             .any(|strip| strip.has_viscous_data)
         {
-            return Err(PegasusError::InvalidGeometry(
+            return Err(ZephyrError::InvalidGeometry(
                 "strip load adjoints do not yet support section drag polars; the strip \
                  area and lift-coefficient sensitivities they need are not represented"
                     .into(),
@@ -172,7 +196,7 @@ impl<'a> StripLoadAdjoint<'a> {
         }
         let mesh = solver.mesh();
         if moment_points.len() != mesh.strip_count() {
-            return Err(PegasusError::InvalidGeometry(format!(
+            return Err(ZephyrError::InvalidGeometry(format!(
                 "{} moment points for {} strips",
                 moment_points.len(),
                 mesh.strip_count()
@@ -229,7 +253,7 @@ impl<'a> StripLoadAdjoint<'a> {
     ///
     /// # Errors
     ///
-    /// Returns [`PegasusError::InvalidGeometry`] if a cotangent's length does not
+    /// Returns [`ZephyrError::InvalidGeometry`] if a cotangent's length does not
     /// match the strip count or if the mesh does not describe this lattice, and
     /// propagates adjoint solve failures.
     pub fn mesh_node_cotangents(
@@ -241,7 +265,7 @@ impl<'a> StripLoadAdjoint<'a> {
         for column in columns {
             if column.force.len() != mesh.strip_count() || column.moment.len() != mesh.strip_count()
             {
-                return Err(PegasusError::InvalidGeometry(
+                return Err(ZephyrError::InvalidGeometry(
                     "strip load cotangent length does not match the solved lattice".into(),
                 ));
             }
@@ -284,7 +308,7 @@ impl<'a> StripLoadAdjoint<'a> {
     ///
     /// # Errors
     ///
-    /// Returns [`PegasusError::InvalidGeometry`] if a cotangent's length does
+    /// Returns [`ZephyrError::InvalidGeometry`] if a cotangent's length does
     /// not match the strip count, and propagates adjoint solve failures.
     ///
     /// [`GradientCalculator::compute_alpha_gradients`]:
@@ -297,7 +321,7 @@ impl<'a> StripLoadAdjoint<'a> {
         for column in columns {
             if column.force.len() != mesh.strip_count() || column.moment.len() != mesh.strip_count()
             {
-                return Err(PegasusError::InvalidGeometry(
+                return Err(ZephyrError::InvalidGeometry(
                     "strip load cotangent length does not match the solved lattice".into(),
                 ));
             }
@@ -614,9 +638,9 @@ impl<'a> StripLoadAdjoint<'a> {
             let info = lattice
                 .surface_info()
                 .get(slot)
-                .ok_or_else(|| PegasusError::InvalidMesh("surface lattice is missing".into()))?;
+                .ok_or_else(|| ZephyrError::InvalidMesh("surface lattice is missing".into()))?;
             if info.num_strips != surface.ny || info.num_chordwise != surface.nx {
-                return Err(PegasusError::InvalidMesh(
+                return Err(ZephyrError::InvalidMesh(
                     "mesh input does not describe the solved lattice".into(),
                 ));
             }
@@ -639,7 +663,7 @@ impl<'a> StripLoadAdjoint<'a> {
                         if surface.y_duplicated {
                             let duplicate =
                                 lattice.surface_info().get(slot + 1).ok_or_else(|| {
-                                    PegasusError::InvalidMesh("duplicate lattice is missing".into())
+                                    ZephyrError::InvalidMesh("duplicate lattice is missing".into())
                                 })?;
                             let mirrored = duplicate.first_vortex_index
                                 + strip_offset * surface.nx

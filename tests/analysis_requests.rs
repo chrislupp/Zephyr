@@ -1,11 +1,35 @@
-use pegasus_vlm::aero::ForceCalculator;
-use pegasus_vlm::analysis::{
+/*
+    Project Zephyr
+
+    Copyright 2024-2026, Christopher A. Lupp
+
+    This program is free software: you can redistribute it and/or modify
+    it under the terms of the GNU General Public License as published by
+    the Free Software Foundation, either version 3 of the License, or
+    (at your option) any later version.
+
+    This work has been cleared for public release, distribution unlimited, case
+    number: AFRL-2026-2198.
+
+    The views expressed are those of the authors and do not reflect the
+    official guidance or position of the United States Government, the
+    Department of Defense or of the United States Air Force.
+
+    Statement from DoD: The Appearance of external hyperlinks does not
+    constitute endorsement by the United States Department of Defense (DoD) of
+    the linked websites, of the information, products, or services contained
+    therein. The DoD does not exercise any editorial, security, or other
+    control over the information you may find at these locations.
+*/
+
+use zephyr_vlm::aero::ForceCalculator;
+use zephyr_vlm::analysis::{
     Analysis, AnalysisRequest, Details, GradientRequest, GradientValue, Input, Output, SolverMode,
 };
-use pegasus_vlm::core::Vec3;
-use pegasus_vlm::geometry::{MeshInput, SurfaceMesh};
-use pegasus_vlm::gradients::{AeroOutput, GradientCalculator};
-use pegasus_vlm::solver::{FlightCondition, VortexLatticeSolver};
+use zephyr_vlm::core::Vec3;
+use zephyr_vlm::geometry::{MeshInput, SurfaceMesh};
+use zephyr_vlm::gradients::{AeroOutput, GradientCalculator};
+use zephyr_vlm::solver::{FlightCondition, VortexLatticeSolver};
 
 fn mesh(nx: usize, ny: usize) -> MeshInput {
     let mut s = SurfaceMesh::new("wing", nx, ny);
@@ -439,8 +463,8 @@ mod common;
 
 #[test]
 fn aircraft_sections_controls_and_viscous_loads_preserve_behavior() {
-    use pegasus_vlm::geometry::ControlSurfaceDefinition;
-    use pegasus_vlm::gradients::GeometryVariable;
+    use zephyr_vlm::geometry::ControlSurfaceDefinition;
+    use zephyr_vlm::gradients::GeometryVariable;
     let mut aircraft = common::tapered_twisted_wing_mirrored();
     aircraft.set_moment_reference_point(Vec3::new(0.3, 0.2, 0.1));
     let c = condition();
@@ -698,7 +722,7 @@ fn exact_zero_and_normalizing_derivatives_skip_adjoint_work() {
 
 #[test]
 fn cache_updates_for_mach_rates_and_symmetric_controls() {
-    use pegasus_vlm::geometry::ControlSurfaceDefinition;
+    use zephyr_vlm::geometry::ControlSurfaceDefinition;
     let mut aircraft = common::tapered_twisted_wing_mirrored();
     for section in aircraft.surfaces_mut()[0].sections_mut() {
         section.add_control_surface(ControlSurfaceDefinition {

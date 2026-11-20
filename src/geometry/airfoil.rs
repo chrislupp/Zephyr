@@ -1,10 +1,34 @@
+/*
+    Project Zephyr
+
+    Copyright 2024-2026, Christopher A. Lupp
+
+    This program is free software: you can redistribute it and/or modify
+    it under the terms of the GNU General Public License as published by
+    the Free Software Foundation, either version 3 of the License, or
+    (at your option) any later version.
+
+    This work has been cleared for public release, distribution unlimited, case
+    number: AFRL-2026-2198.
+
+    The views expressed are those of the authors and do not reflect the
+    official guidance or position of the United States Government, the
+    Department of Defense or of the United States Air Force.
+
+    Statement from DoD: The Appearance of external hyperlinks does not
+    constitute endorsement by the United States Department of Defense (DoD) of
+    the linked websites, of the information, products, or services contained
+    therein. The DoD does not exercise any editorial, security, or other
+    control over the information you may find at these locations.
+*/
+
 //! Airfoil camber-line representation.
 
 use std::fs;
 use std::path::Path;
 
 use crate::core::Scalar;
-use crate::error::{PegasusError, Result};
+use crate::error::{Result, ZephyrError};
 use crate::utils::CubicSpline;
 
 /// Airfoil camber and thickness distributions used by VLM meshing.
@@ -37,12 +61,12 @@ impl Airfoil {
     /// Construct a four-digit NACA airfoil from a numeric designation.
     pub fn naca4(code: u16, point_count: usize) -> Result<Self> {
         if code > 9999 {
-            return Err(PegasusError::InvalidGeometry(
+            return Err(ZephyrError::InvalidGeometry(
                 "NACA four-digit code must be in 0000..=9999".into(),
             ));
         }
         if point_count < 2 {
-            return Err(PegasusError::InvalidGeometry(
+            return Err(ZephyrError::InvalidGeometry(
                 "a NACA airfoil needs at least two points".into(),
             ));
         }
@@ -87,12 +111,12 @@ impl Airfoil {
     /// Construct a four-digit NACA airfoil from text such as `"2412"`.
     pub fn naca4_str(code: &str, point_count: usize) -> Result<Self> {
         if code.len() > 4 || code.is_empty() || !code.bytes().all(|byte| byte.is_ascii_digit()) {
-            return Err(PegasusError::InvalidGeometry(format!(
+            return Err(ZephyrError::InvalidGeometry(format!(
                 "invalid NACA four-digit code '{code}'"
             )));
         }
         let parsed = code.parse::<u16>().map_err(|_| {
-            PegasusError::InvalidGeometry(format!("invalid NACA four-digit code '{code}'"))
+            ZephyrError::InvalidGeometry(format!("invalid NACA four-digit code '{code}'"))
         })?;
         Self::naca4(parsed, point_count)
     }
@@ -100,7 +124,7 @@ impl Airfoil {
     /// Read Selig/Lednicer-style coordinates from a file.
     pub fn from_coordinate_file(path: impl AsRef<Path>) -> Result<Self> {
         let path = path.as_ref();
-        let content = fs::read_to_string(path).map_err(|error| PegasusError::io(path, error))?;
+        let content = fs::read_to_string(path).map_err(|error| ZephyrError::io(path, error))?;
         let mut name = None;
         let mut x = Vec::new();
         let mut y = Vec::new();
@@ -123,7 +147,7 @@ impl Airfoil {
             }
         }
         if x.len() < 3 {
-            return Err(PegasusError::InvalidGeometry(format!(
+            return Err(ZephyrError::InvalidGeometry(format!(
                 "insufficient airfoil coordinates in {}",
                 path.display()
             )));
@@ -137,12 +161,12 @@ impl Airfoil {
     /// coordinates.
     pub fn from_coordinates(x: &[Scalar], y: &[Scalar], is_camber_line: bool) -> Result<Self> {
         if x.len() != y.len() {
-            return Err(PegasusError::InvalidGeometry(
+            return Err(ZephyrError::InvalidGeometry(
                 "airfoil X and Y arrays must have equal length".into(),
             ));
         }
         if x.len() < 2 {
-            return Err(PegasusError::InvalidGeometry(
+            return Err(ZephyrError::InvalidGeometry(
                 "an airfoil needs at least two coordinates".into(),
             ));
         }
@@ -268,7 +292,7 @@ fn extract_camber(x: &[Scalar], y: &[Scalar]) -> Result<(Vec<Scalar>, Vec<Scalar
         .enumerate()
         .min_by(|(_, left), (_, right)| left.total_cmp(right))
         .map(|(index, _)| index)
-        .ok_or_else(|| PegasusError::InvalidGeometry("empty airfoil coordinates".into()))?;
+        .ok_or_else(|| ZephyrError::InvalidGeometry("empty airfoil coordinates".into()))?;
     let mut upper_x = x[..=leading_edge].to_vec();
     let mut upper_y = y[..=leading_edge].to_vec();
     upper_x.reverse();

@@ -1,6 +1,6 @@
 # Selective analysis and half-wing symmetry
 
-`pegasus_vlm::analysis::Analysis` evaluates an explicit request for scalar outputs,
+`zephyr_vlm::analysis::Analysis` evaluates an explicit request for scalar outputs,
 detailed arrays, and individual derivative pairs. It supports aircraft sections
 and direct structured meshes. The existing solver, force, gradient, stability,
 trim, dynamics, and visualization APIs keep their existing behavior.
@@ -8,7 +8,7 @@ trim, dynamics, and visualization APIs keep their existing behavior.
 ## Request only the quantities you need
 
 ```rust
-use pegasus_vlm::analysis::{
+use zephyr_vlm::analysis::{
     Analysis, AnalysisRequest, GradientRequest, Input, Output, SolverMode,
 };
 

@@ -1,10 +1,34 @@
+/*
+    Project Zephyr
+
+    Copyright 2024-2026, Christopher A. Lupp
+
+    This program is free software: you can redistribute it and/or modify
+    it under the terms of the GNU General Public License as published by
+    the Free Software Foundation, either version 3 of the License, or
+    (at your option) any later version.
+
+    This work has been cleared for public release, distribution unlimited, case
+    number: AFRL-2026-2198.
+
+    The views expressed are those of the authors and do not reflect the
+    official guidance or position of the United States Government, the
+    Department of Defense or of the United States Air Force.
+
+    Statement from DoD: The Appearance of external hyperlinks does not
+    constitute endorsement by the United States Department of Defense (DoD) of
+    the linked websites, of the information, products, or services contained
+    therein. The DoD does not exercise any editorial, security, or other
+    control over the information you may find at these locations.
+*/
+
 use approx::assert_abs_diff_eq;
-use pegasus_vlm::core::{DEGREES_TO_RADIANS, SpacingType, SymmetryType, Vec3};
-use pegasus_vlm::geometry::{
+use zephyr_vlm::core::{DEGREES_TO_RADIANS, SpacingType, SymmetryType, Vec3};
+use zephyr_vlm::geometry::{
     Aircraft, Airfoil, Body, BodySection, ControlSurfaceDefinition, DesignVariableDefinition,
     MeshInput, Section, Surface, SurfaceMesh,
 };
-use pegasus_vlm::utils::{
+use zephyr_vlm::utils::{
     CubicSpline, SplineBoundaryCondition, blended_spacing, body_to_stability_rotation,
     cosine_spacing, rotate_about_x, rotate_about_y, rotate_about_z, sine_spacing, spacing,
     uniform_spacing, wind_to_body_rotation,
@@ -250,10 +274,10 @@ fn rotations_are_orthogonal_and_follow_right_hand_rule() {
     );
     let wind = wind_to_body_rotation(0.2, -0.1);
     let stability = body_to_stability_rotation(0.2);
-    assert_abs_diff_eq!(wind.transpose() * wind, pegasus_vlm::core::Mat3::identity());
+    assert_abs_diff_eq!(wind.transpose() * wind, zephyr_vlm::core::Mat3::identity());
     assert_abs_diff_eq!(
         stability.transpose() * stability,
-        pegasus_vlm::core::Mat3::identity()
+        zephyr_vlm::core::Mat3::identity()
     );
 }
 
@@ -329,7 +353,7 @@ fn degenerate_section_geometry_is_rejected() {
         aircraft
     }
 
-    let mut solver = pegasus_vlm::solver::VortexLatticeSolver::new();
+    let mut solver = zephyr_vlm::solver::VortexLatticeSolver::new();
 
     // Repeating a spanwise station is a standard AVL spacing-break idiom.
     assert!(
@@ -382,7 +406,7 @@ fn degenerate_section_geometry_is_rejected() {
 #[test]
 fn aircraft_counts_match_the_generated_lattice() {
     fn check(aircraft: &Aircraft) {
-        let mut lattice = pegasus_vlm::solver::VortexLattice::default();
+        let mut lattice = zephyr_vlm::solver::VortexLattice::default();
         lattice.generate_from_aircraft(aircraft).unwrap();
         assert_eq!(aircraft.total_strip_count(), lattice.strip_count());
         assert_eq!(aircraft.total_vortex_count(), lattice.vortex_count());

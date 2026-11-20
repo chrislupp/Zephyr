@@ -8,4 +8,4 @@ sidebar_position: 3
 Y-duplication, wake/load flags, and an optional drag polar. Section and surface
 incidence values are in degrees.
 
-See the [`Surface` rustdoc](https://docs.rs/pegasus-vlm/latest/pegasus_vlm/geometry/struct.Surface.html).
+See the [`Surface` rustdoc](https://docs.rs/zephyr-vlm/latest/zephyr_vlm/geometry/struct.Surface.html).
