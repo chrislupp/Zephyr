@@ -103,7 +103,8 @@ fn core_radius(
     width_fraction: Scalar,
 ) -> Scalar {
     let vortex = &mesh.vortices()[source];
-    let width = (vortex.bound_vortex_right - vortex.bound_vortex_left).norm();
+    let width = (vortex.bound_vortex_right.y - vortex.bound_vortex_left.y)
+        .hypot(vortex.bound_vortex_right.z - vortex.bound_vortex_left.z);
     if vortex.component_index == target_component {
         0.0001 * width
     } else {
@@ -143,7 +144,7 @@ pub fn aic_row_gradient(
             &target.normal_at_control_point,
             core,
             prandtl_glauert_factor,
-            row != source_index,
+            true,
         );
         control_point += *weight * gradient.control_point;
         normal += *weight * gradient.normal;
@@ -164,7 +165,7 @@ pub fn aic_column_gradient(
     let source = &mesh.vortices()[column];
     let mut left = Vec3::zeros();
     let mut right = Vec3::zeros();
-    for (row, (target, weight)) in mesh.vortices().iter().zip(weights).enumerate() {
+    for (target, weight) in mesh.vortices().iter().zip(weights) {
         if *weight == 0.0 {
             continue;
         }
@@ -182,7 +183,7 @@ pub fn aic_column_gradient(
             &target.normal_at_control_point,
             core,
             prandtl_glauert_factor,
-            row != column,
+            true,
         );
         left += *weight * gradient.bound_left;
         right += *weight * gradient.bound_right;
@@ -190,7 +191,7 @@ pub fn aic_column_gradient(
     (left, right)
 }
 
-/// Differentiate one weighted velocity row with respect to its control point.
+/// Differentiate one weighted force-velocity row with respect to its bound-force point.
 #[must_use]
 pub fn velocity_row_gradient(
     mesh: &VortexLattice,
@@ -216,7 +217,7 @@ pub fn velocity_row_gradient(
         );
         result += *gamma
             * horseshoe_velocity_vjp_field_point(
-                &target.control_point,
+                &target.bound_vortex_center,
                 &source.bound_vortex_left,
                 &source.bound_vortex_right,
                 prandtl_glauert_factor,
@@ -255,7 +256,7 @@ pub fn velocity_column_gradient(
         );
         left += gamma
             * horseshoe_velocity_vjp_bound_left(
-                &target.control_point,
+                &target.bound_vortex_center,
                 &source.bound_vortex_left,
                 &source.bound_vortex_right,
                 prandtl_glauert_factor,
@@ -265,7 +266,7 @@ pub fn velocity_column_gradient(
             );
         right += gamma
             * horseshoe_velocity_vjp_bound_right(
-                &target.control_point,
+                &target.bound_vortex_center,
                 &source.bound_vortex_left,
                 &source.bound_vortex_right,
                 prandtl_glauert_factor,

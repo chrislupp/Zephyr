@@ -604,14 +604,26 @@ fn section_gradients_match_resolves_on_a_mirrored_wing() {
 }
 
 /// The only fixture that makes `claf` design-dependent, so the only one that
-/// exercises `d(x_vortex[0])`.
+/// exercises the CLAF-dependent control-point locations.
 #[test]
 fn section_gradients_handle_a_design_dependent_cl_alpha_factor() {
-    check_section_gradients(
-        &common::cl_alpha_factor_wing(),
-        &[AeroOutput::Lift, AeroOutput::Pitch, AeroOutput::InducedDrag],
-        "cl-alpha factor",
-    );
+    for spacing in [
+        zephyr_vlm::core::SpacingType::Uniform,
+        zephyr_vlm::core::SpacingType::Cosine,
+        zephyr_vlm::core::SpacingType::Sine,
+        zephyr_vlm::core::SpacingType::Blend,
+    ] {
+        let mut aircraft = common::cl_alpha_factor_wing();
+        aircraft.surfaces_mut()[0].set_chordwise_spacing(spacing);
+        for section in aircraft.surfaces_mut()[0].sections_mut() {
+            section.set_airfoil(zephyr_vlm::geometry::Airfoil::naca4(2412, 101).unwrap());
+        }
+        check_section_gradients(
+            &aircraft,
+            &[AeroOutput::Lift, AeroOutput::Pitch, AeroOutput::InducedDrag],
+            "CLAF control-point and camber motion",
+        );
+    }
 }
 
 /// The exact chord-weighted twist derivative, against central differences of

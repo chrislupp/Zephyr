@@ -382,12 +382,23 @@ fn tail_twist_drives_the_pitching_moment_strongly() {
 
 /// Ports `LiftCurveSlopeIsReasonable`.
 #[test]
-fn the_lift_curve_slope_is_physically_reasonable() {
+fn the_lift_curve_slope_matches_optvl() {
     let gradients = calculator()
         .compute_alpha_gradients(&condition(5.0, 0.3))
         .unwrap();
-    assert!(gradients.coefficients.lift > 4.0);
-    assert!(gradients.coefficients.lift < 7.0);
+    let reference: serde_json::Value =
+        serde_json::from_str(include_str!("fixtures/avl_reference/optvl.json")).unwrap();
+    let case = reference["cases"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|case| case["name"] == "wing_tail")
+        .unwrap();
+    assert_abs_diff_eq!(
+        gradients.coefficients.lift,
+        case["alpha_derivatives"]["CL"].as_f64().unwrap(),
+        epsilon = 2.0e-7
+    );
 }
 
 /// Ports `RollDampingIsNegative` and `PitchRateDerivativesAreComputed`.

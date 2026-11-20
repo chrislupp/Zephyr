@@ -124,13 +124,15 @@ fn primal(
     let freestream = VortexLatticeSolver::freestream_direction(&condition_at(alpha, beta));
     let mut force = Vec3::zeros();
     let mut moment = Vec3::zeros();
-    for (index, vortex) in mesh.vortices().iter().enumerate() {
+    for index in 0..mesh.vortex_count() {
         let velocity =
             freestream + Vec3::new(induced[index][0], induced[index][1], induced[index][2]);
         let line = bound_right[index] - bound_left[index];
         let panel = 2.0 * circulation[index] * velocity.cross(&line);
         force += panel;
-        moment += (vortex.control_point - reference.moment_reference_point).cross(&panel);
+        moment += (0.5 * (bound_left[index] + bound_right[index])
+            - reference.moment_reference_point)
+            .cross(&panel);
     }
     force /= reference.area;
     moment /= reference.area * reference.chord;
@@ -430,7 +432,11 @@ fn the_geometry_jvp_matches_a_directional_difference() {
     let mut left_direction = vec![Vec3::zeros(); 2];
     left_direction[0].y = 1.0;
     let right_direction = vec![Vec3::zeros(); 2];
-    let control_direction = vec![Vec3::zeros(); 2];
+    let control_direction: Vec<_> = left_direction
+        .iter()
+        .zip(&right_direction)
+        .map(|(l, r)| 0.5 * (l + r))
+        .collect();
 
     let exact = force_geometry_jvp(
         &mesh,

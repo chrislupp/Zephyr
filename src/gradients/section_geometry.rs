@@ -44,11 +44,8 @@
 //!   `leading_edge + fraction * chord` along x, so `d(bound_vortex)/d(twist)`
 //!   and `d(control_point)/d(twist)` are *exactly* zero. Twist reaches the
 //!   solution only through the normal.
-//! - **Camber contributes nothing.** `camber_slope_at_control_point` is
-//!   evaluated at `x_control[i]`, which no design variable moves, and the
-//!   camber spline is stored in normalized chord fractions and never rebuilt.
-//! - **`x_vortex[0]` is the only movable chordwise fraction**, through `claf`,
-//!   and only when the bracketing sections disagree on `cl_alpha_factor`.
+//! - **CLAF moves control points**, following AVL CSPACER. When section lift
+//!   factors differ, chord changes move the control point and its camber slope.
 //!
 //! A section perturbation touches the two intervals it bounds — as the right
 //! end of the preceding one, then as the left end of the following one. Those
@@ -375,68 +372,60 @@ fn write_interval(
             right_seed.twist,
         );
 
-        // `claf` moves `x_vortex[0]` only when the bracketing sections disagree
-        // on `cl_alpha_factor`; otherwise it is identically one and this term
-        // vanishes.
         let claf = (1.0 - fc) * chord_left / strip.chord_center * cl_alpha_left
             + fc * chord_right / strip.chord_center * cl_alpha_right;
-        let (x_vortex, x_control) = chordwise_spacing(nx, surface.chordwise_spacing(), claf);
-        let edges = crate::utils::spacing(nx + 1, surface.chordwise_spacing());
-        let raw = 0.25 / claf;
-        let leading_vortex_direction = if claf != 1.0 && raw > 0.1 && raw < 0.4 {
-            // `claf` weights the *section* chords against the strip's centre
-            // chord, not the strip's own left/right chords. Using the strip
-            // tangents here makes `d_claf` spuriously non-zero even when both
-            // sections carry the default unit factor, where `claf` is
-            // identically one and this whole term must vanish.
-            let d_claf = ((1.0 - fc) * left_seed.chord * cl_alpha_left
-                + fc * right_seed.chord * cl_alpha_right
-                - claf * chord_center_direction)
-                / strip.chord_center;
-            -0.25 / (claf * claf) * d_claf * (edges[1] - edges[0])
-        } else {
-            0.0
-        };
-
+        let (_, x_vortex, x_control, control_claf) =
+            chordwise_spacing(nx, surface.chordwise_spacing(), claf);
+        let d_claf = ((1.0 - fc) * left_seed.chord * cl_alpha_left
+            + fc * right_seed.chord * cl_alpha_right
+            - claf * chord_center_direction)
+            / strip.chord_center;
         for chord_index in 0..nx {
             let vortex_index = info.first_vortex_index + strip_offset * nx + chord_index;
-            let d_x_vortex = if chord_index == 0 {
-                leading_vortex_direction
-            } else {
-                0.0
-            };
-
+            let d_x_control = control_claf[chord_index] * d_claf;
             let bound_left_direction = Vec3::new(
-                le_left_direction.x
-                    + x_vortex[chord_index] * chord_left_direction
-                    + d_x_vortex * strip.chord_left,
+                le_left_direction.x + x_vortex[chord_index] * chord_left_direction,
                 le_left_direction.y,
                 le_left_direction.z,
             );
             let bound_right_direction = Vec3::new(
-                le_right_direction.x
-                    + x_vortex[chord_index] * chord_right_direction
-                    + d_x_vortex * strip.chord_right,
+                le_right_direction.x + x_vortex[chord_index] * chord_right_direction,
                 le_right_direction.y,
                 le_right_direction.z,
             );
             result.bound_left[vortex_index] = bound_left_direction;
             result.bound_right[vortex_index] = bound_right_direction;
+            result.bound_center[vortex_index] = Vec3::new(
+                le_center_direction.x + x_vortex[chord_index] * chord_center_direction,
+                le_center_direction.y,
+                le_center_direction.z,
+            );
             result.control_point[vortex_index] = Vec3::new(
-                le_center_direction.x + x_control[chord_index] * chord_center_direction,
+                le_center_direction.x
+                    + x_control[chord_index] * chord_center_direction
+                    + d_x_control * strip.chord_center,
                 le_center_direction.y,
                 le_center_direction.z,
             );
             result.local_chord[vortex_index] = chord_center_direction;
 
             let vortex = &lattice.vortices()[vortex_index];
+            let camber_direction = d_x_control
+                * ((1.0 - fc)
+                    * left
+                        .airfoil()
+                        .camber_slope_derivative(x_control[chord_index])
+                    + fc * right
+                        .airfoil()
+                        .camber_slope_derivative(x_control[chord_index]));
             result.normal[vortex_index] = panel_normal_jvp(
                 &vortex.bound_vortex_left,
                 &vortex.bound_vortex_right,
                 &bound_left_direction,
                 &bound_right_direction,
                 strip.twist_angle,
-                twist_direction,
+                twist_direction
+                    - camber_direction / (1.0 + vortex.camber_slope_at_control_point.powi(2)),
                 vortex.camber_slope_at_control_point,
                 (strip.trefftz_normal_y, strip.trefftz_normal_z),
                 trefftz_direction,
@@ -487,6 +476,7 @@ fn mirror_directions(
             result.bound_left[mirrored] = reflected_direction(result.bound_right[original]);
             result.bound_right[mirrored] = reflected_direction(result.bound_left[original]);
             result.control_point[mirrored] = reflected_direction(result.control_point[original]);
+            result.bound_center[mirrored] = reflected_direction(result.bound_center[original]);
             result.normal[mirrored] = reflected_direction(result.normal[original]);
             result.local_chord[mirrored] = result.local_chord[original];
         }

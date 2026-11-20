@@ -224,6 +224,16 @@ impl Airfoil {
             .unwrap_or(0.0)
     }
 
+    /// Derivative of camber slope, including the chord-fraction clamp.
+    pub(crate) fn camber_slope_derivative(&self, x: Scalar) -> Scalar {
+        if !(0.0..=1.0).contains(&x) {
+            return 0.0;
+        }
+        self.camber_spline
+            .evaluate_second_derivative(x)
+            .unwrap_or(0.0)
+    }
+
     /// Evaluate thickness.
     #[must_use]
     pub fn thickness_at(&self, x: Scalar) -> Scalar {

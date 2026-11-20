@@ -114,6 +114,7 @@ pub struct VortexLatticeSolver {
     reference_quantities: ReferenceQuantities,
     aic_matrix: MatX,
     velocity_influence_matrix: MatX,
+    control_influence_matrix: MatX,
     solution_aic_matrix: Option<MatX>,
     aic_lu: Option<DynamicLu>,
     solution_lu: Option<DynamicLu>,
@@ -135,6 +136,7 @@ impl Default for VortexLatticeSolver {
             reference_quantities: ReferenceQuantities::default(),
             aic_matrix: MatX::zeros(0, 0),
             velocity_influence_matrix: MatX::zeros(0, 0),
+            control_influence_matrix: MatX::zeros(0, 0),
             solution_aic_matrix: None,
             aic_lu: None,
             solution_lu: None,
@@ -235,8 +237,8 @@ impl VortexLatticeSolver {
         // `linearized_aic()` and `solution_aic()` handing out NaN-laden
         // matrices after a failed rebuild, paired with a stale `aic_lu` from
         // whatever preceded them.
-        let (aic_matrix, velocity_influence_matrix, all_finite) =
-            builder.normalwash_and_velocity_checked();
+        let (aic_matrix, control_influence_matrix, velocity_influence_matrix, all_finite) =
+            builder.normalwash_control_and_velocity_checked();
         if !all_finite {
             self.aic_valid = false;
             self.unit_responses_valid = false;
@@ -244,6 +246,7 @@ impl VortexLatticeSolver {
             return Err(ZephyrError::SingularSystem);
         }
         self.aic_matrix = aic_matrix;
+        self.control_influence_matrix = control_influence_matrix;
         self.velocity_influence_matrix = velocity_influence_matrix;
         self.aic_lu = Some(factorize(&self.aic_matrix));
         self.aic_valid = true;
@@ -397,9 +400,9 @@ impl VortexLatticeSolver {
         let n = self.mesh.vortex_count();
         MatX::from_fn(n, n, |row, column| {
             normals[row].dot(&Vec3::new(
-                self.velocity_influence_matrix[(3 * row, column)],
-                self.velocity_influence_matrix[(3 * row + 1, column)],
-                self.velocity_influence_matrix[(3 * row + 2, column)],
+                self.control_influence_matrix[(3 * row, column)],
+                self.control_influence_matrix[(3 * row + 1, column)],
+                self.control_influence_matrix[(3 * row + 2, column)],
             ))
         })
     }
@@ -474,9 +477,9 @@ impl VortexLatticeSolver {
             let mut sum = 0.0;
             for column in 0..n {
                 let entry = normal_derivatives[row].dot(&Vec3::new(
-                    self.velocity_influence_matrix[(3 * row, column)],
-                    self.velocity_influence_matrix[(3 * row + 1, column)],
-                    self.velocity_influence_matrix[(3 * row + 2, column)],
+                    self.control_influence_matrix[(3 * row, column)],
+                    self.control_influence_matrix[(3 * row + 1, column)],
+                    self.control_influence_matrix[(3 * row + 2, column)],
                 ));
                 sum += entry * circulation[column];
             }
@@ -538,12 +541,13 @@ impl VortexLatticeSolver {
         if matrix_changed {
             self.solution.is_valid = false;
             self.current_mach = condition.mach;
-            let (matrix, velocities) =
-                if !operator_changed && self.velocity_influence_matrix.nrows() == 3 * n {
+            let (matrix, control, velocities) =
+                if !operator_changed && self.control_influence_matrix.nrows() == 3 * n {
                     // A control changes the normal projection, not the velocity
                     // operator. Reuse its coefficients when they are available.
                     (
                         self.matrix_for_normals(&normals),
+                        std::mem::take(&mut self.control_influence_matrix),
                         std::mem::take(&mut self.velocity_influence_matrix),
                     )
                 } else {
@@ -562,6 +566,7 @@ impl VortexLatticeSolver {
                 return Err(ZephyrError::SingularSystem);
             }
             self.aic_matrix = matrix;
+            self.control_influence_matrix = control;
             self.velocity_influence_matrix = velocities;
             self.aic_lu = Some(factorize(&self.aic_matrix));
             self.solution_lu = None;
@@ -579,7 +584,7 @@ impl VortexLatticeSolver {
                 true,
                 work,
             )
-            .1;
+            .2;
         }
         if matrix_changed || !reuse_solution || !self.solution.is_valid {
             let rhs = self.rhs_for_normals(condition, &self.solution_normals);
@@ -767,6 +772,13 @@ impl VortexLatticeSolver {
         solve_transpose_matrix(factorization, rhs)
     }
 
+    /// Velocity influence at boundary-condition control points (all bound legs included).
+    #[must_use]
+    pub fn control_velocity_matrix(&self) -> &MatX {
+        &self.control_influence_matrix
+    }
+
+    /// Velocity influence at bound-force points, excluding each self-bound leg.
     #[must_use]
     pub fn velocity_matrix(&self) -> &MatX {
         &self.velocity_influence_matrix

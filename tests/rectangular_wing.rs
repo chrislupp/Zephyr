@@ -39,14 +39,10 @@ use zephyr_vlm::solver::{FlightCondition, VortexLatticeSolver};
 /// The frozen suite compared against theory at 10%.
 const THEORY_TOLERANCE: f64 = 0.10;
 
-/// Helmbold's finite-wing lift slope, `2 pi / (1 + 2/(pi AR))`.
-///
-/// Note the `pi` inside the denominator: this is the form the frozen suite used
-/// here, and it is *not* the `2 pi AR / (AR + 2)` form used in `solver_test`.
-/// The two differ by several percent at AR 10, so they are kept distinct rather
-/// than unified.
+/// Helmbold's finite-wing lift slope. The v0.2.0 fixture had an erroneous
+/// extra pi in its denominator, overpredicting the finite-span lift slope.
 fn lift_slope_theory(aspect_ratio: f64) -> f64 {
-    2.0 * PI / (1.0 + 2.0 / (PI * aspect_ratio))
+    2.0 * PI * aspect_ratio / (2.0 + (4.0 + aspect_ratio * aspect_ratio).sqrt())
 }
 
 /// A y-duplicated rectangular wing of the given aspect ratio.

@@ -1,0 +1,13 @@
+Rectangular AVL reference
+0.2
+0 0 0
+4 1 4
+0.25 0 0
+0
+SURFACE
+Wing
+2 1 4 1
+SECTION
+0 -2 0 1 0
+SECTION
+0 2 0 1 0
