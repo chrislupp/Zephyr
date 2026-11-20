@@ -9,4 +9,4 @@ bodies, controls, and design variables. Relative airfoil files resolve from
 the geometry path. `MassReader` parses AVL units, constants, scale/offset
 directives, components, and products of inertia.
 
-Fallible reads return `PegasusError` with path and line context.
+Fallible reads return `ZephyrError` with path and line context.

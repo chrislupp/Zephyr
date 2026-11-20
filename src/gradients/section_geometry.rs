@@ -1,3 +1,27 @@
+/*
+    Project Zephyr
+
+    Copyright 2024-2026, Christopher A. Lupp
+
+    This program is free software: you can redistribute it and/or modify
+    it under the terms of the GNU General Public License as published by
+    the Free Software Foundation, either version 3 of the License, or
+    (at your option) any later version.
+
+    This work has been cleared for public release, distribution unlimited, case
+    number: AFRL-2026-2198.
+
+    The views expressed are those of the authors and do not reflect the
+    official guidance or position of the United States Government, the
+    Department of Defense or of the United States Air Force.
+
+    Statement from DoD: The Appearance of external hyperlinks does not
+    constitute endorsement by the United States Department of Defense (DoD) of
+    the linked websites, of the information, products, or services contained
+    therein. The DoD does not exercise any editorial, security, or other
+    control over the information you may find at these locations.
+*/
+
 //! Forward-mode lattice tangents for aircraft section design variables.
 //!
 //! This is the analytical counterpart of `direct_mesh_node_direction` for the
@@ -30,7 +54,7 @@
 //! and becomes a silent double-count the moment anything else writes here.
 
 use crate::core::{DEGREES_TO_RADIANS, EPSILON, Scalar, Vec3};
-use crate::error::{PegasusError, Result};
+use crate::error::{Result, ZephyrError};
 use crate::geometry::{Aircraft, Surface};
 use crate::solver::{VortexLattice, chordwise_spacing};
 
@@ -182,16 +206,16 @@ pub(crate) fn section_direction(
     let surface = aircraft
         .surfaces()
         .get(surface_index)
-        .ok_or_else(|| PegasusError::InvalidGeometry("section index is out of range".to_owned()))?;
+        .ok_or_else(|| ZephyrError::InvalidGeometry("section index is out of range".to_owned()))?;
     let sections = surface.sections();
     if section_index >= sections.len() {
-        return Err(PegasusError::InvalidGeometry(
+        return Err(ZephyrError::InvalidGeometry(
             "section index is out of range".to_owned(),
         ));
     }
 
     let layout = surface.spanwise_layout().ok_or_else(|| {
-        PegasusError::InvalidGeometry(format!("surface '{}' has zero span", surface.name()))
+        ZephyrError::InvalidGeometry(format!("surface '{}' has zero span", surface.name()))
     })?;
 
     // Each preceding surface occupies one lattice slot, or two when mirrored.
@@ -203,7 +227,7 @@ pub(crate) fn section_direction(
         .surface_info()
         .get(surface_slot)
         .cloned()
-        .ok_or_else(|| PegasusError::InvalidGeometry("surface lattice is missing".to_owned()))?;
+        .ok_or_else(|| ZephyrError::InvalidGeometry("surface lattice is missing".to_owned()))?;
 
     let scale = *surface.scale();
     let seed = match variable {
@@ -438,7 +462,7 @@ fn mirror_directions(
         .get(surface_slot + 1)
         .cloned()
         .ok_or_else(|| {
-            PegasusError::InvalidGeometry("mirrored surface lattice is missing".to_owned())
+            ZephyrError::InvalidGeometry("mirrored surface lattice is missing".to_owned())
         })?;
     for strip_offset in 0..info.num_strips {
         let original_strip = info.first_strip_index + strip_offset;

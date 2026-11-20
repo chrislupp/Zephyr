@@ -1,18 +1,42 @@
+/*
+    Project Zephyr
+
+    Copyright 2024-2026, Christopher A. Lupp
+
+    This program is free software: you can redistribute it and/or modify
+    it under the terms of the GNU General Public License as published by
+    the Free Software Foundation, either version 3 of the License, or
+    (at your option) any later version.
+
+    This work has been cleared for public release, distribution unlimited, case
+    number: AFRL-2026-2198.
+
+    The views expressed are those of the authors and do not reflect the
+    official guidance or position of the United States Government, the
+    Department of Defense or of the United States Air Force.
+
+    Statement from DoD: The Appearance of external hyperlinks does not
+    constitute endorsement by the United States Department of Defense (DoD) of
+    the linked websites, of the information, products, or services contained
+    therein. The DoD does not exercise any editorial, security, or other
+    control over the information you may find at these locations.
+*/
+
 #![cfg(feature = "vtk")]
 
 use approx::assert_abs_diff_eq;
-use pegasus_vlm::aero::ForceCalculator;
-use pegasus_vlm::core::Vec3;
-use pegasus_vlm::geometry::{Aircraft, Section, Surface};
-use pegasus_vlm::solver::{FlightCondition, VortexLatticeSolver};
-use pegasus_vlm::visualization::{VtkExportOptions, VtkExporter};
 use vtkio::model::{DataSet, IOBuffer, Piece};
+use zephyr_vlm::aero::ForceCalculator;
+use zephyr_vlm::core::Vec3;
+use zephyr_vlm::geometry::{Aircraft, Section, Surface};
+use zephyr_vlm::solver::{FlightCondition, VortexLatticeSolver};
+use zephyr_vlm::visualization::{VtkExportOptions, VtkExporter};
 
 fn solved_wing() -> (
     Aircraft,
     VortexLatticeSolver,
-    pegasus_vlm::solver::SolutionState,
-    pegasus_vlm::aero::AerodynamicResults,
+    zephyr_vlm::solver::SolutionState,
+    zephyr_vlm::aero::AerodynamicResults,
     FlightCondition,
 ) {
     let mut surface = Surface::new("Wing");
@@ -97,7 +121,7 @@ fn invalid_solution_creates_no_file() {
     let result = VtkExporter::export_surface_mesh(
         &path,
         solver.mesh(),
-        &pegasus_vlm::solver::SolutionState::default(),
+        &zephyr_vlm::solver::SolutionState::default(),
         VtkExportOptions::default(),
     );
     assert!(result.is_err());
@@ -132,7 +156,7 @@ fn binary_is_smaller_than_ascii_for_fixture() {
 
 #[test]
 fn vtk_availability_and_default_options_are_consistent() {
-    assert!(pegasus_vlm::visualization::is_available());
+    assert!(zephyr_vlm::visualization::is_available());
     let options = VtkExportOptions::default();
     assert!(options.export_cp);
     assert!(options.export_circulation);

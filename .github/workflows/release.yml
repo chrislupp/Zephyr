@@ -144,14 +144,14 @@ jobs:
             --version "${{ steps.version.outputs.package_version }}" .
           cargo check
           grep -m1 '^version = ' Cargo.toml
-          grep -A1 '^name = "pegasus-vlm"$' Cargo.lock
+          grep -A1 '^name = "zephyr-vlm"$' Cargo.lock
 
       - name: Finalize changelog
         run: |
           TAG="${{ steps.version.outputs.tag_version }}"
           VERSION="${{ steps.version.outputs.package_version }}"
           DATE=$(date +%Y-%m-%d)
-          REPOSITORY="https://github.com/chrislupp/Pegasus"
+          REPOSITORY="https://github.com/chrislupp/Zephyr"
 
           sed -i "s/^## \[Unreleased\]/## [Unreleased]\n\n## [${VERSION}] - ${DATE}/" CHANGELOG.md
           sed -i '/^\[Unreleased\]:/d' CHANGELOG.md
@@ -211,7 +211,7 @@ jobs:
           tag_name: ${{ steps.version.outputs.tag_version }}
           name: ${{ steps.version.outputs.tag_version }}
           body_path: /tmp/release-notes.md
-          files: target/package/pegasus-vlm-*.crate
+          files: target/package/zephyr-vlm-*.crate
           prerelease: ${{ steps.labels.outputs.is_prerelease }}
         env:
           GITHUB_TOKEN: ${{ secrets.RELEASE_TOKEN }}

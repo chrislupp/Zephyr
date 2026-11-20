@@ -1,9 +1,33 @@
+/*
+    Project Zephyr
+
+    Copyright 2024-2026, Christopher A. Lupp
+
+    This program is free software: you can redistribute it and/or modify
+    it under the terms of the GNU General Public License as published by
+    the Free Software Foundation, either version 3 of the License, or
+    (at your option) any later version.
+
+    This work has been cleared for public release, distribution unlimited, case
+    number: AFRL-2026-2198.
+
+    The views expressed are those of the authors and do not reflect the
+    official guidance or position of the United States Government, the
+    Department of Defense or of the United States Air Force.
+
+    Statement from DoD: The Appearance of external hyperlinks does not
+    constitute endorsement by the United States Department of Defense (DoD) of
+    the linked websites, of the information, products, or services contained
+    therein. The DoD does not exercise any editorial, security, or other
+    control over the information you may find at these locations.
+*/
+
 mod common;
 
 use approx::assert_abs_diff_eq;
-use pegasus_vlm::core::DEGREES_TO_RADIANS;
-use pegasus_vlm::solver::VortexLatticeSolver;
-use pegasus_vlm::trim::{
+use zephyr_vlm::core::DEGREES_TO_RADIANS;
+use zephyr_vlm::solver::VortexLatticeSolver;
+use zephyr_vlm::trim::{
     ConstraintType, OperatingVariables, TrimConstraints, TrimOptions, TrimPresets, TrimSolver,
     TrimStatus, VariableConstraint,
 };
@@ -21,7 +45,7 @@ fn drives(kind: ConstraintType, target: f64) -> VariableConstraint {
     VariableConstraint { kind, target }
 }
 
-fn coefficient(results: &pegasus_vlm::aero::AerodynamicResults, kind: ConstraintType) -> f64 {
+fn coefficient(results: &zephyr_vlm::aero::AerodynamicResults, kind: ConstraintType) -> f64 {
     match kind {
         ConstraintType::Lift => results.coefficients.lift,
         ConstraintType::Side => results.coefficients.side,

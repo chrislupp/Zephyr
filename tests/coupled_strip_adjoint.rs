@@ -1,3 +1,27 @@
+/*
+    Project Zephyr
+
+    Copyright 2024-2026, Christopher A. Lupp
+
+    This program is free software: you can redistribute it and/or modify
+    it under the terms of the GNU General Public License as published by
+    the Free Software Foundation, either version 3 of the License, or
+    (at your option) any later version.
+
+    This work has been cleared for public release, distribution unlimited, case
+    number: AFRL-2026-2198.
+
+    The views expressed are those of the authors and do not reflect the
+    official guidance or position of the United States Government, the
+    Department of Defense or of the United States Air Force.
+
+    Statement from DoD: The Appearance of external hyperlinks does not
+    constitute endorsement by the United States Department of Defense (DoD) of
+    the linked websites, of the information, products, or services contained
+    therein. The DoD does not exercise any editorial, security, or other
+    control over the information you may find at these locations.
+*/
+
 //! Reverse-mode strip-load sensitivities to the mesh nodes.
 //!
 //! `StripLoadAdjoint` exists for aeroelastic coupling, where the structure needs
@@ -7,11 +31,11 @@
 //! re-solving the lattice at each perturbed mesh, so the check covers the
 //! implicit circulation path as well as the explicit Kutta–Joukowski one.
 
-use pegasus_vlm::aero::ForceCalculator;
-use pegasus_vlm::core::{DEGREES_TO_RADIANS, Vec3};
-use pegasus_vlm::geometry::{MeshInput, SurfaceMesh};
-use pegasus_vlm::gradients::{StripLoadAdjoint, StripLoadCotangent};
-use pegasus_vlm::solver::{FlightCondition, VortexLatticeSolver};
+use zephyr_vlm::aero::ForceCalculator;
+use zephyr_vlm::core::{DEGREES_TO_RADIANS, Vec3};
+use zephyr_vlm::geometry::{MeshInput, SurfaceMesh};
+use zephyr_vlm::gradients::{StripLoadAdjoint, StripLoadCotangent};
+use zephyr_vlm::solver::{FlightCondition, VortexLatticeSolver};
 
 const NX: usize = 2;
 const NY: usize = 3;
@@ -190,8 +214,8 @@ fn mesh_node_cotangents_match_finite_differences_on_a_duplicated_surface() {
 
 #[test]
 fn a_symmetry_plane_is_rejected_rather_than_silently_ignored() {
-    use pegasus_vlm::core::SymmetryType;
-    use pegasus_vlm::solver::SymmetryConfig;
+    use zephyr_vlm::core::SymmetryType;
+    use zephyr_vlm::solver::SymmetryConfig;
 
     let input = mesh_input(false);
     let mut solver = VortexLatticeSolver::new();

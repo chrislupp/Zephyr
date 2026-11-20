@@ -1,10 +1,34 @@
+/*
+    Project Zephyr
+
+    Copyright 2024-2026, Christopher A. Lupp
+
+    This program is free software: you can redistribute it and/or modify
+    it under the terms of the GNU General Public License as published by
+    the Free Software Foundation, either version 3 of the License, or
+    (at your option) any later version.
+
+    This work has been cleared for public release, distribution unlimited, case
+    number: AFRL-2026-2198.
+
+    The views expressed are those of the authors and do not reflect the
+    official guidance or position of the United States Government, the
+    Department of Defense or of the United States Air Force.
+
+    Statement from DoD: The Appearance of external hyperlinks does not
+    constitute endorsement by the United States Department of Defense (DoD) of
+    the linked websites, of the information, products, or services contained
+    therein. The DoD does not exercise any editorial, security, or other
+    control over the information you may find at these locations.
+*/
+
 //! Athena Vortex Lattice geometry reader.
 
 use std::fs;
 use std::path::{Path, PathBuf};
 
 use crate::core::{Scalar, SymmetryType, Vec3};
-use crate::error::{PegasusError, Result};
+use crate::error::{Result, ZephyrError};
 use crate::geometry::{
     Aircraft, Airfoil, Body, BodySection, ControlSurfaceDefinition, DesignVariableDefinition,
     Section, Surface,
@@ -31,7 +55,7 @@ impl AvlReader {
     /// Read an AVL file, resolving `AFILE` references relative to it.
     pub fn read_path(&self, path: impl AsRef<Path>) -> Result<Aircraft> {
         let path = path.as_ref();
-        let content = fs::read_to_string(path).map_err(|error| PegasusError::io(path, error))?;
+        let content = fs::read_to_string(path).map_err(|error| ZephyrError::io(path, error))?;
         self.read_with_base(&content, path.parent().unwrap_or(Path::new(".")))
             .map_err(|error| error.with_source_path(path))
     }
@@ -186,7 +210,7 @@ impl AvlReader {
                     }
                     let values = next_numbers(cursor, line_number, "SECTION")?;
                     if values.len() < 5 {
-                        return Err(PegasusError::parse(
+                        return Err(ZephyrError::parse(
                             line_number,
                             "SECTION needs Xle Yle Zle chord incidence",
                         ));
@@ -228,7 +252,7 @@ impl AvlReader {
                             // Silently degrading to a flat plate changes the
                             // camber the solve runs on while still reporting
                             // success, so this has to surface.
-                            return Err(PegasusError::parse(
+                            return Err(ZephyrError::parse(
                                 line_number,
                                 format!("could not load AFILE {}: {cause}", path.display()),
                             ));
@@ -339,7 +363,7 @@ impl<'a> Cursor<'a> {
     }
 
     fn next_required(&mut self, context: &str) -> Result<(usize, &'a str)> {
-        self.next().ok_or_else(|| PegasusError::Parse {
+        self.next().ok_or_else(|| ZephyrError::Parse {
             location: crate::error::ParseLocation::default(),
             message: format!("unexpected end of AVL data while reading {context}"),
         })
@@ -347,7 +371,7 @@ impl<'a> Cursor<'a> {
 
     fn next_required_after(&mut self, context: &str, line: usize) -> Result<(usize, &'a str)> {
         self.next().ok_or_else(|| {
-            PegasusError::parse(line, format!("unexpected end of AVL data after {context}"))
+            ZephyrError::parse(line, format!("unexpected end of AVL data after {context}"))
         })
     }
 }
@@ -382,7 +406,7 @@ const MAX_COUNT_FROM_FILE: Scalar = 100_000.0;
 /// input, so this rejects rather than clamps.
 fn count_from_file(value: Scalar, line: usize, context: &str) -> Result<usize> {
     if !value.is_finite() || !(0.0..=MAX_COUNT_FROM_FILE).contains(&value) {
-        return Err(PegasusError::parse(
+        return Err(ZephyrError::parse(
             line,
             format!("{context} count must be between 0 and {MAX_COUNT_FROM_FILE:.0}"),
         ));
@@ -432,7 +456,7 @@ fn resolve_path(base: &Path, relative: &str) -> PathBuf {
 fn parse_control(definition: &str, line: usize) -> Result<ControlSurfaceDefinition> {
     let fields: Vec<_> = definition.split_whitespace().collect();
     if fields.len() < 6 {
-        return Err(PegasusError::parse(
+        return Err(ZephyrError::parse(
             line,
             "CONTROL needs name gain hinge_x hx hy hz [sign]",
         ));
@@ -440,7 +464,7 @@ fn parse_control(definition: &str, line: usize) -> Result<ControlSurfaceDefiniti
     let number = |index: usize| {
         fields[index]
             .parse::<Scalar>()
-            .map_err(|_| PegasusError::parse(line, "invalid numeric CONTROL field"))
+            .map_err(|_| ZephyrError::parse(line, "invalid numeric CONTROL field"))
     };
     let sign = match fields.get(6) {
         Some(_) => number(6)?,

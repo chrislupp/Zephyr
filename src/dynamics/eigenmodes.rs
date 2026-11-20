@@ -1,3 +1,27 @@
+/*
+    Project Zephyr
+
+    Copyright 2024-2026, Christopher A. Lupp
+
+    This program is free software: you can redistribute it and/or modify
+    it under the terms of the GNU General Public License as published by
+    the Free Software Foundation, either version 3 of the License, or
+    (at your option) any later version.
+
+    This work has been cleared for public release, distribution unlimited, case
+    number: AFRL-2026-2198.
+
+    The views expressed are those of the authors and do not reflect the
+    official guidance or position of the United States Government, the
+    Department of Defense or of the United States Air Force.
+
+    Statement from DoD: The Appearance of external hyperlinks does not
+    constitute endorsement by the United States Department of Defense (DoD) of
+    the linked websites, of the information, products, or services contained
+    therein. The DoD does not exercise any editorial, security, or other
+    control over the information you may find at these locations.
+*/
+
 //! Linearized rigid-body matrices and dynamic-mode decomposition.
 
 use faer::Mat;
@@ -5,7 +29,7 @@ use num_complex::Complex64;
 
 use crate::aero::StabilityDerivatives;
 use crate::core::{EPSILON, MatX, PI, Scalar};
-use crate::error::{PegasusError, Result};
+use crate::error::{Result, ZephyrError};
 use crate::geometry::Aircraft;
 
 use super::{FlightState, MassProperties};
@@ -303,7 +327,7 @@ impl EigenmodeAnalysis {
         let faer_matrix = Mat::<Scalar>::from_fn(n, n, |row, column| system_matrix[(row, column)]);
         let decomposition = faer_matrix
             .eigen()
-            .map_err(|error| PegasusError::Eigensolver(format!("{error:?}")))?;
+            .map_err(|error| ZephyrError::Eigensolver(format!("{error:?}")))?;
         let eigenvalues = decomposition.S().column_vector();
         let eigenvectors = decomposition.U();
         let mut modes = Vec::new();
@@ -360,17 +384,17 @@ fn validate_inputs(
     flight: &FlightState,
 ) -> Result<()> {
     if !mass.is_valid() {
-        return Err(PegasusError::Eigensolver(
+        return Err(ZephyrError::Eigensolver(
             "mass and principal inertias must be positive".into(),
         ));
     }
     if !derivatives.is_valid {
-        return Err(PegasusError::Eigensolver(
+        return Err(ZephyrError::Eigensolver(
             "valid stability derivatives are required".into(),
         ));
     }
     if flight.velocity <= 0.0 || !flight.velocity.is_finite() || flight.density <= 0.0 {
-        return Err(PegasusError::Eigensolver(
+        return Err(ZephyrError::Eigensolver(
             "positive finite velocity and density are required".into(),
         ));
     }

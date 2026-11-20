@@ -1,3 +1,27 @@
+/*
+    Project Zephyr
+
+    Copyright 2024-2026, Christopher A. Lupp
+
+    This program is free software: you can redistribute it and/or modify
+    it under the terms of the GNU General Public License as published by
+    the Free Software Foundation, either version 3 of the License, or
+    (at your option) any later version.
+
+    This work has been cleared for public release, distribution unlimited, case
+    number: AFRL-2026-2198.
+
+    The views expressed are those of the authors and do not reflect the
+    official guidance or position of the United States Government, the
+    Department of Defense or of the United States Air Force.
+
+    Statement from DoD: The Appearance of external hyperlinks does not
+    constitute endorsement by the United States Department of Defense (DoD) of
+    the linked websites, of the information, products, or services contained
+    therein. The DoD does not exercise any editorial, security, or other
+    control over the information you may find at these locations.
+*/
+
 //! Ported from the frozen v0.2.0 `mesh_sensitivity_test.cpp`.
 //!
 //! The C++ built section-geometry gradients out of free functions operating on
@@ -14,11 +38,11 @@
 //! replacement's own property instead.
 
 use approx::assert_abs_diff_eq;
-use pegasus_vlm::core::{DEGREES_TO_RADIANS, SpacingType, Vec3};
-use pegasus_vlm::geometry::{Aircraft, Section, Surface};
-use pegasus_vlm::gradients::{GradientCalculator, interpolated_twist_jvp, panel_normal_jvp};
-use pegasus_vlm::solver::{FlightCondition, VortexLattice};
-use pegasus_vlm::utils::{cosine_spacing, uniform_spacing};
+use zephyr_vlm::core::{DEGREES_TO_RADIANS, SpacingType, Vec3};
+use zephyr_vlm::geometry::{Aircraft, Section, Surface};
+use zephyr_vlm::gradients::{GradientCalculator, interpolated_twist_jvp, panel_normal_jvp};
+use zephyr_vlm::solver::{FlightCondition, VortexLattice};
+use zephyr_vlm::utils::{cosine_spacing, uniform_spacing};
 
 /// The frozen fixture: a 4x8 duplicated wing of span 10.
 fn aircraft() -> Aircraft {
@@ -227,7 +251,7 @@ fn cosine_spanwise_fractions_bracket_their_centres() {
 /// step that could be forgotten.
 #[test]
 fn default_constructed_section_gradients_are_zero() {
-    use pegasus_vlm::gradients::SectionGeometryGradients;
+    use zephyr_vlm::gradients::SectionGeometryGradients;
     let gradients = SectionGeometryGradients::default();
     assert!(gradients.surface_name.is_empty());
     assert_eq!(gradients.section_index, 0);
@@ -387,7 +411,7 @@ fn cosine_spacing_clusters_more_tightly_than_uniform_at_the_root() {
     let cosine = cosine_spacing(9);
     assert!(cosine[1] - cosine[0] < uniform[1] - uniform[0]);
     assert_eq!(
-        pegasus_vlm::utils::spacing(9, SpacingType::Cosine).len(),
+        zephyr_vlm::utils::spacing(9, SpacingType::Cosine).len(),
         cosine.len()
     );
 }

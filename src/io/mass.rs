@@ -1,3 +1,27 @@
+/*
+    Project Zephyr
+
+    Copyright 2024-2026, Christopher A. Lupp
+
+    This program is free software: you can redistribute it and/or modify
+    it under the terms of the GNU General Public License as published by
+    the Free Software Foundation, either version 3 of the License, or
+    (at your option) any later version.
+
+    This work has been cleared for public release, distribution unlimited, case
+    number: AFRL-2026-2198.
+
+    The views expressed are those of the authors and do not reflect the
+    official guidance or position of the United States Government, the
+    Department of Defense or of the United States Air Force.
+
+    Statement from DoD: The Appearance of external hyperlinks does not
+    constitute endorsement by the United States Department of Defense (DoD) of
+    the linked websites, of the information, products, or services contained
+    therein. The DoD does not exercise any editorial, security, or other
+    control over the information you may find at these locations.
+*/
+
 //! AVL `.mass` reader.
 
 use std::fs;
@@ -5,7 +29,7 @@ use std::path::Path;
 
 use crate::core::{Mat3, Scalar, Vec3};
 use crate::dynamics::MassProperties;
-use crate::error::{PegasusError, Result};
+use crate::error::{Result, ZephyrError};
 
 /// One component from an AVL mass file.
 #[derive(Clone, Debug, Default)]
@@ -134,7 +158,7 @@ impl MassReader {
     /// Read a mass file.
     pub fn read_path(path: impl AsRef<Path>) -> Result<MassFileData> {
         let path = path.as_ref();
-        let content = fs::read_to_string(path).map_err(|error| PegasusError::io(path, error))?;
+        let content = fs::read_to_string(path).map_err(|error| ZephyrError::io(path, error))?;
         Self::read_str(&content)
     }
 

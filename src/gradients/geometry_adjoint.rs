@@ -1,3 +1,27 @@
+/*
+    Project Zephyr
+
+    Copyright 2024-2026, Christopher A. Lupp
+
+    This program is free software: you can redistribute it and/or modify
+    it under the terms of the GNU General Public License as published by
+    the Free Software Foundation, either version 3 of the License, or
+    (at your option) any later version.
+
+    This work has been cleared for public release, distribution unlimited, case
+    number: AFRL-2026-2198.
+
+    The views expressed are those of the authors and do not reflect the
+    official guidance or position of the United States Government, the
+    Department of Defense or of the United States Air Force.
+
+    Statement from DoD: The Appearance of external hyperlinks does not
+    constitute endorsement by the United States Department of Defense (DoD) of
+    the linked websites, of the information, products, or services contained
+    therein. The DoD does not exercise any editorial, security, or other
+    control over the information you may find at these locations.
+*/
+
 //! Reverse-mode geometry sensitivities of the lattice.
 //!
 //! Every geometry derivative here is adjoint-based. The context solves the flow
@@ -12,7 +36,7 @@
 //! forward once per variable multiplies that same pass by their count.
 
 use crate::core::{EPSILON, MatX, PI, Scalar, SymmetryType, Vec3};
-use crate::error::{PegasusError, Result};
+use crate::error::{Result, ZephyrError};
 use crate::geometry::{MeshInput, ReferenceQuantities};
 use crate::solver::{FlightCondition, SolutionState, VortexLattice, VortexLatticeSolver};
 
@@ -113,17 +137,17 @@ impl<'a> GeometryAdjointContext<'a> {
         selection: OutputSelection,
     ) -> Result<Self> {
         if !solver.solution().is_valid {
-            return Err(PegasusError::InvalidSolution);
+            return Err(ZephyrError::InvalidSolution);
         }
         if !condition.control_deflections.is_empty() {
-            return Err(PegasusError::InvalidFlightCondition(
+            return Err(ZephyrError::InvalidFlightCondition(
                 "geometry adjoints with deflected control normals are not supported".into(),
             ));
         }
         if solver.symmetry().y_symmetry != SymmetryType::None
             || solver.symmetry().z_symmetry != SymmetryType::None
         {
-            return Err(PegasusError::InvalidGeometry(
+            return Err(ZephyrError::InvalidGeometry(
                 "geometry adjoints require explicit mirrored lattice geometry".into(),
             ));
         }
@@ -142,7 +166,7 @@ impl<'a> GeometryAdjointContext<'a> {
             .iter()
             .any(|strip| strip.has_viscous_data)
         {
-            return Err(PegasusError::InvalidGeometry(
+            return Err(ZephyrError::InvalidGeometry(
                 "geometry adjoints do not yet support section drag polars; the strip \
                  area and quarter-chord sensitivities they need are not represented"
                     .into(),
@@ -218,7 +242,7 @@ impl<'a> GeometryAdjointContext<'a> {
             || direction.local_chord.len() != mesh.vortex_count()
             || direction.strip_chord.len() != mesh.strip_count()
         {
-            return Err(PegasusError::InvalidGeometry(
+            return Err(ZephyrError::InvalidGeometry(
                 "lattice direction dimensions do not match the solved mesh".into(),
             ));
         }
@@ -848,7 +872,7 @@ pub(crate) fn scatter_mesh_node_cotangents(
     let surface = input
         .surfaces
         .get(surface_index)
-        .ok_or_else(|| PegasusError::InvalidMesh("surface index is out of range".into()))?;
+        .ok_or_else(|| ZephyrError::InvalidMesh("surface index is out of range".into()))?;
     let surface_slot: usize = input.surfaces[..surface_index]
         .iter()
         .map(|surface| 1 + usize::from(surface.y_duplicated))
@@ -856,7 +880,7 @@ pub(crate) fn scatter_mesh_node_cotangents(
     let info = lattice
         .surface_info()
         .get(surface_slot)
-        .ok_or_else(|| PegasusError::InvalidMesh("surface lattice is missing".into()))?;
+        .ok_or_else(|| ZephyrError::InvalidMesh("surface lattice is missing".into()))?;
 
     // Fold the mirrored half back onto the original. The reflection is its own
     // transpose, and the duplicate's left endpoint came from the original's
@@ -876,7 +900,7 @@ pub(crate) fn scatter_mesh_node_cotangents(
             .surface_info()
             .get(surface_slot + 1)
             .ok_or_else(|| {
-                PegasusError::InvalidMesh("mirrored surface lattice is missing".into())
+                ZephyrError::InvalidMesh("mirrored surface lattice is missing".into())
             })?;
         for strip_offset in 0..info.num_strips {
             let original_strip = info.first_strip_index + strip_offset;

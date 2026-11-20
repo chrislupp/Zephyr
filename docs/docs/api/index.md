@@ -4,7 +4,7 @@ sidebar_position: 1
 
 # API Reference
 
-The crate is imported as `pegasus_vlm`. Its public modules are:
+The crate is imported as `zephyr_vlm`. Its public modules are:
 
 - `geometry`: owned aircraft, surfaces, sections, airfoils, bodies, and meshes
 - `solver`: lattice generation, influence matrices, and cached primal solves
@@ -14,4 +14,4 @@ The crate is imported as `pegasus_vlm`. Its public modules are:
 - `io` and `visualization`: AVL/mass input and VTK XML output
 
 Generated API documentation is available through rustdoc and
-[docs.rs](https://docs.rs/pegasus-vlm).
+[docs.rs](https://docs.rs/zephyr-vlm).

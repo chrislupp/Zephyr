@@ -1255,28 +1255,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "57c0d7b74b563b49d38dae00a0c37d4d6de9b432382b2892f0574ddcae73fd0a"
 
 [[package]]
-name = "pegasus-vlm"
-version = "0.5.0"
-dependencies = [
- "approx",
- "async-trait",
- "criterion",
- "faer",
- "nalgebra",
- "ndarray",
- "num-complex",
- "philote-mdo",
- "rayon",
- "serde",
- "serde_json",
- "tempfile",
- "thiserror 2.0.19",
- "tokio",
- "tonic",
- "vtkio",
-]
-
-[[package]]
 name = "percent-encoding"
 version = "2.3.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2374,6 +2352,28 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "388c44dc09d76f1536602ead6d325eb532f5c122f17782bd57fb47baeeb767e2"
 dependencies = [
  "lzma-sys",
+]
+
+[[package]]
+name = "zephyr-vlm"
+version = "0.5.0"
+dependencies = [
+ "approx",
+ "async-trait",
+ "criterion",
+ "faer",
+ "nalgebra",
+ "ndarray",
+ "num-complex",
+ "philote-mdo",
+ "rayon",
+ "serde",
+ "serde_json",
+ "tempfile",
+ "thiserror 2.0.19",
+ "tokio",
+ "tonic",
+ "vtkio",
 ]
 
 [[package]]

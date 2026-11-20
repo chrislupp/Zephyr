@@ -4,19 +4,19 @@ sidebar_position: 1
 
 # Installation
 
-Pegasus requires Rust 1.93.1 or newer. Add the library to `Cargo.toml`:
+Zephyr requires Rust 1.93.1 or newer. Add the library to `Cargo.toml`:
 
 ```toml
 [dependencies]
-pegasus-vlm = { git = "https://github.com/chrislupp/Pegasus.git" }
+zephyr-vlm = { git = "https://github.com/chrislupp/Zephyr.git" }
 ```
 
 VTK XML export is enabled by default and uses `vtkio`; no system VTK library
 is required. For a minimal build:
 
 ```toml
-pegasus-vlm = {
-    git = "https://github.com/chrislupp/Pegasus.git",
+zephyr-vlm = {
+    git = "https://github.com/chrislupp/Zephyr.git",
     default-features = false,
 }
 ```

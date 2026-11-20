@@ -25,6 +25,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `analysis_mode` expose selective requests and half-wing symmetry. The discipline
   declares the selected outputs and derivative pairs and reuses the primal
   analysis when computing partials at the same mesh and flight condition.
+- The public release statement (case number AFRL-2026-2198) and the
+  accompanying DoD disclaimers, in the README and in the header of every Rust
+  and Python source file. Source headers now also carry the GPL notice, which
+  only `src/lib.rs` had before.
+- A Distribution Statement page in the documentation site, outside the
+  versioned docs so it applies to every version, linked from the docs sidebar
+  and footer.
 - `GradientCalculator::mesh_node_gradients_from` and
   `flight_condition_gradients_from` reuse a solver's existing solution. The
   legacy Philote derivative path uses them to avoid repeating the primal solve.
@@ -39,6 +46,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- **Breaking:** the project is now named Zephyr. The package is `zephyr-vlm`
+  and the import name `zephyr_vlm` (previously `pegasus-vlm` / `pegasus_vlm`),
+  the error type is `ZephyrError`, the Philote disciplines report themselves as
+  `ZephyrVLM` and `ZephyrMesh`, and the repository and documentation site live
+  under `chrislupp/Zephyr`.
+- The documentation site footer credits Christopher A. Lupp as copyright
+  holder instead of "VLM Authors" and notes the public release case number.
 - Mesh-node sensitivities now accumulate in a shared reverse geometry sweep and
   scatter onto the input nodes, replacing a separate forward sweep for every
   node coordinate. Section sensitivities contract against the same lattice
@@ -528,5 +542,5 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 [0.2.0]: https://github.com/chrislupp/Pegasus/releases/tag/v0.2.0
 [0.3.0]: https://github.com/chrislupp/Pegasus/releases/tag/v0.3.0
 [0.4.0]: https://github.com/chrislupp/Pegasus/releases/tag/v0.4.0
-[Unreleased]: https://github.com/chrislupp/Pegasus/compare/v0.5.0...HEAD
+[Unreleased]: https://github.com/chrislupp/Zephyr/compare/v0.5.0...HEAD
 [0.5.0]: https://github.com/chrislupp/Pegasus/releases/tag/v0.5.0

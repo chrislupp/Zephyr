@@ -1,7 +1,31 @@
+/*
+    Project Zephyr
+
+    Copyright 2024-2026, Christopher A. Lupp
+
+    This program is free software: you can redistribute it and/or modify
+    it under the terms of the GNU General Public License as published by
+    the Free Software Foundation, either version 3 of the License, or
+    (at your option) any later version.
+
+    This work has been cleared for public release, distribution unlimited, case
+    number: AFRL-2026-2198.
+
+    The views expressed are those of the authors and do not reflect the
+    official guidance or position of the United States Government, the
+    Department of Defense or of the United States Air Force.
+
+    Statement from DoD: The Appearance of external hyperlinks does not
+    constitute endorsement by the United States Department of Defense (DoD) of
+    the linked websites, of the information, products, or services contained
+    therein. The DoD does not exercise any editorial, security, or other
+    control over the information you may find at these locations.
+*/
+
 //! Transpose solves and total flight-condition derivatives.
 
 use crate::core::{MatX, Scalar, Vec3, VecX};
-use crate::error::{PegasusError, Result};
+use crate::error::{Result, ZephyrError};
 use crate::solver::{FlightCondition, VortexLatticeSolver};
 
 use super::{
@@ -17,21 +41,21 @@ pub struct AdjointSolver<'a> {
 impl<'a> AdjointSolver<'a> {
     pub fn new(solver: &'a VortexLatticeSolver) -> Result<Self> {
         if !solver.is_aic_valid() {
-            return Err(PegasusError::InvalidSolution);
+            return Err(ZephyrError::InvalidSolution);
         }
         Ok(Self { solver })
     }
 
     pub fn solve(&self, rhs: &VecX) -> Result<VecX> {
         if rhs.len() != self.solver.aic().nrows() {
-            return Err(PegasusError::InvalidSolution);
+            return Err(ZephyrError::InvalidSolution);
         }
         self.solver.solve_linearized_transpose(rhs)
     }
 
     pub fn solve_batched(&self, rhs: &MatX) -> Result<MatX> {
         if rhs.nrows() != self.solver.aic().nrows() {
-            return Err(PegasusError::InvalidSolution);
+            return Err(ZephyrError::InvalidSolution);
         }
         self.solver.solve_linearized_transpose_batched(rhs)
     }
@@ -57,7 +81,7 @@ impl TotalDerivative {
         output: AeroOutput,
     ) -> Result<Self> {
         if !solver.solution().is_valid {
-            return Err(PegasusError::InvalidSolution);
+            return Err(ZephyrError::InvalidSolution);
         }
         let gradient = if output == AeroOutput::InducedDrag {
             trefftz_circulation_gradients(

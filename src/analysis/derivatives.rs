@@ -1,3 +1,27 @@
+/*
+    Project Zephyr
+
+    Copyright 2024-2026, Christopher A. Lupp
+
+    This program is free software: you can redistribute it and/or modify
+    it under the terms of the GNU General Public License as published by
+    the Free Software Foundation, either version 3 of the License, or
+    (at your option) any later version.
+
+    This work has been cleared for public release, distribution unlimited, case
+    number: AFRL-2026-2198.
+
+    The views expressed are those of the authors and do not reflect the
+    official guidance or position of the United States Government, the
+    Department of Defense or of the United States Air Force.
+
+    Statement from DoD: The Appearance of external hyperlinks does not
+    constitute endorsement by the United States Department of Defense (DoD) of
+    the linked websites, of the information, products, or services contained
+    therein. The DoD does not exercise any editorial, security, or other
+    control over the information you may find at these locations.
+*/
+
 //! Selected analytical derivatives. One adjoint per requested scalar output.
 use super::operator::{core, reflect};
 use super::{
@@ -5,7 +29,7 @@ use super::{
     Source, Work, unsupported,
 };
 use crate::core::{EPSILON, MatX, Scalar, Vec3, VecX};
-use crate::error::{PegasusError, Result};
+use crate::error::{Result, ZephyrError};
 use crate::gradients::geometry_adjoint::{LatticeCotangents, scatter_mesh_node_cotangents};
 use crate::gradients::section_geometry::section_direction;
 use crate::gradients::{horseshoe_velocity_jacobians, horseshoe_velocity_pg_derivative};
@@ -29,19 +53,19 @@ pub(crate) fn validate(
             && (!c.control_deflections.is_empty()
                 || s.mesh().strips().iter().any(|v| v.has_viscous_data))
         {
-            return Err(PegasusError::InvalidGeometry(
+            return Err(ZephyrError::InvalidGeometry(
                 "geometry adjoints require undeflected controls and no section drag polars".into(),
             ));
         }
         match (&g.input, source) {
             (Input::MomentReference(axis), _) if *axis > 2 => {
-                return Err(PegasusError::InvalidGeometry(
+                return Err(ZephyrError::InvalidGeometry(
                     "moment-reference axis must be 0, 1, or 2".into(),
                 ));
             }
             (Input::MeshNodes(i), Source::Mesh(m)) if *i < m.surfaces.len() => {}
             (Input::MeshNodes(_), _) => {
-                return Err(PegasusError::InvalidGeometry(
+                return Err(ZephyrError::InvalidGeometry(
                     "mesh-node derivatives require a valid direct-mesh surface index".into(),
                 ));
             }
@@ -55,7 +79,7 @@ pub(crate) fn validate(
                 .get(*surface)
                 .is_some_and(|s| *section < s.sections().len()) => {}
             (Input::Section { .. }, _) => {
-                return Err(PegasusError::InvalidGeometry(
+                return Err(ZephyrError::InvalidGeometry(
                     "section derivatives require a valid aircraft section".into(),
                 ));
             }
@@ -68,7 +92,7 @@ pub(crate) fn validate(
                     .filter(|i| &i.name == name)
                     .collect();
                 if influences.is_empty() {
-                    return Err(PegasusError::InvalidGeometry(format!(
+                    return Err(ZephyrError::InvalidGeometry(format!(
                         "unknown control '{name}'"
                     )));
                 }

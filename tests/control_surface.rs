@@ -1,3 +1,27 @@
+/*
+    Project Zephyr
+
+    Copyright 2024-2026, Christopher A. Lupp
+
+    This program is free software: you can redistribute it and/or modify
+    it under the terms of the GNU General Public License as published by
+    the Free Software Foundation, either version 3 of the License, or
+    (at your option) any later version.
+
+    This work has been cleared for public release, distribution unlimited, case
+    number: AFRL-2026-2198.
+
+    The views expressed are those of the authors and do not reflect the
+    official guidance or position of the United States Government, the
+    Department of Defense or of the United States Air Force.
+
+    Statement from DoD: The Appearance of external hyperlinks does not
+    constitute endorsement by the United States Department of Defense (DoD) of
+    the linked websites, of the information, products, or services contained
+    therein. The DoD does not exercise any editorial, security, or other
+    control over the information you may find at these locations.
+*/
+
 //! Ported from the frozen v0.2.0 `control_surface_test.cpp`.
 //!
 //! Control surfaces travel from the AVL file through `Section`, `Aircraft` and
@@ -5,11 +29,11 @@
 //! These cases follow that chain and assert what survives each hop.
 
 use approx::assert_abs_diff_eq;
-use pegasus_vlm::aero::{ControlDerivatives, StabilityDerivatives};
-use pegasus_vlm::core::{DEGREES_TO_RADIANS, Vec3};
-use pegasus_vlm::geometry::{Aircraft, ControlSurfaceDefinition, Section, Surface};
-use pegasus_vlm::io::AvlReader;
-use pegasus_vlm::solver::{FlightCondition, VortexLattice, VortexLatticeSolver};
+use zephyr_vlm::aero::{ControlDerivatives, StabilityDerivatives};
+use zephyr_vlm::core::{DEGREES_TO_RADIANS, Vec3};
+use zephyr_vlm::geometry::{Aircraft, ControlSurfaceDefinition, Section, Surface};
+use zephyr_vlm::io::AvlReader;
+use zephyr_vlm::solver::{FlightCondition, VortexLattice, VortexLatticeSolver};
 
 const TOL: f64 = 1.0e-10;
 
@@ -445,10 +469,10 @@ fn control_derivatives_default_to_a_unit_gain() {
 
     let derivs = ControlDerivatives {
         name: "elevator".into(),
-        coefficients: pegasus_vlm::aero::Coefficients {
+        coefficients: zephyr_vlm::aero::Coefficients {
             lift: 0.5,
             pitch: -1.2,
-            ..pegasus_vlm::aero::Coefficients::default()
+            ..zephyr_vlm::aero::Coefficients::default()
         },
         ..ControlDerivatives::default()
     };

@@ -9,4 +9,4 @@ reference point, Mach, profile drag, and symmetry settings. Collections are
 exposed as slices with checked/name-based access. Aggregate methods report
 panel counts, area, span, and ordered unique control/design-variable names.
 
-See the [`Aircraft` rustdoc](https://docs.rs/pegasus-vlm/latest/pegasus_vlm/geometry/struct.Aircraft.html).
+See the [`Aircraft` rustdoc](https://docs.rs/zephyr-vlm/latest/zephyr_vlm/geometry/struct.Aircraft.html).

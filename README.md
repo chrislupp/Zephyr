@@ -1,10 +1,10 @@
-# Pegasus VLM
+# Zephyr VLM
 
-Pegasus is a safe, Rust-only vortex-lattice-method library for aircraft
+Zephyr is a safe, Rust-only vortex-lattice-method library for aircraft
 geometry, aerodynamic analysis, stability and control derivatives, trim,
 eigenmodes, analytical/adjoint gradients, AVL input, and VTK output.
 
-The package is named `pegasus-vlm` and imported as `pegasus_vlm`. The
+The package is named `zephyr-vlm` and imported as `zephyr_vlm`. The
 unreleased Rust API is a breaking replacement for the former C++ API. The
 repository is publication-ready, but this port does not publish it to
 crates.io.
@@ -28,7 +28,7 @@ The crate has no C, C++, or Python runtime dependency. Philote is optional.
 
 ## Units and axes
 
-Pegasus uses double precision throughout. Geometry is expressed in a
+Zephyr uses double precision throughout. Geometry is expressed in a
 right-handed body frame with x aft, y starboard, and z up. The following unit
 distinction is deliberate:
 
@@ -43,12 +43,12 @@ distinction is deliberate:
 
 ```toml
 [dependencies]
-pegasus-vlm = { git = "https://github.com/chrislupp/Pegasus.git" }
+zephyr-vlm = { git = "https://github.com/chrislupp/Zephyr.git" }
 ```
 
 The default `vtk` feature uses the pure-Rust `vtkio` crate. A minimal build is
 available with `default-features = false`; visualization functions then return
-`PegasusError::FeatureDisabled`.
+`ZephyrError::FeatureDisabled`.
 
 The optional `parallel` feature distributes influence assembly and geometry
 reverse sweeps, including the selective half-wing analysis used by Philote.
@@ -65,10 +65,10 @@ RAYON_NUM_THREADS=10 cargo run --release --features philote,parallel \
 ## Basic analysis
 
 ```rust
-use pegasus_vlm::aero::ForceCalculator;
-use pegasus_vlm::core::{DEGREES_TO_RADIANS, Vec3};
-use pegasus_vlm::geometry::{Aircraft, Section, Surface};
-use pegasus_vlm::solver::{FlightCondition, VortexLatticeSolver};
+use zephyr_vlm::aero::ForceCalculator;
+use zephyr_vlm::core::{DEGREES_TO_RADIANS, Vec3};
+use zephyr_vlm::geometry::{Aircraft, Section, Surface};
+use zephyr_vlm::solver::{FlightCondition, VortexLatticeSolver};
 
 let mut wing = Surface::new("Wing");
 wing.set_chordwise_panel_count(4);
@@ -99,7 +99,7 @@ let results = ForceCalculator::new().compute_for_aircraft(
 
 assert!(results.is_valid);
 assert!(results.coefficients.lift > 0.0);
-# Ok::<(), pegasus_vlm::PegasusError>(())
+# Ok::<(), zephyr_vlm::ZephyrError>(())
 ```
 
 ## AVL and mass files
@@ -110,12 +110,12 @@ corresponding path and string APIs for AVL mass files. Parse errors retain the
 source name, line, and active keyword.
 
 ```rust,no_run
-use pegasus_vlm::io::{AvlReader, MassReader};
+use zephyr_vlm::io::{AvlReader, MassReader};
 
 let aircraft = AvlReader::new().read_path("aircraft.avl")?;
 let mass = MassReader::read_path("aircraft.mass")?;
 # let _ = (aircraft, mass);
-# Ok::<(), pegasus_vlm::PegasusError>(())
+# Ok::<(), zephyr_vlm::ZephyrError>(())
 ```
 
 ## Analytical gradients
@@ -127,10 +127,10 @@ solve and cached batched transpose solves. Objectives use `AeroOutput` instead
 of integer selectors.
 
 ```rust,no_run
-use pegasus_vlm::gradients::{AeroOutput, TotalDerivative};
-use pegasus_vlm::solver::{FlightCondition, VortexLatticeSolver};
-# use pegasus_vlm::geometry::Aircraft;
-# fn evaluate(aircraft: &Aircraft) -> pegasus_vlm::Result<()> {
+use zephyr_vlm::gradients::{AeroOutput, TotalDerivative};
+use zephyr_vlm::solver::{FlightCondition, VortexLatticeSolver};
+# use zephyr_vlm::geometry::Aircraft;
+# fn evaluate(aircraft: &Aircraft) -> zephyr_vlm::Result<()> {
 
 let condition = FlightCondition::default();
 let mut solver = VortexLatticeSolver::new();
@@ -179,5 +179,20 @@ benchmarks, committed parity fixtures, and a manifest mapping the non-Philote
 
 ## License
 
-Pegasus is licensed under GPL-3.0-or-later. See the repository's `LICENSE`
+Zephyr is licensed under GPL-3.0-or-later. See the repository's `LICENSE`
 file.
+
+## Public release
+
+This work has been cleared for public release, distribution unlimited, case
+number: AFRL-2026-2198.
+
+The views expressed are those of the authors and do not reflect the official
+guidance or position of the United States Government, the Department of
+Defense or of the United States Air Force.
+
+Statement from DoD: The Appearance of external hyperlinks does not constitute
+endorsement by the United States Department of Defense (DoD) of the linked
+websites, of the information, products, or services contained therein. The
+DoD does not exercise any editorial, security, or other control over the
+information you may find at these locations.

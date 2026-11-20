@@ -11,10 +11,10 @@ const config: Config = {
     favicon: "img/favicon.ico",
 
     url: "https://chrislupp.github.io",
-    baseUrl: "/Pegasus/",
+    baseUrl: "/Zephyr/",
 
     organizationName: "chrislupp",
-    projectName: "Pegasus",
+    projectName: "Zephyr",
 
     onBrokenLinks: "throw",
 
@@ -42,7 +42,7 @@ const config: Config = {
                     remarkPlugins: [remarkMath],
                     rehypePlugins: [rehypeKatex],
                     editUrl:
-                        "https://github.com/chrislupp/Pegasus/tree/develop/docs/",
+                        "https://github.com/chrislupp/Zephyr/tree/develop/docs/",
                     versions: {
                         current: {
                             label: "Next",
@@ -82,7 +82,7 @@ const config: Config = {
                     position: "right",
                 },
                 {
-                    href: "https://github.com/chrislupp/Pegasus",
+                    href: "https://github.com/chrislupp/Zephyr",
                     label: "GitHub",
                     position: "right",
                 },
@@ -109,16 +109,20 @@ const config: Config = {
                     items: [
                         {
                             label: "GitHub",
-                            href: "https://github.com/chrislupp/Pegasus",
+                            href: "https://github.com/chrislupp/Zephyr",
                         },
                         {
                             label: "Changelog",
-                            href: "https://github.com/chrislupp/Pegasus/blob/main/CHANGELOG.md",
+                            href: "https://github.com/chrislupp/Zephyr/blob/main/CHANGELOG.md",
+                        },
+                        {
+                            label: "Distribution Statement",
+                            to: "/public-release",
                         },
                     ],
                 },
             ],
-            copyright: `Copyright \u00A9 ${new Date().getFullYear()} VLM Authors. Built with Docusaurus.`,
+            copyright: `Copyright \u00A9 2024-${new Date().getFullYear()} Christopher A. Lupp. Approved for public release; distribution unlimited (AFRL-2026-2198). Built with Docusaurus.`,
         },
         prism: {
             theme: prismThemes.github,

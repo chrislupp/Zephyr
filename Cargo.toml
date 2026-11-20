@@ -1,11 +1,11 @@
 [package]
-name = "pegasus-vlm"
+name = "zephyr-vlm"
 version = "0.5.0"
 edition = "2024"
 rust-version = "1.93"
 description = "Vortex Lattice Method aerodynamics library"
 license = "GPL-3.0-or-later"
-repository = "https://github.com/chrislupp/Pegasus"
+repository = "https://github.com/chrislupp/Zephyr"
 readme = "README.md"
 keywords = ["aerodynamics", "vlm", "aircraft", "optimization"]
 categories = ["science", "simulation"]

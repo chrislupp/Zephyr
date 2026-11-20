@@ -1,3 +1,27 @@
+/*
+    Project Zephyr
+
+    Copyright 2024-2026, Christopher A. Lupp
+
+    This program is free software: you can redistribute it and/or modify
+    it under the terms of the GNU General Public License as published by
+    the Free Software Foundation, either version 3 of the License, or
+    (at your option) any later version.
+
+    This work has been cleared for public release, distribution unlimited, case
+    number: AFRL-2026-2198.
+
+    The views expressed are those of the authors and do not reflect the
+    official guidance or position of the United States Government, the
+    Department of Defense or of the United States Air Force.
+
+    Statement from DoD: The Appearance of external hyperlinks does not
+    constitute endorsement by the United States Department of Defense (DoD) of
+    the linked websites, of the information, products, or services contained
+    therein. The DoD does not exercise any editorial, security, or other
+    control over the information you may find at these locations.
+*/
+
 //! Selective aerodynamic analysis with optional half-wing symmetry.
 //!
 //! [`AnalysisRequest`] selects both ordinary outputs and exact derivative pairs.
@@ -11,7 +35,7 @@ mod trefftz;
 pub use request::*;
 
 use crate::core::{Scalar, SymmetryType};
-use crate::error::{PegasusError, Result};
+use crate::error::{Result, ZephyrError};
 use crate::geometry::{Aircraft, MeshInput};
 use crate::solver::{FlightCondition, VortexLatticeSolver};
 use std::collections::BTreeMap;
@@ -77,19 +101,19 @@ impl Source {
                 .iter()
                 .all(|v| v.is_finite())
         {
-            return Err(PegasusError::InvalidGeometry(
+            return Err(ZephyrError::InvalidGeometry(
                 "reference quantities must be finite with positive area, chord and span".into(),
             ));
         }
         if solver.mesh().vortex_count() == 0 {
-            return Err(PegasusError::InvalidMesh("empty lattice".into()));
+            return Err(ZephyrError::InvalidMesh("empty lattice".into()));
         }
         Ok(solver)
     }
 }
 
-pub(crate) fn unsupported(message: &str) -> PegasusError {
-    PegasusError::InvalidGeometry(format!(
+pub(crate) fn unsupported(message: &str) -> ZephyrError {
+    ZephyrError::InvalidGeometry(format!(
         "{message}; use full mode for unrestricted existing functionality"
     ))
 }
@@ -283,7 +307,7 @@ fn validate_condition(c: &FlightCondition) -> Result<()> {
         || c.mach >= 1.0
         || c.dynamic_pressure < 0.0
     {
-        return Err(PegasusError::InvalidFlightCondition(
+        return Err(ZephyrError::InvalidFlightCondition(
             "finite subsonic flight conditions and nonnegative pressure are required".into(),
         ));
     }
