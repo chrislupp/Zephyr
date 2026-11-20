@@ -44,6 +44,16 @@ fn factorize(matrix: &MatX) -> DynamicLu {
         .partial_piv_lu()
 }
 
+/// A partial-pivot LU of a singular matrix still "succeeds"; the breakdown
+/// only shows up as non-finite entries in what it solves for.
+fn ensure_finite(solution: &[Scalar]) -> Result<()> {
+    if solution.iter().all(|value| value.is_finite()) {
+        Ok(())
+    } else {
+        Err(ZephyrError::SingularSystem)
+    }
+}
+
 fn solve_matrix(factorization: &DynamicLu, rhs: &MatX) -> Result<MatX> {
     let mut solution = rhs.clone();
     let (nrows, ncols) = solution.shape();
@@ -52,11 +62,8 @@ fn solve_matrix(factorization: &DynamicLu, rhs: &MatX) -> Result<MatX> {
         nrows,
         ncols,
     ));
-    if solution.iter().all(|value| value.is_finite()) {
-        Ok(solution)
-    } else {
-        Err(ZephyrError::SingularSystem)
-    }
+    ensure_finite(solution.as_slice())?;
+    Ok(solution)
 }
 
 fn solve_vector(factorization: &DynamicLu, rhs: &VecX) -> Result<VecX> {
@@ -67,11 +74,8 @@ fn solve_vector(factorization: &DynamicLu, rhs: &VecX) -> Result<VecX> {
         nrows,
         1,
     ));
-    if solution.iter().all(|value| value.is_finite()) {
-        Ok(solution)
-    } else {
-        Err(ZephyrError::SingularSystem)
-    }
+    ensure_finite(solution.as_slice())?;
+    Ok(solution)
 }
 
 fn solve_transpose_matrix(factorization: &DynamicLu, rhs: &MatX) -> Result<MatX> {
@@ -82,11 +86,8 @@ fn solve_transpose_matrix(factorization: &DynamicLu, rhs: &MatX) -> Result<MatX>
         nrows,
         ncols,
     ));
-    if solution.iter().all(|value| value.is_finite()) {
-        Ok(solution)
-    } else {
-        Err(ZephyrError::SingularSystem)
-    }
+    ensure_finite(solution.as_slice())?;
+    Ok(solution)
 }
 
 fn solve_transpose_vector(factorization: &DynamicLu, rhs: &VecX) -> Result<VecX> {
@@ -97,11 +98,8 @@ fn solve_transpose_vector(factorization: &DynamicLu, rhs: &VecX) -> Result<VecX>
         nrows,
         1,
     ));
-    if solution.iter().all(|value| value.is_finite()) {
-        Ok(solution)
-    } else {
-        Err(ZephyrError::SingularSystem)
-    }
+    ensure_finite(solution.as_slice())?;
+    Ok(solution)
 }
 
 /// Main VLM solver with cached AIC and six unit responses.

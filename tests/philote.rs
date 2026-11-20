@@ -798,3 +798,9 @@ async fn explicit_empty_analysis_and_outputs_only_do_not_return_partials() {
         );
     }
 }
+
+#[test]
+fn disciplines_report_zephyr_names() {
+    assert_eq!(MeshDiscipline::default().name(), "ZephyrMesh");
+    assert_eq!(VlmDiscipline::default().name(), "ZephyrVLM");
+}

@@ -115,9 +115,10 @@ impl Airfoil {
                 "invalid NACA four-digit code '{code}'"
             )));
         }
-        let parsed = code.parse::<u16>().map_err(|_| {
-            ZephyrError::InvalidGeometry(format!("invalid NACA four-digit code '{code}'"))
-        })?;
+        // At most four ASCII digits, checked above, always fit in a `u16`.
+        let parsed = code
+            .bytes()
+            .fold(0_u16, |value, digit| value * 10 + u16::from(digit - b'0'));
         Self::naca4(parsed, point_count)
     }
 
