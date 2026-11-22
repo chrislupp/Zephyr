@@ -67,6 +67,18 @@ pub(crate) fn velocity_influence_mach_derivative_times(
     VecX::from_fn(3 * n, |index, _| rows[index / 3][index % 3])
 }
 
+impl VortexLatticeSolver {
+    /// [`velocity_influence_mach_derivative_times`] for crate code outside
+    /// `gradients`, whose `mach` module is private.
+    pub(crate) fn velocity_mach_derivative_times(
+        &self,
+        at_bound: bool,
+        circulation: &VecX,
+    ) -> VecX {
+        velocity_influence_mach_derivative_times(self, at_bound, circulation)
+    }
+}
+
 /// The dense `3N x N` matrix whose product the function above evaluates.
 #[cfg(test)]
 pub(crate) fn velocity_influence_mach_derivative(

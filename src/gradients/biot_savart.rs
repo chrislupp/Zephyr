@@ -87,6 +87,33 @@ pub struct HorseshoeVelocityJacobians {
     pub bound_right: Mat3,
 }
 
+impl HorseshoeVelocityJacobians {
+    /// The seed-independent terms of one (field point, horseshoe) pair, for
+    /// crate code outside this module, which is private to `gradients`.
+    /// Arguments are those of
+    /// [`horseshoe_vortex_velocity`](crate::solver::horseshoe_vortex_velocity);
+    /// the result offers single-seed endpoint VJPs, the Jacobians and the
+    /// Prandtl-Glauert derivative, each bit-identical to the public kernels.
+    #[inline]
+    pub(crate) fn shared_terms(
+        field_point: &Vec3,
+        bound_left: &Vec3,
+        bound_right: &Vec3,
+        prandtl_glauert_factor: Scalar,
+        core_radius: Scalar,
+        include_bound: bool,
+    ) -> HorseshoeDerivatives {
+        HorseshoeDerivatives::new(
+            field_point,
+            bound_left,
+            bound_right,
+            prandtl_glauert_factor,
+            core_radius,
+            include_bound,
+        )
+    }
+}
+
 /// All three geometry Jacobians of the horseshoe velocity in one pass.
 ///
 /// The VJP kernels are the right shape when a caller has one seed per field

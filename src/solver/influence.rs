@@ -1132,6 +1132,21 @@ impl<'a> InfluenceMatrixBuilder<'a> {
         (aic, velocity, finite)
     }
 
+    /// The control-point pass alone: normalwash, control-point velocity
+    /// operator and the normalwash finiteness flag, without the bound-force
+    /// pass. The same assembly [`Self::normalwash_control_and_velocity_checked`]
+    /// runs first, so the two matrices are identical to its first two.
+    pub(crate) fn normalwash_and_control_checked(&self) -> (MatX, MatX, bool) {
+        let assembly = self.assemble::<true>();
+        (
+            assembly
+                .aic
+                .expect("assemble::<true> always produces the normalwash matrix"),
+            assembly.velocity,
+            assembly.aic_all_finite,
+        )
+    }
+
     pub(crate) fn normalwash_control_and_velocity_checked(&self) -> (MatX, MatX, MatX, bool) {
         let assembly = self.assemble::<true>();
         let velocity = self.assemble::<false>().velocity;
