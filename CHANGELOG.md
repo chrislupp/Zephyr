@@ -87,6 +87,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   with the full LU to a few 1e-15 relative; with the setting off they are
   unchanged.
 
+- `Analysis::set_mirror_reuse` and `Analysis::set_symmetric_factorization` (both
+  off by default, with getters and `Analysis::symmetric_factorization_applies`)
+  bring the solver's opt-in mirror reuse and block-symmetric factorization to the
+  selective analysis path in full mode. Mirror reuse is bit-identical; the
+  symmetric factorization agrees with the full LU to rounding. Neither has an
+  effect in half-wing mode. `set_mesh`/`set_aircraft` keep both settings.
+
 ### Changed
 
 - **Breaking:** the project is now named Zephyr. The package is `zephyr-vlm`
@@ -147,6 +154,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   faster, and the flight-condition circulation gradient no longer copies the
   velocity matrix. Gradient values change only at rounding level; serial and
   `parallel` builds stay bit-identical.
+- The selective analysis path is faster: full-mode operators come from the tuned
+  influence builder (bit-identical), half-wing assembly hoists per-source data,
+  the Mach derivative is threaded under `parallel` and skipped at Mach 0, the
+  mesh-node reverse sweep uses single-seed kernel products, and the near-field
+  seed no longer copies the transposed velocity operator. Primal results are
+  unchanged; derivatives change at rounding level only, except that the Mach
+  derivative below the Mach 0 threshold is now exactly zero.
+- `StripLoadAdjoint` and the batched mesh-node coefficient gradients that route
+  through it are faster: the pairwise sweep gathers its per-pair terms into one
+  dense product per group of source panels, takes single-seed products where
+  the panel normal is the only seed, and reuses the solver's control-point
+  influence matrix instead of re-evaluating the kernel. Each additional
+  functional costs about 1.3 ns per panel pair instead of 20. Results change
+  only at rounding level, and `parallel` output stays bit-identical to serial.
 - `StabilityDerivativeCalculator::compute` and `compute_body_axis` reuse a
   solution the solver already holds for the same condition instead of solving
   again. The values are unchanged.

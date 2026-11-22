@@ -138,6 +138,16 @@ This mode is distinct from `VortexLatticeSolver::set_symmetry`, which adds image
 planes to an existing lattice, and from `set_mirror_reuse`, which preserves the
 full system while reusing reflected influence entries.
 
+Full mode has two opt-in accelerations for lattices built from y-duplicated
+surfaces, both off by default. `Analysis::set_mirror_reuse` derives reflected
+influence entries instead of evaluating them and is bit-identical to plain
+assembly. `Analysis::set_symmetric_factorization` factorizes two half-size
+systems when the system matrix is exactly mirror-symmetric, and otherwise falls
+back to the full factorization; `symmetric_factorization_applies` reports which
+was used, and results agree with the full factorization to rounding. Neither
+setting has an effect in half-wing mode, and the Philote `analysis_*` options
+do not expose them.
+
 ## Philote options
 
 With the `philote` feature, `VlmDiscipline` accepts:
