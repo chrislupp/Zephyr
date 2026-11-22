@@ -124,8 +124,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Optional Philote `outputs` and `fixed_inputs` selections restrict returned
   coefficients and declared partials. Defaults retain the complete interface.
   Alpha-only requests bypass unused Mach/rate/reference derivative calculations.
+- `StabilityDerivativeCalculator::compute` and `compute_body_axis` reuse a
+  solution the solver already holds for the same condition instead of solving
+  again. The values are unchanged.
 
 ### Fixed
+
+- `TrimSolver` now takes exact Newton steps. Its Jacobian left out the coupling
+  between state and control equations (for example dCL/d(elevator) and
+  dCm/d(alpha)) and used the frozen-induced-velocity stability derivatives, so
+  trims with a control variable converged linearly. A wing-tail elevator trim
+  now converges in 3 iterations instead of 12. The converged root is unchanged;
+  at the default tolerance the returned state may differ within that tolerance.
+- `Analysis::evaluate` rejects flight conditions that name an unknown control,
+  as `VortexLatticeSolver::solve` does, instead of ignoring the deflection.
 
 - Control-point normalwash includes each panel's own bound vortex, as in AVL.
   Force velocities are evaluated at the bound-force points with the self-bound
