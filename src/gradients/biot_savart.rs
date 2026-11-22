@@ -377,6 +377,59 @@ impl HorseshoeDerivatives {
             endpoint_derivative - if component == 0 { velocity_x / pg } else { 0.0 }
         })
     }
+    /// All three geometry Jacobians, assembled entry by entry from the stored
+    /// terms rather than through three basis-seed products.
+    ///
+    /// Equal to [`Self::jacobians`] in exact arithmetic and to rounding in
+    /// floating point. The seed enters every VJP linearly, so each endpoint's
+    /// VJP is one 3x3 matrix applied to the seed: the bound term contributes
+    /// `T [b]x + dT/da (a x b)^T` (left) and `-T [a]x + dT/db (a x b)^T`
+    /// (right), each trailing leg its own constant matrix, and the constant
+    /// seed and Prandtl-Glauert scalings become a column and a row scaling.
+    /// The Jacobian is that matrix transposed. A sweep that needs the full
+    /// blocks for every pair pays for one assembly instead of three
+    /// contractions.
+    #[inline]
+    pub(crate) fn assembled_jacobians(&self) -> HorseshoeVelocityJacobians {
+        let pg = self.prandtl_glauert_factor;
+        // `left_vjp(v) = S L D v`, with `L` the map from the effective seed,
+        // `D` the seed's constant scaling and `S` the x-row stretch.
+        let mut left = Mat3::zeros();
+        let mut right = Mat3::zeros();
+        if let Some(bound) = &self.bound {
+            let cross = self.geometry.cross_ab.transpose();
+            left += bound.t * cross_matrix(&self.geometry.b) + bound.d_t_a * cross;
+            right += bound.d_t_b * cross - bound.t * cross_matrix(&self.geometry.a);
+        }
+        if let Some(leg) = &self.leg_a {
+            left += leg.matrix();
+        }
+        if let Some(leg) = &self.leg_b {
+            right += leg.matrix();
+        }
+        let seed_scale = [INV_4_PI / pg, INV_4_PI, INV_4_PI];
+        let mut result = HorseshoeVelocityJacobians::default();
+        for m in 0..3 {
+            for k in 0..3 {
+                let (mut by_left, mut by_right) =
+                    (left[(k, m)] * seed_scale[m], right[(k, m)] * seed_scale[m]);
+                if k == 0 {
+                    by_left /= pg;
+                    by_right /= pg;
+                }
+                result.bound_left[(m, k)] = by_left;
+                result.bound_right[(m, k)] = by_right;
+                result.field_point[(m, k)] = -(by_left + by_right);
+            }
+        }
+        result
+    }
+}
+
+/// `[v]x`, the matrix with `[v]x s = v x s`.
+#[inline]
+fn cross_matrix(v: &Vec3) -> Mat3 {
+    Mat3::new(0.0, -v.z, v.y, v.z, 0.0, -v.x, -v.y, v.x, 0.0)
 }
 
 fn core_four(core_radius: Scalar) -> Scalar {
@@ -625,6 +678,26 @@ impl LegTerms {
             seed.y * p_z * d_t.x + seed.z * (-p_y * d_t.x),
             seed.y * p_z * d_t.y + seed.z * (-t - p_y * d_t.y),
             seed.y * (t + p_z * d_t.z) + seed.z * (-p_y * d_t.z),
+        )
+    }
+}
+
+impl LegTerms {
+    /// The seed-to-VJP map of [`Self::vjp`] as a matrix: `vjp(s) = matrix() s`.
+    #[inline]
+    fn matrix(&self) -> Mat3 {
+        let (p_y, p_z, t) = (self.p_y, self.p_z, self.t);
+        let d_t = &self.d_t;
+        Mat3::new(
+            0.0,
+            p_z * d_t.x,
+            -p_y * d_t.x,
+            0.0,
+            p_z * d_t.y,
+            -t - p_y * d_t.y,
+            0.0,
+            t + p_z * d_t.z,
+            -p_y * d_t.z,
         )
     }
 }
