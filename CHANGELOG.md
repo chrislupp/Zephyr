@@ -124,6 +124,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Optional Philote `outputs` and `fixed_inputs` selections restrict returned
   coefficients and declared partials. Defaults retain the complete interface.
   Alpha-only requests bypass unused Mach/rate/reference derivative calculations.
+- Gradient kernels compute the shared horseshoe geometry once per vortex pair.
+  Flight-condition gradients at nonzero Mach are about 5x faster serially and
+  about 20x faster with `parallel`: the Mach derivative is applied to the
+  circulation directly instead of through a dense 3N x N matrix, is threaded
+  under `parallel`, and is skipped at Mach 0. Mesh-node gradients are 1.6-2.4x
+  faster, and the flight-condition circulation gradient no longer copies the
+  velocity matrix. Gradient values change only at rounding level; serial and
+  `parallel` builds stay bit-identical.
 - `StabilityDerivativeCalculator::compute` and `compute_body_axis` reuse a
   solution the solver already holds for the same condition instead of solving
   again. The values are unchanged.
