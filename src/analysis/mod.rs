@@ -195,6 +195,15 @@ impl Analysis {
         }
         let half = request.mode == SolverMode::HalfWing;
         let solver = self.solver.as_mut().expect("prepared solver");
+        // `VortexLatticeSolver::solve` rejects these; the selective solve must
+        // not silently ignore a misspelled control instead.
+        for (name, _) in &condition.control_deflections {
+            if !solver.mesh().control_surface_names().contains(name) {
+                return Err(ZephyrError::InvalidFlightCondition(format!(
+                    "unknown control '{name}'"
+                )));
+            }
+        }
         if half {
             validate_half(solver, condition)?;
         }

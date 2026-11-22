@@ -911,6 +911,44 @@ fn vlm_rejects_unknown_output_and_fixed_input_names() {
     assert!(discipline.setup().is_err());
 }
 
+#[test]
+fn selective_analysis_rejects_options_it_would_otherwise_ignore() {
+    let control = serde_json::json!([
+        {"surface": "Wing", "name": "flap", "span_start": 0, "span_end": 3, "hinge": 1.2}
+    ]);
+    let trim = serde_json::json!({
+        "enabled": true, "variables": ["alpha"],
+        "balances": [{"quantity": "Fz", "scale": 1000.0}]
+    });
+    let conflicting: [(&str, serde_json::Value); 4] = [
+        ("controls", control),
+        ("fixed_inputs", "mach".into()),
+        ("outputs", "CL,CD".into()),
+        ("trim", trim),
+    ];
+    for (name, value) in conflicting {
+        let mut discipline = VlmDiscipline::default();
+        discipline.initialize().unwrap();
+        discipline
+            .set_options(&options(&[
+                ("surface_names", serde_json::json!(["Wing"])),
+                ("surface_nx", serde_json::json!([2])),
+                ("surface_ny", serde_json::json!([3])),
+                ("surface_y_duplicated", serde_json::json!([true])),
+                ("analysis_outputs", serde_json::json!(["CL"])),
+                (name, value),
+            ]))
+            .unwrap_or_else(|e| panic!("{name} should be accepted as an option: {e}"));
+        let error = discipline
+            .setup()
+            .expect_err(&format!("{name} must be rejected with analysis options"));
+        assert!(
+            error.to_string().contains("cannot be combined"),
+            "{name}: {error}"
+        );
+    }
+}
+
 #[tokio::test]
 async fn mesh_controls_have_exact_philote_partials_and_invalidate_cache() {
     let mut discipline = VlmDiscipline::default();

@@ -26,7 +26,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   declares the selected outputs and derivative pairs and reuses the primal
   analysis when computing partials at the same mesh and flight condition. These
   options select their own outputs and partials and cannot be combined with the
-  `trim`, `outputs` or `fixed_inputs` options.
+  `trim`, `outputs`, `fixed_inputs` or `controls` options.
 - The public release statement (case number AFRL-2026-2198) and the
   accompanying DoD disclaimers, in the README and in the header of every Rust
   and Python source file. Source headers now also carry the GPL notice, which

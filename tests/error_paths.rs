@@ -134,6 +134,31 @@ fn analysis_rejects_invalid_derivative_requests() {
 }
 
 #[test]
+fn analysis_rejects_unknown_control_names_like_the_solver() {
+    let mesh = rectangular_mesh(2, 4);
+    let mut misspelled = condition();
+    misspelled.control_deflections.push(("typo".into(), 0.3));
+    let request = AnalysisRequest {
+        outputs: vec![Output::Lift],
+        ..AnalysisRequest::default()
+    };
+
+    let mut solver = VortexLatticeSolver::new();
+    solver.set_mesh(&mesh).unwrap();
+    assert!(matches!(
+        solver.solve(&misspelled),
+        Err(ZephyrError::InvalidFlightCondition(_))
+    ));
+    let mut analysis = Analysis::from_mesh(&mesh);
+    assert!(matches!(
+        analysis.evaluate(&misspelled, &request),
+        Err(ZephyrError::InvalidFlightCondition(_))
+    ));
+    // The rejection must not poison the context for a valid condition.
+    assert!(analysis.evaluate(&condition(), &request).is_ok());
+}
+
+#[test]
 fn analysis_rejects_degenerate_references_and_empty_lattices() {
     // Aircraft sources skip mesh-input validation, so the analysis checks its
     // own reference quantities and lattice.

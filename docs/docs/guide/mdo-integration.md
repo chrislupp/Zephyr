@@ -31,7 +31,8 @@ command. Its default outputs remain `CL,CD,CY,Cl,Cm,Cn`.
 
 The selective `analysis_outputs`, `analysis_gradients` and `analysis_mode`
 options described in the selective-analysis notes choose their own outputs and
-partials, so they cannot be combined with `trim`, `outputs` or `fixed_inputs`.
+partials, so they cannot be combined with `trim`, `outputs`, `fixed_inputs` or
+`controls`.
 
 The `outputs` option selects coefficients or dimensional resultants
 `Fx,Fy,Fz,Mx,My,Mz`. Each is a scalar function with analytical gradients.

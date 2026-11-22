@@ -714,11 +714,16 @@ impl Discipline for VlmDiscipline {
         if self.analysis_request.is_some()
             && (self.trim.is_some()
                 || !self.fixed_inputs.is_empty()
-                || self.outputs.iter().map(String::as_str).ne(OUTPUTS))
+                || self.outputs.iter().map(String::as_str).ne(OUTPUTS)
+                || self.surfaces.iter().any(|s| !s.controls.is_empty()))
         {
+            // The selective path has no control inputs and its geometry
+            // adjoint requires an empty deflection list, so declared controls
+            // would make every mesh-node partial fail at evaluation time.
             return Err(invalid(
                 "analysis_outputs, analysis_gradients and analysis_mode select their own outputs \
-                 and partials; they cannot be combined with trim, outputs or fixed_inputs",
+                 and partials; they cannot be combined with trim, outputs, fixed_inputs or \
+                 controls",
             ));
         }
         let inputs = self.physical_inputs();
