@@ -44,15 +44,14 @@
 //!
 //! [`GradientCalculator`]: super::GradientCalculator
 
-use crate::core::{MatX, Scalar, SymmetryType, Vec3};
+use crate::core::{Mat3, MatX, Scalar, SymmetryType, Vec3, VecX};
 use crate::error::{Result, ZephyrError};
 use crate::geometry::MeshInput;
-use crate::solver::{
-    FlightCondition, VortexLattice, VortexLatticeSolver, horseshoe_vortex_velocity,
-};
+use crate::solver::{FlightCondition, VortexLattice, VortexLatticeSolver};
 
+use super::biot_savart::HorseshoeDerivatives;
 use super::geometry_adjoint::{normalized_direction, reflected_direction};
-use super::{AdjointSolver, TotalDerivative, horseshoe_velocity_jacobians};
+use super::{AdjointSolver, TotalDerivative};
 
 /// One linear functional of a lattice's strip loads.
 ///
@@ -130,8 +129,8 @@ impl LatticeCotangents {
 /// # Restrictions
 ///
 /// The same ones the mesh-node coefficient gradients carry, for the same
-/// reasons: deflected control normals, symmetry planes and section drag polars
-/// each add a geometry path this module does not represent, and returning a
+/// reasons: symmetry planes and section drag polars each add a geometry path
+/// this module does not represent, and returning a
 /// derivative that silently omits one is worse than refusing. Mirror a wing
 /// explicitly rather than through a symmetry plane.
 pub struct StripLoadAdjoint<'a> {
@@ -170,11 +169,7 @@ impl<'a> StripLoadAdjoint<'a> {
         if !solver.solution().is_valid {
             return Err(ZephyrError::InvalidSolution);
         }
-        if !condition.control_deflections.is_empty() {
-            return Err(ZephyrError::InvalidFlightCondition(
-                "strip load adjoints with deflected control normals are not supported".into(),
-            ));
-        }
+        solver.check_solved_condition(condition)?;
         if solver.symmetry().y_symmetry != SymmetryType::None
             || solver.symmetry().z_symmetry != SymmetryType::None
         {
@@ -261,6 +256,11 @@ impl<'a> StripLoadAdjoint<'a> {
         input: &MeshInput,
         columns: &[StripLoadCotangent],
     ) -> Result<Vec<MeshNodeCotangent>> {
+        if self.mesh().mesh_input() != Some(input) {
+            return Err(ZephyrError::InvalidMesh(
+                "mesh input does not describe the solved lattice".into(),
+            ));
+        }
         let mesh = self.mesh();
         for column in columns {
             if column.force.len() != mesh.strip_count() || column.moment.len() != mesh.strip_count()
@@ -371,6 +371,40 @@ impl<'a> StripLoadAdjoint<'a> {
         Ok(out)
     }
 
+    /// Derivatives of each strip-load functional with respect to every named
+    /// command, in radians. Names are sorted like the lattice's control list.
+    /// Includes induced velocity and uses the solved, deflected AIC.
+    pub fn control_cotangents(
+        &self,
+        columns: &[StripLoadCotangent],
+    ) -> Result<Vec<Vec<(String, Scalar)>>> {
+        for column in columns {
+            if column.force.len() != self.mesh().strip_count()
+                || column.moment.len() != self.mesh().strip_count()
+            {
+                return Err(ZephyrError::InvalidGeometry(
+                    "strip load cotangent length does not match the solved lattice".into(),
+                ));
+            }
+        }
+        if columns.is_empty() {
+            return Ok(Vec::new());
+        }
+        let (panel_seed, velocity_seed) = self.panel_cotangents(columns);
+        let gradients = self.circulation_gradients(&panel_seed, &velocity_seed);
+        let adjoints = AdjointSolver::new(self.solver)?.solve_batched(&gradients)?;
+        let mut result = vec![Vec::new(); columns.len()];
+        for name in self.mesh().control_surface_names() {
+            let rhs = self
+                .solver
+                .control_residual_derivative(self.condition, name)?;
+            for (column, values) in result.iter_mut().enumerate() {
+                values.push((name.clone(), adjoints.column(column).dot(&rhs)));
+            }
+        }
+        Ok(result)
+    }
+
     // ========================================================================
     // Load model
     // ========================================================================
@@ -440,7 +474,7 @@ impl<'a> StripLoadAdjoint<'a> {
                 direct[(index, column)] = rate.dot(&seed);
             }
         }
-        direct + self.solver.velocity_matrix().transpose() * velocity_seed
+        direct + transposed_product(self.solver.velocity_matrix(), velocity_seed)
     }
 
     /// The geometry terms that need no sweep over vortex pairs.
@@ -486,10 +520,18 @@ impl<'a> StripLoadAdjoint<'a> {
     /// One sweep serves both: the residual's dependence on geometry, contracted
     /// with the adjoints, and the induced velocity's, contracted with the
     /// velocity seeds. They share the horseshoe kernel — an AIC entry is just
-    /// the induced velocity projected onto the target normal — so evaluating the
-    /// dense Jacobian blocks once per pair covers both, for every column at
-    /// once. Evaluating a seeded VJP per column instead would re-derive the same
-    /// geometry `ndof` times per pair.
+    /// the induced velocity projected onto the target normal.
+    ///
+    /// Each pair `(target i, source j)` contributes to the target's control
+    /// point, normal and bound-force point, and to the source's two bound
+    /// endpoints. The target-side terms factor: every functional sees the same
+    /// sum over sources, weighted by the target's own adjoint or velocity seed,
+    /// so the sweep accumulates one vector or 3x3 block per target and applies
+    /// the functionals once per target afterwards. The source-side terms do not
+    /// factor, but for a fixed source they are a sum over targets of 3-vectors
+    /// against each target's adjoint and seed: gathered for a few sources at a
+    /// time, they become one dense matrix product against the stacked
+    /// `[psi; seed]` weights instead of eight strided rank updates per pair.
     fn accumulate_pairwise(
         &self,
         velocity_seed: &MatX,
@@ -497,126 +539,120 @@ impl<'a> StripLoadAdjoint<'a> {
         out: &mut LatticeCotangents,
     ) {
         let mesh = self.mesh();
+        let n = mesh.vortex_count();
+        let columns = adjoints.ncols();
         let solution = self.solver.solution();
+
+        // Row `4 i` carries target i's adjoint, rows `4 i + 1 ..= 4 i + 3` its
+        // velocity seed: the order the gathered source rows are laid out in.
+        let mut weights = MatX::zeros(4 * n, columns);
+        for column in 0..columns {
+            for row in 0..n {
+                weights[(4 * row, column)] = adjoints[(row, column)];
+                for d in 0..3 {
+                    weights[(4 * row + 1 + d, column)] = velocity_seed[(3 * row + d, column)];
+                }
+            }
+        }
+        // The core radius depends only on the source and on whether the target
+        // shares its component, so it is evaluated once per source.
+        let (core_same_component, core_other_component) = (0..n)
+            .map(|source| {
+                (
+                    core_radius(mesh, source, true),
+                    core_radius(mesh, source, false),
+                )
+            })
+            .unzip();
+        let inputs = PairwiseInputs {
+            mesh,
+            normals: self.solver.linearized_normals(),
+            circulation: &solution.circulation,
+            weights,
+            core_same_component,
+            core_other_component,
+            prandtl_glauert: self.prandtl_glauert,
+        };
+
+        // Fixed source blocks, each a whole number of gathered products, and an
+        // ordered reduction make the arithmetic independent of the pool size
+        // and of whether the parallel feature is enabled.
+        let block_size = n
+            .div_ceil(PAIRWISE_BLOCKS)
+            .next_multiple_of(SOURCES_PER_PRODUCT)
+            .max(SOURCES_PER_PRODUCT);
+        let blocks: Vec<_> = (0..n)
+            .step_by(block_size)
+            .map(|start| start..(start + block_size).min(n))
+            .collect();
+        let evaluate = |sources: &std::ops::Range<usize>| sweep_sources(&inputs, sources.clone());
+        #[cfg(feature = "parallel")]
+        let partials: Vec<_> = if n < PARALLEL_MIN_PANELS {
+            blocks.iter().map(evaluate).collect()
+        } else {
+            use rayon::prelude::*;
+            blocks.par_iter().map(evaluate).collect()
+        };
+        #[cfg(not(feature = "parallel"))]
+        let partials: Vec<_> = blocks.iter().map(evaluate).collect();
+
+        let mut control_point = vec![Vec3::zeros(); n];
+        let mut field_point = vec![Mat3::zeros(); n];
+        for block in &partials {
+            for (offset, source) in block.sources.clone().enumerate() {
+                for column in 0..columns {
+                    for d in 0..3 {
+                        out.bound_left[(3 * source + d, column)] +=
+                            block.endpoints[(6 * offset + d, column)];
+                        out.bound_right[(3 * source + d, column)] +=
+                            block.endpoints[(6 * offset + 3 + d, column)];
+                    }
+                }
+            }
+            for (total, partial) in control_point.iter_mut().zip(&block.control_point) {
+                *total += partial;
+            }
+            for (total, partial) in field_point.iter_mut().zip(&block.field_point) {
+                *total += partial;
+            }
+        }
+
+        // The normal's own derivative is the control-point velocity, summed
+        // over sources: the solver's stored control-point influence matrix
+        // times the circulation. That matrix is the same kernel at the same
+        // core radii and Prandtl-Glauert factor, every bound leg included.
+        let induced = self.solver.control_velocity_matrix() * &solution.circulation;
         let freestream = VortexLatticeSolver::freestream_direction(self.condition);
         let omega = Vec3::new(
             self.condition.roll_rate,
             self.condition.pitch_rate,
             self.condition.yaw_rate,
         );
-
         for (row, target) in mesh.vortices().iter().enumerate() {
-            let normal = target.normal_at_control_point;
-            let seed_rows = velocity_seed.rows(3 * row, 3);
-            let adjoint_row = adjoints.row(row);
-
-            for (column, source) in mesh.vortices().iter().enumerate() {
-                let gamma = solution.circulation[column];
-                if gamma == 0.0 {
-                    continue;
-                }
-                let core = core_radius(mesh, column, target.component_index);
-                let include_bound = true;
-                let jacobians = horseshoe_velocity_jacobians(
-                    &target.control_point,
-                    &source.bound_vortex_left,
-                    &source.bound_vortex_right,
-                    self.prandtl_glauert,
-                    core,
-                    include_bound,
-                );
-
-                // The AIC entry is `normal . velocity`, so its geometry gradient
-                // is these same blocks contracted with the normal, plus the
-                // velocity itself for the normal's own derivative. This is
-                // exactly `aic_element_gradient`, reusing work the sweep has
-                // already done.
-                let gradient_left = jacobians.bound_left.tr_mul(&normal);
-                let gradient_right = jacobians.bound_right.tr_mul(&normal);
-                let gradient_control = jacobians.field_point.tr_mul(&normal);
-                let gradient_normal = horseshoe_vortex_velocity(
-                    &target.control_point,
-                    &source.bound_vortex_left,
-                    &source.bound_vortex_right,
-                    self.prandtl_glauert,
-                    core,
-                    include_bound,
-                );
-
-                // Residual path. `R = A gamma - rhs`, and the coupled Jacobian
-                // consumes `-psi^T dR/dg`, hence the negative weight.
-                out.bound_left.rows_mut(3 * column, 3).gemm(
-                    -gamma,
-                    &gradient_left,
-                    &adjoint_row,
-                    1.0,
-                );
-                out.bound_right.rows_mut(3 * column, 3).gemm(
-                    -gamma,
-                    &gradient_right,
-                    &adjoint_row,
-                    1.0,
-                );
-                out.control_point.rows_mut(3 * row, 3).gemm(
-                    -gamma,
-                    &gradient_control,
-                    &adjoint_row,
-                    1.0,
-                );
-                out.normal
-                    .rows_mut(3 * row, 3)
-                    .gemm(-gamma, &gradient_normal, &adjoint_row, 1.0);
-
-                let jacobians = horseshoe_velocity_jacobians(
-                    &target.bound_vortex_center,
-                    &source.bound_vortex_left,
-                    &source.bound_vortex_right,
-                    self.prandtl_glauert,
-                    core,
-                    row != column,
-                );
-                // Load path: the induced velocity at this bound-force point moves
-                // when either the target or the source moves.
-                out.bound_left.rows_mut(3 * column, 3).gemm_tr(
-                    gamma,
-                    &jacobians.bound_left,
-                    &seed_rows,
-                    1.0,
-                );
-                out.bound_right.rows_mut(3 * column, 3).gemm_tr(
-                    gamma,
-                    &jacobians.bound_right,
-                    &seed_rows,
-                    1.0,
-                );
-                out.bound_left.rows_mut(3 * row, 3).gemm_tr(
-                    0.5 * gamma,
-                    &jacobians.field_point,
-                    &seed_rows,
-                    1.0,
-                );
-                out.bound_right.rows_mut(3 * row, 3).gemm_tr(
-                    0.5 * gamma,
-                    &jacobians.field_point,
-                    &seed_rows,
-                    1.0,
-                );
-            }
-
+            let normal = inputs.normals[row];
+            let mut control_seed = control_point[row];
+            let mut normal_seed =
+                Vec3::new(induced[3 * row], induced[3 * row + 1], induced[3 * row + 2]);
             // The right-hand side is the freestream and rotation normalwash,
             // which depends on the target's control point and normal alone.
             if target.affected_by_freestream {
-                let local_velocity = freestream
+                control_seed += normal.cross(&omega);
+                normal_seed += freestream
                     + omega.cross(&(target.control_point - self.solver.reference_point()));
-                out.control_point.rows_mut(3 * row, 3).gemm(
-                    -1.0,
-                    &normal.cross(&omega),
-                    &adjoint_row,
-                    1.0,
-                );
-                out.normal
-                    .rows_mut(3 * row, 3)
-                    .gemm(-1.0, &local_velocity, &adjoint_row, 1.0);
+            }
+            for column in 0..columns {
+                // Residual path. `R = A gamma - rhs`, and the coupled Jacobian
+                // consumes `-psi^T dR/dg`, hence the negative weight.
+                let psi = adjoints[(row, column)];
+                // Load path: half of the bound-force point's motion goes to
+                // each bound endpoint.
+                let load = 0.5 * field_point[row].tr_mul(&read(velocity_seed, row, column));
+                for d in 0..3 {
+                    out.control_point[(3 * row + d, column)] -= psi * control_seed[d];
+                    out.normal[(3 * row + d, column)] -= psi * normal_seed[d];
+                    out.bound_left[(3 * row + d, column)] += load[d];
+                    out.bound_right[(3 * row + d, column)] += load[d];
+                }
             }
         }
     }
@@ -669,7 +705,12 @@ impl<'a> StripLoadAdjoint<'a> {
                         let mut bound_left = read(&cotangents.bound_left, index, column);
                         let mut bound_right = read(&cotangents.bound_right, index, column);
                         let mut control_point = read(&cotangents.control_point, index, column);
-                        let mut normal = read(&cotangents.normal, index, column);
+                        let (mut normal, mut axes) = crate::solver::control::normal_vjp(
+                            lattice.vortices()[index].normal_at_control_point,
+                            read(&cotangents.normal, index, column),
+                            &lattice.control_influences()[index],
+                            self.condition,
+                        );
 
                         // A duplicated surface has no nodes of its own; its
                         // lattice is a reflection of this one's, so its
@@ -695,8 +736,37 @@ impl<'a> StripLoadAdjoint<'a> {
                                 mirrored,
                                 column,
                             ));
-                            normal +=
-                                reflected_direction(read(&cotangents.normal, mirrored, column));
+                            let (mirror_normal, mirror_axes) = crate::solver::control::normal_vjp(
+                                lattice.vortices()[mirrored].normal_at_control_point,
+                                read(&cotangents.normal, mirrored, column),
+                                &lattice.control_influences()[mirrored],
+                                self.condition,
+                            );
+                            normal += reflected_direction(mirror_normal);
+                            for (axis, mirrored_axis) in axes.iter_mut().zip(mirror_axes) {
+                                *axis += reflected_direction(mirrored_axis);
+                            }
+                        }
+
+                        // Hinges follow the incoming deformed mesh. Pull the
+                        // normalized axis seed back onto its material nodes.
+                        let mut influence = 0;
+                        for control in &surface.controls {
+                            if control.panel_gain(chord_offset, strip_offset).abs()
+                                <= crate::core::EPSILON
+                            {
+                                continue;
+                            }
+                            let seed = normalized_direction(
+                                &control.hinge_vector(surface, strip_offset),
+                                &axes[influence],
+                            );
+                            for (j, sign) in [(strip_offset, -1.0), (strip_offset + 1, 1.0)] {
+                                for (k, weight) in control.weights(surface, j) {
+                                    nodes[k] += sign * weight * seed;
+                                }
+                            }
+                            influence += 1;
                         }
 
                         let node = |i: usize, j: usize| -> usize { i * (surface.ny + 1) + j };
@@ -756,26 +826,206 @@ fn prandtl_glauert_factor(mach: Scalar) -> Scalar {
 }
 
 /// The Leishman core radius the influence matrix builder uses, at its defaults.
-fn core_radius(mesh: &VortexLattice, source_index: usize, target_component: usize) -> Scalar {
+fn core_radius(mesh: &VortexLattice, source_index: usize, same_component: bool) -> Scalar {
     let source = &mesh.vortices()[source_index];
     let width = (source.bound_vortex_right.y - source.bound_vortex_left.y)
         .hypot(source.bound_vortex_right.z - source.bound_vortex_left.z);
-    if source.component_index == target_component {
+    if same_component {
         0.0001 * width
     } else {
         (0.0001 * source.local_chord).max(0.0001 * width)
     }
 }
 
+/// `matrix^T * rhs` without materializing the transpose of `matrix`.
+///
+/// A single functional is a matrix-vector product, which the contiguous
+/// column dot products of `tr_mul` do best. Several are a matrix product,
+/// computed as `(rhs^T matrix)^T` so the blocked kernel sees two contiguous
+/// operands: only the `3N x k` seed and the `k x N` result are transposed,
+/// never the `3N x N` influence matrix. (A transposed, strided view of the
+/// matrix would avoid even those copies, but nalgebra 0.35's matrix-vector
+/// fallback indexes past the end of any vector whose row stride is not one.)
+fn transposed_product(matrix: &MatX, rhs: &MatX) -> MatX {
+    if rhs.ncols() <= SMALL_PRODUCT_COLUMNS {
+        matrix.tr_mul(rhs)
+    } else {
+        (rhs.transpose() * matrix).transpose()
+    }
+}
+
+/// Source panels whose endpoint cotangents share one dense product.
+const SOURCES_PER_PRODUCT: usize = 8;
+
+/// Target panels per slice of that product, which keeps the gathered block in
+/// cache while it is written and read back.
+const TARGETS_PER_PRODUCT: usize = 128;
+
+/// Fixed number of source blocks in the pairwise sweep, independent of the
+/// thread count.
+const PAIRWISE_BLOCKS: usize = 16;
+
+/// Below this many panels the pairwise sweep is not worth scheduling.
+#[cfg(feature = "parallel")]
+const PARALLEL_MIN_PANELS: usize = 128;
+
+/// Functional counts up to which `transposed_product` uses dot products.
+const SMALL_PRODUCT_COLUMNS: usize = 5;
+
+/// Everything the pairwise sweep reads, shared by every source block.
+struct PairwiseInputs<'a> {
+    mesh: &'a VortexLattice,
+    normals: &'a [Vec3],
+    circulation: &'a VecX,
+    /// `4N x k`: target i's adjoint in row `4 i`, its velocity seed below it.
+    weights: MatX,
+    core_same_component: Vec<Scalar>,
+    core_other_component: Vec<Scalar>,
+    prandtl_glauert: Scalar,
+}
+
+/// One source block's share of the pairwise sweep.
+struct SourceBlock {
+    sources: std::ops::Range<usize>,
+    /// Cotangents of the block's own bound endpoints, complete: row
+    /// `6 (j - start) + d` is the left endpoint's component `d`, the row three
+    /// below it the right endpoint's.
+    endpoints: MatX,
+    /// Per target, `sum_j gamma_j d(n . v_j)/d(control point)` over the block.
+    control_point: Vec<Vec3>,
+    /// Per target, `sum_j gamma_j d(v_j)/d(bound-force point)` over the block.
+    field_point: Vec<Mat3>,
+}
+
+/// The pairwise sweep over one fixed block of source panels and every target.
+///
+/// For a few sources at a time, the per-pair 3-vectors that multiply each
+/// target's adjoint and velocity seed are gathered column by column into a
+/// `6 s x 4N` block and contracted with the `4N x k` weights in one product.
+/// Targets are sliced so the gathered block stays in cache; the product
+/// accumulates across slices. All shapes depend only on the panel count.
+fn sweep_sources(inputs: &PairwiseInputs<'_>, sources: std::ops::Range<usize>) -> SourceBlock {
+    let mesh = inputs.mesh;
+    let vortices = mesh.vortices();
+    let n = mesh.vortex_count();
+    let columns = inputs.weights.ncols();
+    let mut block = SourceBlock {
+        sources: sources.clone(),
+        endpoints: MatX::zeros(6 * sources.len(), columns),
+        control_point: vec![Vec3::zeros(); n],
+        field_point: vec![Mat3::zeros(); n],
+    };
+    let stride = 6 * SOURCES_PER_PRODUCT;
+    let mut gathered = MatX::zeros(stride, 4 * TARGETS_PER_PRODUCT);
+    let mut product = MatX::zeros(stride, columns);
+
+    for first in sources.clone().step_by(SOURCES_PER_PRODUCT) {
+        let last = (first + SOURCES_PER_PRODUCT).min(sources.end);
+        let rows = 6 * (last - first);
+        product.fill(0.0);
+        for tile in (0..n).step_by(TARGETS_PER_PRODUCT) {
+            let tile_end = (tile + TARGETS_PER_PRODUCT).min(n);
+            let data = gathered.as_mut_slice();
+            for row in tile..tile_end {
+                let target = &vortices[row];
+                let normal = inputs.normals[row];
+                let base = 4 * (row - tile) * stride;
+                let mut control_point = Vec3::zeros();
+                let mut field_point = Mat3::zeros();
+                for (offset, source) in vortices[first..last].iter().enumerate() {
+                    let source_index = first + offset;
+                    let local = base + 6 * offset;
+                    let gamma = inputs.circulation[source_index];
+                    if gamma == 0.0 {
+                        for q in 0..4 {
+                            data[local + q * stride..local + q * stride + 6].fill(0.0);
+                        }
+                        continue;
+                    }
+                    let core = if source.component_index == target.component_index {
+                        inputs.core_same_component[source_index]
+                    } else {
+                        inputs.core_other_component[source_index]
+                    };
+
+                    // The AIC entry is `normal . velocity`, so its geometry
+                    // gradient is the control-point kernel contracted with the
+                    // one seed `normal`, the same for every functional: a
+                    // single-seed VJP, not three Jacobians. This is exactly
+                    // `aic_element_gradient`.
+                    let (by_left, by_right) = HorseshoeDerivatives::new(
+                        &target.control_point,
+                        &source.bound_vortex_left,
+                        &source.bound_vortex_right,
+                        inputs.prandtl_glauert,
+                        core,
+                        true,
+                    )
+                    .endpoint_vjp(&normal);
+                    control_point -= gamma * (by_left + by_right);
+
+                    // Load path: the induced velocity at this bound-force point
+                    // moves when either the target or the source moves, and
+                    // each functional contracts it with its own seed.
+                    let jacobians = HorseshoeDerivatives::new(
+                        &target.bound_vortex_center,
+                        &source.bound_vortex_left,
+                        &source.bound_vortex_right,
+                        inputs.prandtl_glauert,
+                        core,
+                        row != source_index,
+                    )
+                    .assembled_jacobians();
+                    field_point += gamma * jacobians.field_point;
+
+                    for d in 0..3 {
+                        data[local + d] = -by_left[d];
+                        data[local + 3 + d] = -by_right[d];
+                        for m in 0..3 {
+                            let at = local + (1 + m) * stride;
+                            data[at + d] = jacobians.bound_left[(m, d)];
+                            data[at + 3 + d] = jacobians.bound_right[(m, d)];
+                        }
+                    }
+                }
+                block.control_point[row] += control_point;
+                block.field_point[row] += field_point;
+            }
+            let targets = 4 * (tile_end - tile);
+            product.rows_mut(0, rows).gemm(
+                1.0,
+                &gathered.view((0, 0), (rows, targets)),
+                &inputs.weights.rows(4 * tile, targets),
+                1.0,
+            );
+        }
+        for source_index in first..last {
+            let gamma = inputs.circulation[source_index];
+            let local = 6 * (source_index - first);
+            let at = 6 * (source_index - sources.start);
+            for column in 0..columns {
+                for r in 0..6 {
+                    block.endpoints[(at + r, column)] = gamma * product[(local + r, column)];
+                }
+            }
+        }
+    }
+    block
+}
+
 #[cfg(test)]
 mod tests {
-    use super::super::aic_element_gradient;
+    use super::super::{aic_element_gradient, horseshoe_velocity_jacobians};
     use super::*;
+    use crate::geometry::{MeshControlSurface, SurfaceMesh};
+    use crate::solver::horseshoe_vortex_velocity;
 
     /// The pairwise sweep derives the AIC entry's geometry gradient from the
-    /// dense velocity blocks rather than calling `aic_element_gradient`. This
-    /// pins the two to each other, so a change to either kernel cannot silently
-    /// split the coupled Jacobian off from the aerodynamic adjoints.
+    /// shared kernel terms rather than calling `aic_element_gradient`. This
+    /// pins the two to each other — both the dense blocks and the single-seed
+    /// product the sweep contracts with the normal — so a change to either
+    /// kernel cannot silently split the coupled Jacobian off from the
+    /// aerodynamic adjoints.
     #[test]
     fn the_swept_blocks_reproduce_the_aic_element_gradient() {
         let bound_left = Vec3::new(0.1, -0.4, 0.05);
@@ -809,6 +1059,159 @@ mod tests {
                 (swept - expected).norm() <= 1.0e-12 * (1.0 + expected.norm()),
                 "swept block {swept:?} does not match {expected:?}"
             );
+        }
+
+        let (by_left, by_right) =
+            HorseshoeDerivatives::new(&control_point, &bound_left, &bound_right, pg, core, true)
+                .endpoint_vjp(&normal);
+        for (swept, expected) in [
+            (by_left, reference.bound_left),
+            (by_right, reference.bound_right),
+            (-(by_left + by_right), reference.control_point),
+        ] {
+            assert!(
+                (swept - expected).norm() <= 1.0e-12 * (1.0 + expected.norm()),
+                "single-seed product {swept:?} does not match {expected:?}"
+            );
+        }
+    }
+
+    /// The assembled blocks the load path gathers are the basis-seed blocks,
+    /// on smooth geometry and on every branch boundary of the primal.
+    #[test]
+    fn assembled_jacobians_match_the_basis_seed_jacobians() {
+        let left = Vec3::new(0.0, -0.5, 0.0);
+        let right = Vec3::new(0.1, 0.6, 0.05);
+        let midpoint = 0.5 * (left + right);
+        let cases = [
+            (Vec3::new(0.3, 0.2, 0.4), 1.0, 1.0e-3, true),
+            (Vec3::new(0.3, 0.2, 0.4), 0.7, 1.0e-3, true),
+            (Vec3::new(0.3, 0.2, 0.4), 0.6, 1.0e-3, false),
+            (Vec3::new(5.0, 0.05, -0.1), 0.75, 1.0e-3, true),
+            (midpoint + Vec3::new(0.0, 0.0, 0.015), 0.8, 0.05, true),
+            // On the segment, at the bound centre, and on each endpoint.
+            (midpoint, 0.8, 1.0e-3, true),
+            (midpoint, 1.0, 1.0e-3, false),
+            (left, 1.0, 1.0e-3, true),
+            (right, 0.5, 1.0e-3, true),
+        ];
+        for (field, pg, core, include_bound) in cases {
+            let kernel = HorseshoeDerivatives::new(&field, &left, &right, pg, core, include_bound);
+            let assembled = kernel.assembled_jacobians();
+            let reference = kernel.jacobians();
+            for (block, expected) in [
+                (assembled.bound_left, reference.bound_left),
+                (assembled.bound_right, reference.bound_right),
+                (assembled.field_point, reference.field_point),
+            ] {
+                let scale = expected.abs().max();
+                assert!(
+                    (block - expected).abs().max() <= 1.0e-14 * scale,
+                    "assembled {block:?} vs basis-seed {expected:?}"
+                );
+                assert!(block.iter().all(|value| value.is_finite()));
+            }
+        }
+    }
+
+    /// The sweep takes the normal's own derivative from the solver's stored
+    /// control-point influence matrix instead of re-evaluating the kernel.
+    /// That is only sound if the matrix is the same kernel at the same core
+    /// radii and Prandtl-Glauert factor; it is, bit for bit, including on a
+    /// mirrored surface with deflected controls at a compressible Mach number.
+    #[test]
+    fn the_stored_control_point_velocities_are_the_sweep_kernel() {
+        let mut surface = SurfaceMesh::new("Wing", 3, 4);
+        surface.y_duplicated = true;
+        for i in 0..=3 {
+            for j in 0..=4 {
+                let eta = j as Scalar / 4.0;
+                let x = i as Scalar / 3.0;
+                surface
+                    .set_node(
+                        i,
+                        j,
+                        Vec3::new(
+                            0.2 * eta + (1.0 - 0.3 * eta) * x,
+                            0.2 + 3.0 * eta,
+                            0.15 * eta * eta + 0.12 * x * eta,
+                        ),
+                    )
+                    .unwrap();
+            }
+        }
+        surface.controls.push(MeshControlSurface::trailing_edge(
+            "flap",
+            0..4,
+            vec![2.1; 5],
+        ));
+        let mut tail = SurfaceMesh::new("Tail", 1, 2);
+        for i in 0..=1 {
+            for j in 0..=2 {
+                tail.set_node(
+                    i,
+                    j,
+                    Vec3::new(3.0 + 0.4 * i as Scalar, -0.8 + 0.8 * j as Scalar, 0.3),
+                )
+                .unwrap();
+            }
+        }
+        let mut input = MeshInput::default();
+        input.surfaces.push(surface);
+        input.surfaces.push(tail);
+        input.reference.area = 5.0;
+        input.reference.chord = 0.8;
+        input.reference.span = 6.0;
+        let condition = FlightCondition {
+            alpha: 0.08,
+            mach: 0.4,
+            control_deflections: vec![("flap".into(), 0.12)],
+            ..FlightCondition::default()
+        };
+        let mut solver = VortexLatticeSolver::new();
+        solver.set_mesh(&input).unwrap();
+        solver.solve(&condition).unwrap();
+
+        let mesh = solver.mesh();
+        let pg = prandtl_glauert_factor(solver.current_mach());
+        let matrix = solver.control_velocity_matrix();
+        for (row, target) in mesh.vortices().iter().enumerate() {
+            for (column, source) in mesh.vortices().iter().enumerate() {
+                let core = core_radius(
+                    mesh,
+                    column,
+                    source.component_index == target.component_index,
+                );
+                let velocity = horseshoe_vortex_velocity(
+                    &target.control_point,
+                    &source.bound_vortex_left,
+                    &source.bound_vortex_right,
+                    pg,
+                    core,
+                    true,
+                );
+                for d in 0..3 {
+                    assert_eq!(
+                        matrix[(3 * row + d, column)].to_bits(),
+                        velocity[d].to_bits(),
+                        "entry ({row}, {column}, {d})"
+                    );
+                }
+            }
+        }
+    }
+
+    /// Both paths of the copy-free transposed product agree with the
+    /// materialized transpose.
+    #[test]
+    fn the_transposed_product_matches_the_explicit_transpose() {
+        let matrix = MatX::from_fn(12, 4, |r, c| ((3 * r + 7 * c) as Scalar * 0.37).sin());
+        for columns in [1, SMALL_PRODUCT_COLUMNS, SMALL_PRODUCT_COLUMNS + 1, 9] {
+            let rhs = MatX::from_fn(12, columns, |r, c| ((r + 5 * c) as Scalar * 0.61).cos());
+            let expected = matrix.transpose() * &rhs;
+            let product = transposed_product(&matrix, &rhs);
+            assert_eq!(product.shape(), expected.shape());
+            assert!((product - &expected).abs().max() <= 1.0e-14 * expected.abs().max());
         }
     }
 }

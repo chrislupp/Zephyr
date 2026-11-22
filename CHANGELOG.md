@@ -24,7 +24,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Philote `VlmDiscipline` options `analysis_outputs`, `analysis_gradients` and
   `analysis_mode` expose selective requests and half-wing symmetry. The discipline
   declares the selected outputs and derivative pairs and reuses the primal
-  analysis when computing partials at the same mesh and flight condition.
+  analysis when computing partials at the same mesh and flight condition. These
+  options select their own outputs and partials and cannot be combined with the
+  `trim`, `outputs`, `fixed_inputs` or `controls` options.
 - The public release statement (case number AFRL-2026-2198) and the
   accompanying DoD disclaimers, in the README and in the header of every Rust
   and Python source file. Source headers now also carry the GPL notice, which
@@ -34,7 +36,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   and footer.
 - `GradientCalculator::mesh_node_gradients_from` and
   `flight_condition_gradients_from` reuse a solver's existing solution. The
-  legacy Philote derivative path uses them to avoid repeating the primal solve.
+  Philote derivative path reuses its solved state the same way.
 - `VortexLatticeSolver::control_velocity_matrix` exposes the velocity influence
   at boundary-condition control points, separately from the bound-force operator
   returned by `velocity_matrix`.
@@ -43,6 +45,66 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   Cases include cosine and negative-sine spacing, nonuniform CLAF, wing–tail
   interference, and 40-/680-panel symmetric uCRM wings. Matching section cases
   agree within 2e-8 for coefficients/circulation and 2e-7 for alpha derivatives.
+- Optional internal trim in the explicit Philote VLM discipline and a
+  transport-independent `MeshTrimSolver`: selected operating-variable outputs,
+  dimensional force/moment balances or coefficient targets, linked controls,
+  scaled damped Newton with bounds and conditioning diagnostics, and exact
+  direct/adjoint sensitivities through the converged trim solution.
+- A runnable SciPy sizing optimization through explicit Philote RPCs, with
+  analytical gradients through internal trim, independent gradient checks,
+  and a recorded optimization maintaining Fz/My equilibrium at every evaluation.
+- Dimensional Philote body resultants `Fx,Fy,Fz,Mx,My,Mz`, including analytical
+  scaling and frame-conversion partials; native and explicit-client trim examples.
+- `MeshControlSurface` definitions on structured meshes: material hinge
+  coordinates, span intervals, leading/trailing-edge coverage, gains and mirrored
+  signs. Hinges follow the incoming deformed mesh; commands rotate normals.
+- Analytical `GradientCalculator::compute_control_gradients` for coefficients
+  and induced drag, and `StripLoadAdjoint::control_cotangents` for distributed
+  force/moment functionals. External applications own coupled solves and can
+  supply commands directly or use internal trim.
+- Philote `controls` metadata and per-command `control_<name>` inputs with exact
+  partials, cache invalidation and `fixed_inputs` support; native usage example
+  and independent re-solve checks for controls and deformed geometry.
+- Philote `VlmDiscipline` declares a `consistent_forces` option for clients
+  written against the unreleased opt-in force convention.
+  Forces always use the bound-center convention described under Fixed, so the
+  option accepts only `true`, which is the default and changes nothing; `false`
+  is rejected because the legacy v0.2 force convention was removed. There is no
+  corresponding `MeshInput` field.
+- Batched strip-adjoint calculation of the six mesh-node coefficient gradients
+  when Trefftz induced drag is not requested. Philote uses this path to avoid
+  one aerodynamic geometry sweep per mesh node.
+- Exact single-horseshoe force/moment and mesh-gradient regression checks for
+  the bound-center force convention.
+
+- `VortexLatticeSolver::set_symmetric_factorization` (off by default), with
+  `symmetric_factorization()` and `symmetric_factorization_applies()`. For
+  lattices built from `y_duplicated` surfaces whose system matrix is exactly
+  block-symmetric under the mirror pairing, the solver factorizes two half-size
+  systems instead of one full one (about a quarter of the LU cost); every solve
+  and adjoint solve uses the same factorization. Antisymmetric deflections,
+  unpaired meshes and half-wing models fall back to the full LU. Results agree
+  with the full LU to a few 1e-15 relative; with the setting off they are
+  unchanged.
+
+- `Analysis::set_mirror_reuse` and `Analysis::set_symmetric_factorization` (both
+  off by default, with getters and `Analysis::symmetric_factorization_applies`)
+  bring the solver's opt-in mirror reuse and block-symmetric factorization to the
+  selective analysis path in full mode. Mirror reuse is bit-identical; the
+  symmetric factorization agrees with the full LU to rounding. Neither has an
+  effect in half-wing mode. `set_mesh`/`set_aircraft` keep both settings.
+
+- Philote `VlmDiscipline` options `mirror_reuse` and `symmetric_factorization`
+  (booleans, both off by default) apply the solver's mirror reuse and
+  block-symmetric factorization to every solve the discipline makes: ordinary
+  function and partial evaluations, the internal trim iteration and its
+  sensitivities, and the selective `analysis_*` path. They combine with every
+  other option, clear the cached state when changed, and may be changed after
+  setup even with trim configured. Values that are not booleans are rejected.
+  `VlmDiscipline::symmetric_factorization_applies` reports whether the cached
+  solve used the half-size factorization. `MeshTrimSolver::solve_with_solver`
+  converges trim with a caller-configured solver, keeping its settings;
+  `MeshTrimSolver::solve` is unchanged.
 
 ### Changed
 
@@ -72,8 +134,66 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   geometry argument, including any subtraction for motion of the moment
   reference point. Callers that supplied control-point directions must update
   them to match the corrected moment arms.
+- Geometry and strip-load adjoints now support deflected control normals,
+  including hinge-direction changes with mesh deformation and section-control
+  coverage changes. The reverse geometry sweep differentiates the rotated
+  normals and pulls their cotangents back onto the base normals, hinge axes and
+  gains. Symmetry-plane and viscous geometry restrictions remain.
+- Control derivative calls reject stale solved states and unknown commands;
+  solves reject unknown control names. Fixed-control angle/rate updates reuse
+  the deflected factorization.
+- The `parallel` feature also threads the strip-load mesh-adjoint pairwise
+  geometry sweep at 128 or more panels. Sixteen fixed blocks and an ordered
+  reduction preserve reproducibility across thread counts and serial/parallel
+  builds, with bounded O(N * outputs) scratch storage. Smaller meshes retain
+  serial accumulation.
+- Philote VLM function and derivative requests reuse one solved state, keyed by
+  all input arrays and invalidated when options change. Node and flight
+  derivatives reuse that factorization instead of rebuilding separate solvers.
+- Optional Philote `outputs` and `fixed_inputs` selections restrict returned
+  coefficients and declared partials. Defaults retain the complete interface.
+  Alpha-only requests bypass unused Mach/rate/reference derivative calculations.
+- `set_mirror_reuse` now also derives the bound-centre (force-velocity)
+  influence pass by reflection, halving its kernel evaluations. Output remains
+  bit-identical to plain assembly.
+- A repeated `solve()` at unchanged control deflections reuses the deflected
+  unit responses as well as the deflected factorization; results are unchanged.
+- Gradient kernels compute the shared horseshoe geometry once per vortex pair.
+  Flight-condition gradients at nonzero Mach are about 5x faster serially and
+  about 20x faster with `parallel`: the Mach derivative is applied to the
+  circulation directly instead of through a dense 3N x N matrix, is threaded
+  under `parallel`, and is skipped at Mach 0. Mesh-node gradients are 1.6-2.4x
+  faster, and the flight-condition circulation gradient no longer copies the
+  velocity matrix. Gradient values change only at rounding level; serial and
+  `parallel` builds stay bit-identical.
+- The selective analysis path is faster: full-mode operators come from the tuned
+  influence builder (bit-identical), half-wing assembly hoists per-source data,
+  the Mach derivative is threaded under `parallel` and skipped at Mach 0, the
+  mesh-node reverse sweep uses single-seed kernel products, and the near-field
+  seed no longer copies the transposed velocity operator. Primal results are
+  unchanged; derivatives change at rounding level only, except that the Mach
+  derivative below the Mach 0 threshold is now exactly zero.
+- `StripLoadAdjoint` and the batched mesh-node coefficient gradients that route
+  through it are faster: the pairwise sweep gathers its per-pair terms into one
+  dense product per group of source panels, takes single-seed products where
+  the panel normal is the only seed, and reuses the solver's control-point
+  influence matrix instead of re-evaluating the kernel. Each additional
+  functional costs about 1.3 ns per panel pair instead of 20. Results change
+  only at rounding level, and `parallel` output stays bit-identical to serial.
+- `StabilityDerivativeCalculator::compute` and `compute_body_axis` reuse a
+  solution the solver already holds for the same condition instead of solving
+  again. The values are unchanged.
 
 ### Fixed
+
+- `TrimSolver` now takes exact Newton steps. Its Jacobian left out the coupling
+  between state and control equations (for example dCL/d(elevator) and
+  dCm/d(alpha)) and used the frozen-induced-velocity stability derivatives, so
+  trims with a control variable converged linearly. A wing-tail elevator trim
+  now converges in 3 iterations instead of 12. The converged root is unchanged;
+  at the default tolerance the returned state may differ within that tolerance.
+- `Analysis::evaluate` rejects flight conditions that name an unknown control,
+  as `VortexLatticeSolver::solve` does, instead of ignoring the deflection.
 
 - Control-point normalwash includes each panel's own bound vortex, as in AVL.
   Force velocities are evaluated at the bound-force points with the self-bound
@@ -96,6 +216,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   remain, trim must reach its requested lift, and mesh/section gradients are
   checked against re-solves. The finite-wing lift-slope test uses the corrected
   Helmbold formula.
+
 
 ## [0.5.0] - 2026-09-05
 

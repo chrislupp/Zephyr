@@ -65,6 +65,8 @@ impl From<&super::Aircraft> for ReferenceQuantities {
 /// Structured `(nx+1) × (ny+1)` node grid.
 #[derive(Clone, Debug, PartialEq)]
 pub struct SurfaceMesh {
+    /// Controls attached to this mesh before control actuation.
+    pub controls: Vec<super::MeshControlSurface>,
     /// Surface name.
     pub name: String,
     /// Chordwise panel count.
@@ -90,6 +92,7 @@ impl SurfaceMesh {
     #[must_use]
     pub fn new(name: impl Into<String>, nx: usize, ny: usize) -> Self {
         Self {
+            controls: Vec::new(),
             name: name.into(),
             nx,
             ny,
@@ -139,6 +142,9 @@ impl SurfaceMesh {
                 "surface '{}' contains non-finite coordinates",
                 self.name
             )));
+        }
+        for control in &self.controls {
+            control.validate(self)?;
         }
         Ok(())
     }

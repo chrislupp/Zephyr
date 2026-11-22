@@ -314,6 +314,23 @@ fn derive_mirrored_rows(
     aic_mj: &mut [Scalar],
     plan: &MirrorPlan,
 ) {
+    derive_mirrored_velocity_rows(velocity_j, velocity_mj, plan);
+    for (mirror, &original) in plan.partner.iter().enumerate() {
+        if plan.is_original[mirror] {
+            continue;
+        }
+        aic_mj[mirror] = aic_j[original];
+        aic_j[mirror] = aic_mj[original];
+    }
+}
+
+/// The velocity half of [`derive_mirrored_rows`], which is all the
+/// bound-force pass produces.
+fn derive_mirrored_velocity_rows(
+    velocity_j: &mut [Scalar],
+    velocity_mj: &mut [Scalar],
+    plan: &MirrorPlan,
+) {
     for (mirror, &original) in plan.partner.iter().enumerate() {
         if plan.is_original[mirror] {
             continue;
@@ -329,9 +346,6 @@ fn derive_mirrored_rows(
         velocity_j[3 * mirror] = velocity_mj[3 * original];
         velocity_j[3 * mirror + 1] = 0.0 - velocity_mj[3 * original + 1];
         velocity_j[3 * mirror + 2] = velocity_mj[3 * original + 2];
-
-        aic_mj[mirror] = aic_j[original];
-        aic_j[mirror] = aic_mj[original];
     }
 }
 
@@ -414,6 +428,76 @@ where
     all_finite
 }
 
+/// [`drive_mirrored_columns`] for the velocity-only (bound-force) pass.
+///
+/// Identical pairing and block walk, without a normalwash output: zipping an
+/// empty normalwash buffer into the column iterators would silently truncate
+/// them to nothing, so the velocity-only walk is kept separate.
+fn drive_mirrored_velocity_columns<F>(
+    velocity: &mut [Scalar],
+    n: usize,
+    plan: &MirrorPlan,
+    fill: F,
+) -> bool
+where
+    F: Fn(usize, &mut [Scalar], &mut [Scalar]) -> bool + Sync,
+{
+    #[cfg(feature = "parallel")]
+    use rayon::prelude::*;
+
+    let mut all_finite = true;
+    let mut velocity_rest = velocity;
+    let mut consumed = 0usize;
+
+    for block in &plan.blocks {
+        debug_assert_eq!(block.first, consumed, "mirror blocks must tile the columns");
+        let (velocity_block, velocity_tail) = velocity_rest.split_at_mut(2 * block.count * 3 * n);
+        velocity_rest = velocity_tail;
+        let (velocity_a, velocity_b) = velocity_block.split_at_mut(block.count * 3 * n);
+
+        let first = block.first;
+        let count = block.count;
+        let pair = |offset: usize, velocity_j: &mut [Scalar], velocity_mj: &mut [Scalar]| -> bool {
+            let j = first + offset;
+            let mj = first + count + offset;
+            let finite = fill(j, velocity_j, &mut []) & fill(mj, velocity_mj, &mut []);
+            derive_mirrored_velocity_rows(velocity_j, velocity_mj, plan);
+            finite
+        };
+        let serial = |velocity_a: &mut [Scalar], velocity_b: &mut [Scalar]| -> bool {
+            let mut all_finite = true;
+            for (offset, (velocity_j, velocity_mj)) in velocity_a
+                .chunks_mut(3 * n)
+                .zip(velocity_b.chunks_mut(3 * n))
+                .enumerate()
+            {
+                all_finite &= pair(offset, velocity_j, velocity_mj);
+            }
+            all_finite
+        };
+
+        #[cfg(feature = "parallel")]
+        let block_finite = if count >= PARALLEL_MIN_PANELS {
+            velocity_a
+                .par_chunks_mut(3 * n)
+                .zip(velocity_b.par_chunks_mut(3 * n))
+                .enumerate()
+                .map(|(offset, (velocity_j, velocity_mj))| pair(offset, velocity_j, velocity_mj))
+                .reduce(|| true, |all, finite| all && finite)
+        } else {
+            serial(velocity_a, velocity_b)
+        };
+
+        #[cfg(not(feature = "parallel"))]
+        let block_finite = serial(velocity_a, velocity_b);
+
+        all_finite &= block_finite;
+        consumed += 2 * block.count;
+    }
+
+    all_finite
+}
+
 /// Serial column-pair sweep shared by both drivers.
 fn serial_pairs<P>(
     velocity_a: &mut [Scalar],
@@ -436,6 +520,102 @@ where
         all_finite &= pair(offset, velocity_j, velocity_mj, aic_j, aic_mj);
     }
     all_finite
+}
+
+/// Pairs every panel with its `y_duplicated` partner from surface metadata
+/// alone, without checking geometry.
+///
+/// Requires every panel to belong to a pair, with each duplicate laid out
+/// directly after its original and the blocks tiling `0..n` contiguously and
+/// in ascending order. Callers that rely on the pairing for exactness must
+/// verify the property they need on top of it: [`InfluenceMatrixBuilder`]
+/// checks the geometric reflection, the solver's block factorization checks
+/// the assembled matrix.
+fn surface_pairing(mesh: &VortexLattice) -> Option<MirrorPlan> {
+    let n = mesh.vortices().len();
+    if n == 0 || !n.is_multiple_of(2) {
+        return None;
+    }
+
+    let surfaces = mesh.surface_info();
+    let mut blocks = Vec::new();
+    let mut partner = vec![usize::MAX; n];
+    let mut is_original = vec![false; n];
+
+    for surface in surfaces {
+        if !surface.is_y_duplicated {
+            continue;
+        }
+        let original = surfaces.get(surface.original_surface_index)?;
+        // The duplicate must directly follow its original and match it in
+        // size, which is how `duplicate_surface` lays them out.
+        if original.num_vortices != surface.num_vortices
+            || original.first_vortex_index + original.num_vortices != surface.first_vortex_index
+        {
+            return None;
+        }
+        blocks.push(MirrorBlock {
+            first: original.first_vortex_index,
+            count: original.num_vortices,
+        });
+        for offset in 0..original.num_vortices {
+            let a = original.first_vortex_index + offset;
+            let b = surface.first_vortex_index + offset;
+            if a >= n || b >= n || partner[a] != usize::MAX || partner[b] != usize::MAX {
+                return None;
+            }
+            partner[a] = b;
+            partner[b] = a;
+            is_original[a] = true;
+        }
+    }
+
+    // Every panel must belong to a pair; a mesh mixing duplicated and
+    // plain surfaces has no usable pairing and falls back.
+    if blocks.is_empty() || partner.contains(&usize::MAX) {
+        return None;
+    }
+
+    // The blocks must tile `0..n` contiguously and in ascending order.
+    // `drive_mirrored_columns` walks them with `split_at_mut`, so a gap or
+    // an out-of-order block would either panic there or, worse, write a
+    // column into the wrong block. That held only because both generators
+    // append each duplicate immediately after its original; checking it
+    // here makes the guarantee total instead of incidental, and costs
+    // `O(blocks)` against an `O(N²)` assembly.
+    let mut consumed = 0usize;
+    for block in &blocks {
+        if block.first != consumed {
+            return None;
+        }
+        consumed += 2 * block.count;
+    }
+    if consumed != n {
+        return None;
+    }
+
+    Some(MirrorPlan {
+        blocks,
+        partner,
+        is_original,
+    })
+}
+
+/// `(original, mirror)` panel index pairs of a fully `y_duplicated` lattice,
+/// in ascending original order, or `None` when some panel has no partner.
+///
+/// This is metadata only. It says which panels *would* be mirror images; it
+/// does not establish that any matrix built on them is mirror-symmetric.
+pub(crate) fn mirror_pairs(mesh: &VortexLattice) -> Option<Vec<(usize, usize)>> {
+    let plan = surface_pairing(mesh)?;
+    Some(
+        plan.partner
+            .iter()
+            .enumerate()
+            .filter(|(index, _)| plan.is_original[*index])
+            .map(|(index, &partner)| (index, partner))
+            .collect(),
+    )
 }
 
 /// Builds velocity and normalwash influence matrices for a fixed mesh.
@@ -553,7 +733,15 @@ impl<'a> InfluenceMatrixBuilder<'a> {
     ///   derived entries disagree with evaluated ones. Rather than trusting the
     ///   plane metadata, this checks the resulting geometry directly: each
     ///   mirrored panel must satisfy the reflection relation exactly, including
-    ///   the deliberate left/right endpoint swap.
+    ///   the deliberate left/right endpoint swap. Both target sets are
+    ///   checked -- control points and bound centres -- because the plan
+    ///   serves both assembly passes.
+    ///
+    /// The bound-force pass additionally drops each target's own bound leg.
+    /// That rule commutes with the pairing: `i == j` exactly when
+    /// `mirror(i) == mirror(j)`, and a mirrored target `mi` never equals an
+    /// original source `j`, so every derived entry was evaluated under the
+    /// same `include_bound` flag as the entry it is derived from.
     ///
     /// The whole check is `O(N)` against an `O(N²)` assembly, so validating is
     /// far cheaper than the work it guards.
@@ -565,72 +753,12 @@ impl<'a> InfluenceMatrixBuilder<'a> {
             return None;
         }
 
+        let plan = surface_pairing(self.mesh)?;
         let vortices = self.mesh.vortices();
-        let n = vortices.len();
-        if n == 0 || !n.is_multiple_of(2) {
-            return None;
-        }
-
-        let surfaces = self.mesh.surface_info();
-        let mut blocks = Vec::new();
-        let mut partner = vec![usize::MAX; n];
-        let mut is_original = vec![false; n];
-
-        for surface in surfaces {
-            if !surface.is_y_duplicated {
-                continue;
-            }
-            let original = surfaces.get(surface.original_surface_index)?;
-            // The duplicate must directly follow its original and match it in
-            // size, which is how `duplicate_surface` lays them out.
-            if original.num_vortices != surface.num_vortices
-                || original.first_vortex_index + original.num_vortices != surface.first_vortex_index
-            {
-                return None;
-            }
-            blocks.push(MirrorBlock {
-                first: original.first_vortex_index,
-                count: original.num_vortices,
-            });
-            for offset in 0..original.num_vortices {
-                let a = original.first_vortex_index + offset;
-                let b = surface.first_vortex_index + offset;
-                if a >= n || b >= n || partner[a] != usize::MAX || partner[b] != usize::MAX {
-                    return None;
-                }
-                partner[a] = b;
-                partner[b] = a;
-                is_original[a] = true;
-            }
-        }
-
-        // Every panel must belong to a pair; a mesh mixing duplicated and
-        // plain surfaces has no usable pairing and falls back.
-        if blocks.is_empty() || partner.contains(&usize::MAX) {
-            return None;
-        }
-
-        // The blocks must tile `0..n` contiguously and in ascending order.
-        // `drive_mirrored_columns` walks them with `split_at_mut`, so a gap or
-        // an out-of-order block would either panic there or, worse, write a
-        // column into the wrong block. That held only because both generators
-        // append each duplicate immediately after its original; checking it
-        // here makes the guarantee total instead of incidental, and costs
-        // `O(blocks)` against an `O(N²)` assembly.
-        let mut consumed = 0usize;
-        for block in &blocks {
-            if block.first != consumed {
-                return None;
-            }
-            consumed += 2 * block.count;
-        }
-        if consumed != vortices.len() {
-            return None;
-        }
 
         // Verify the reflection relation holds exactly for every pair.
-        for (a, &b) in partner.iter().enumerate() {
-            if !is_original[a] {
+        for (a, &b) in plan.partner.iter().enumerate() {
+            if !plan.is_original[a] {
                 continue;
             }
             let original = &vortices[a];
@@ -642,6 +770,9 @@ impl<'a> InfluenceMatrixBuilder<'a> {
                 // panel keeps a consistent circulation orientation.
                 || mirrored.bound_vortex_left != reflected(original.bound_vortex_right)
                 || mirrored.bound_vortex_right != reflected(original.bound_vortex_left)
+                // The bound-force pass evaluates at bound centres, so they
+                // must reflect exactly too.
+                || mirrored.bound_vortex_center != reflected(original.bound_vortex_center)
                 || mirrored.local_chord != original.local_chord
                 || mirrored.component_index != original.component_index
             {
@@ -649,11 +780,7 @@ impl<'a> InfluenceMatrixBuilder<'a> {
             }
         }
 
-        Some(MirrorPlan {
-            blocks,
-            partner,
-            is_original,
-        })
+        Some(plan)
     }
 
     fn core_radius(&self, vortex_index: usize, same_component: bool) -> Scalar {
@@ -815,9 +942,10 @@ impl<'a> InfluenceMatrixBuilder<'a> {
             Vec::new()
         };
 
-        // The control-point pass reuses reflected rows. The bound-force pass
-        // assembles independent columns, including its distinct self-bound rule.
-        let plan = if WITH_AIC { self.mirror_plan() } else { None };
+        // Both passes reuse reflected rows under a plan. The bound-force pass's
+        // self-bound rule (`i != j`) commutes with the pairing; see
+        // `mirror_plan`.
+        let plan = self.mirror_plan();
         let originals: Option<&[bool]> = plan.as_ref().map(|plan| plan.is_original.as_slice());
 
         // One source column. Returns whether every normalwash entry it wrote is
@@ -955,8 +1083,14 @@ impl<'a> InfluenceMatrixBuilder<'a> {
             };
 
         let aic_all_finite = match &plan {
-            Some(plan) => {
+            Some(plan) if WITH_AIC => {
                 drive_mirrored_columns(&mut velocity_data, &mut aic_data, n, plan, fill_column)
+            }
+            Some(plan) => {
+                // The velocity-only pass reports nothing about finiteness:
+                // `aic_all_finite` is trivially true when no normalwash was
+                // requested, exactly as `drive_columns` reports it.
+                drive_mirrored_velocity_columns(&mut velocity_data, n, plan, fill_column)
             }
             None => drive_columns(&mut velocity_data, &mut aic_data, n, WITH_AIC, fill_column),
         };
@@ -996,6 +1130,21 @@ impl<'a> InfluenceMatrixBuilder<'a> {
     pub fn normalwash_and_velocity_checked(&self) -> (MatX, MatX, bool) {
         let (aic, _, velocity, finite) = self.normalwash_control_and_velocity_checked();
         (aic, velocity, finite)
+    }
+
+    /// The control-point pass alone: normalwash, control-point velocity
+    /// operator and the normalwash finiteness flag, without the bound-force
+    /// pass. The same assembly [`Self::normalwash_control_and_velocity_checked`]
+    /// runs first, so the two matrices are identical to its first two.
+    pub(crate) fn normalwash_and_control_checked(&self) -> (MatX, MatX, bool) {
+        let assembly = self.assemble::<true>();
+        (
+            assembly
+                .aic
+                .expect("assemble::<true> always produces the normalwash matrix"),
+            assembly.velocity,
+            assembly.aic_all_finite,
+        )
     }
 
     pub(crate) fn normalwash_control_and_velocity_checked(&self) -> (MatX, MatX, MatX, bool) {
@@ -1040,5 +1189,74 @@ impl<'a> InfluenceMatrixBuilder<'a> {
             total += circulation[j] * velocity;
         }
         total
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::geometry::{MeshInput, SurfaceMesh};
+
+    fn duplicated_lattice() -> VortexLattice {
+        let mut surface = SurfaceMesh::new("wing", 3, 4);
+        surface.y_duplicated = true;
+        for i in 0..=3 {
+            for j in 0..=4 {
+                surface
+                    .set_node(i, j, Vec3::new(i as Scalar / 3.0, 0.5 * j as Scalar, 0.0))
+                    .unwrap();
+            }
+        }
+        let mut lattice = VortexLattice::default();
+        lattice
+            .generate_from_mesh(&MeshInput {
+                surfaces: vec![surface],
+                ..MeshInput::default()
+            })
+            .unwrap();
+        lattice
+    }
+
+    fn bits(matrix: &MatX) -> Vec<u64> {
+        matrix.iter().map(|value| value.to_bits()).collect()
+    }
+
+    /// The bound-force pass evaluates at bound centres, so a lattice whose
+    /// centres do not mirror exactly must be declined, not given reflected
+    /// entries.
+    #[test]
+    fn reuse_declines_a_lattice_whose_bound_centres_do_not_mirror() {
+        let mut lattice = duplicated_lattice();
+        {
+            let mut builder = InfluenceMatrixBuilder::new(&lattice);
+            builder.set_mirror_reuse(true);
+            assert!(builder.mirror_reuse_applies());
+        }
+        let last = lattice.vortices().len() - 1;
+        lattice.vortices_mut()[last].bound_vortex_center.x += 1e-3;
+
+        let plain = InfluenceMatrixBuilder::new(&lattice);
+        let mut mirrored = InfluenceMatrixBuilder::new(&lattice);
+        mirrored.set_mirror_reuse(true);
+        assert!(!mirrored.mirror_reuse_applies());
+        assert_eq!(
+            bits(&mirrored.velocity_influence_matrix()),
+            bits(&plain.velocity_influence_matrix())
+        );
+    }
+
+    /// Metadata pairing lists each original with its duplicate, in order, and
+    /// declines a lattice with an unpaired panel.
+    #[test]
+    fn mirror_pairs_follow_the_surface_layout() {
+        let lattice = duplicated_lattice();
+        let n = lattice.vortex_count();
+        let pairs = mirror_pairs(&lattice).expect("fully duplicated");
+        assert_eq!(pairs.len(), n / 2);
+        for (k, &(original, mirror)) in pairs.iter().enumerate() {
+            assert_eq!(original, k);
+            assert_eq!(mirror, k + n / 2);
+        }
+        assert!(mirror_pairs(&VortexLattice::default()).is_none());
     }
 }

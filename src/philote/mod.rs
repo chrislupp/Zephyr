@@ -28,7 +28,9 @@
 //! provided, and they chain: [`MeshDiscipline`] turns a section-based
 //! parameterization into a node mesh plus reference quantities, and
 //! [`VlmDiscipline`] takes that mesh and returns the six force and moment
-//! coefficients.
+//! coefficients, optionally dimensional loads and solved trim variables.
+//! Internal trim keeps the service explicit, with analytical derivatives through
+//! the converged operating condition.
 //!
 //! Both supply analytical partials. The VLM discipline's node partials come
 //! from the adjoint, so a gradient-based optimizer pays one transposed solve
@@ -58,7 +60,9 @@
 use ndarray::{ArrayD, IxDyn};
 use philote_mdo::{PhiloteError, Result};
 
+mod aero_evaluation;
 mod mesh;
+mod trim;
 mod vlm;
 
 pub use mesh::MeshDiscipline;
@@ -169,6 +173,34 @@ pub(crate) fn option_usize(value: &serde_json::Value, name: &str) -> Result<usiz
         )));
     }
     Ok(parsed as usize)
+}
+
+/// Read a scalar option as a boolean, rejecting anything that is not clearly
+/// one.
+///
+/// Accepts a JSON boolean, the numbers `0` and `1`, and the strings
+/// [`parse_bool`] reads as true together with their false counterparts
+/// (`false`, `0`, `no`, `n`), ignoring case and surrounding whitespace.
+pub(crate) fn option_flag(value: &serde_json::Value, name: &str) -> Result<bool> {
+    let parsed = match value {
+        serde_json::Value::Bool(flag) => Some(*flag),
+        serde_json::Value::Number(number) => match number.as_f64() {
+            Some(0.0) => Some(false),
+            Some(1.0) => Some(true),
+            _ => None,
+        },
+        serde_json::Value::String(text) => match text.trim().to_ascii_lowercase().as_str() {
+            "true" | "1" | "yes" | "y" => Some(true),
+            "false" | "0" | "no" | "n" => Some(false),
+            _ => None,
+        },
+        _ => None,
+    };
+    parsed.ok_or_else(|| {
+        invalid(format!(
+            "option `{name}` must be true or false, got {value}"
+        ))
+    })
 }
 
 /// Read a scalar option as a boolean.

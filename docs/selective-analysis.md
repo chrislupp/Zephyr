@@ -138,6 +138,16 @@ This mode is distinct from `VortexLatticeSolver::set_symmetry`, which adds image
 planes to an existing lattice, and from `set_mirror_reuse`, which preserves the
 full system while reusing reflected influence entries.
 
+Full mode has two opt-in accelerations for lattices built from y-duplicated
+surfaces, both off by default. `Analysis::set_mirror_reuse` derives reflected
+influence entries instead of evaluating them and is bit-identical to plain
+assembly. `Analysis::set_symmetric_factorization` factorizes two half-size
+systems when the system matrix is exactly mirror-symmetric, and otherwise falls
+back to the full factorization; `symmetric_factorization_applies` reports which
+was used, and results agree with the full factorization to rounding. Neither
+setting has an effect in half-wing mode. The Philote discipline exposes them as
+its `mirror_reuse` and `symmetric_factorization` options, described below.
+
 ## Philote options
 
 With the `philote` feature, `VlmDiscipline` accepts:
@@ -163,9 +173,18 @@ only selected partial pairs. Because Philote partials refer to registered output
 variables, outputs named by `analysis_gradients` are also registered and returned
 by the discipline's `compute`; the core Rust API allows gradient-only results.
 
-Without analysis options, the existing six-output/full-partials discipline is
-unchanged. The selective discipline caches its `Analysis` across `compute` and
+The analysis options cannot be combined with the discipline's `trim`, `outputs`,
+`fixed_inputs` or `controls` options; setup rejects that combination. Without analysis
+options, the discipline keeps its ordinary six-output/full-partials behavior,
+including those options. The selective discipline caches its `Analysis` across `compute` and
 `compute_partials` calls on identical inputs.
+
+The boolean `mirror_reuse` and `symmetric_factorization` options (both default
+`false`) call `Analysis::set_mirror_reuse` and
+`Analysis::set_symmetric_factorization` on that `Analysis`, and apply the same
+settings to the discipline's ordinary and trim solves. They may be combined with
+the analysis options and with every other option; changing either discards the
+cached `Analysis`. In `half_wing` mode they have no effect, bit for bit.
 
 ## Validation
 

@@ -109,10 +109,9 @@ async fn assert_partials_match<D: ExplicitDiscipline>(
                 let stride = values.len();
                 for (row, expected) in derivative.iter().enumerate() {
                     let exact = block.as_slice().unwrap()[row * stride + index];
-                    assert_abs_diff_eq!(
-                        exact,
-                        expected,
-                        epsilon = tolerance * expected.abs() + NOISE_FLOOR
+                    assert!(
+                        (exact - expected).abs() <= tolerance * expected.abs() + NOISE_FLOOR,
+                        "d{output}/d{name}[{index}], row {row}: {exact} != {expected}"
                     );
                     checked += 1;
                 }
@@ -799,8 +798,748 @@ async fn explicit_empty_analysis_and_outputs_only_do_not_return_partials() {
     }
 }
 
+fn selected_vlm() -> VlmDiscipline {
+    let mut discipline = VlmDiscipline::default();
+    discipline.initialize().unwrap();
+    discipline.set_options(&options(&[
+        ("surface_names", "Wing".into()),
+        ("surface_nx", "2".into()), ("surface_ny", "3".into()),
+        ("consistent_forces", true.into()),
+        ("outputs", "CL,CD,Cm".into()),
+        ("fixed_inputs", "beta,mach,roll_rate,pitch_rate,yaw_rate,moment_ref_x,moment_ref_y,moment_ref_z,reference_area,reference_chord,reference_span,dynamic_pressure".into()),
+    ])).unwrap();
+    discipline.setup().unwrap();
+    discipline.setup_partials().unwrap();
+    discipline
+}
+
+#[tokio::test]
+async fn selected_vlm_partials_match_full_derivatives_and_independent_oracle() {
+    let selected = selected_vlm();
+    let mut full = vlm_discipline(2, 3);
+    full.set_options(&options(&[
+        ("consistent_forces", true.into()),
+        ("surface_names", "Wing".into()),
+        ("surface_nx", "2".into()),
+        ("surface_ny", "3".into()),
+    ]))
+    .unwrap();
+    let inputs = vlm_inputs(2, 3, 1.0, 3.0);
+    let forward = selected.compute(&inputs).await.unwrap();
+    assert_eq!(forward.len(), 3);
+    let partials = selected.compute_partials(&inputs).await.unwrap();
+    let reference = full.compute_partials(&inputs).await.unwrap();
+    assert_eq!(partials.len(), 6); // Three outputs, mesh and alpha only.
+    for (key, values) in &partials {
+        for (a, b) in values.iter().zip(reference[key].iter()) {
+            assert_abs_diff_eq!(a, b, epsilon = 1e-12);
+        }
+    }
+    for input in ["Wing", "alpha"] {
+        for (index, _) in inputs[input].iter().enumerate() {
+            let differences = difference(&selected, &inputs, input, index, 1e-6).await;
+            for (output, values) in differences {
+                let analytic = partials[&(output, input.into())][index];
+                assert_abs_diff_eq!(analytic, values[0], epsilon = 1e-7);
+            }
+        }
+    }
+}
+
+#[tokio::test]
+async fn vlm_cache_tracks_all_inputs_and_option_changes() {
+    let mut cached = selected_vlm();
+    let inputs = vlm_inputs(2, 3, 1.0, 3.0);
+    let original = cached.compute(&inputs).await.unwrap();
+    assert_eq!(original, cached.compute(&inputs).await.unwrap());
+    for name in ["Wing", "alpha", "mach", "reference_area", "moment_ref_x"] {
+        let mut changed = inputs.clone();
+        changed.get_mut(name).unwrap()[0] += 0.01;
+        let expected = selected_vlm().compute(&changed).await.unwrap();
+        assert_eq!(expected, cached.compute(&changed).await.unwrap());
+        assert_eq!(original, cached.compute(&inputs).await.unwrap());
+    }
+    // The legacy v0.2 force convention was removed: asking for it is an error.
+    let error = cached
+        .set_options(&options(&[
+            ("consistent_forces", false.into()),
+            ("surface_names", "Wing".into()),
+            ("surface_nx", "2".into()),
+            ("surface_ny", "3".into()),
+        ]))
+        .unwrap_err();
+    assert!(
+        error
+            .to_string()
+            .contains("legacy v0.2 force convention was removed")
+    );
+    // Explicit `true` is the default: after the option change clears the cache,
+    // the result matches a discipline that never set it.
+    cached
+        .set_options(&options(&[
+            ("consistent_forces", true.into()),
+            ("surface_names", "Wing".into()),
+            ("surface_nx", "2".into()),
+            ("surface_ny", "3".into()),
+        ]))
+        .unwrap();
+    let reference = vlm_discipline(2, 3).compute(&inputs).await.unwrap();
+    let changed = cached.compute(&inputs).await.unwrap();
+    for (name, value) in changed {
+        assert_eq!(value, reference[&name]);
+    }
+}
+
 #[test]
 fn disciplines_report_zephyr_names() {
     assert_eq!(MeshDiscipline::default().name(), "ZephyrMesh");
     assert_eq!(VlmDiscipline::default().name(), "ZephyrVLM");
+}
+
+#[test]
+fn vlm_rejects_unknown_output_and_fixed_input_names() {
+    let mut discipline = VlmDiscipline::default();
+    discipline.initialize().unwrap();
+    assert!(
+        discipline
+            .set_options(&options(&[("outputs", "CD,typo".into())]))
+            .is_err()
+    );
+    discipline
+        .set_options(&options(&[("fixed_inputs", "typo".into())]))
+        .unwrap();
+    assert!(discipline.setup().is_err());
+}
+
+#[test]
+fn selective_analysis_rejects_options_it_would_otherwise_ignore() {
+    let control = serde_json::json!([
+        {"surface": "Wing", "name": "flap", "span_start": 0, "span_end": 3, "hinge": 1.2}
+    ]);
+    let trim = serde_json::json!({
+        "enabled": true, "variables": ["alpha"],
+        "balances": [{"quantity": "Fz", "scale": 1000.0}]
+    });
+    let conflicting: [(&str, serde_json::Value); 4] = [
+        ("controls", control),
+        ("fixed_inputs", "mach".into()),
+        ("outputs", "CL,CD".into()),
+        ("trim", trim),
+    ];
+    for (name, value) in conflicting {
+        let mut discipline = VlmDiscipline::default();
+        discipline.initialize().unwrap();
+        discipline
+            .set_options(&options(&[
+                ("surface_names", serde_json::json!(["Wing"])),
+                ("surface_nx", serde_json::json!([2])),
+                ("surface_ny", serde_json::json!([3])),
+                ("surface_y_duplicated", serde_json::json!([true])),
+                ("analysis_outputs", serde_json::json!(["CL"])),
+                (name, value),
+            ]))
+            .unwrap_or_else(|e| panic!("{name} should be accepted as an option: {e}"));
+        let error = discipline
+            .setup()
+            .expect_err(&format!("{name} must be rejected with analysis options"));
+        assert!(
+            error.to_string().contains("cannot be combined"),
+            "{name}: {error}"
+        );
+    }
+}
+
+#[tokio::test]
+async fn mesh_controls_have_exact_philote_partials_and_invalidate_cache() {
+    let mut discipline = VlmDiscipline::default();
+    discipline.initialize().unwrap();
+    let controls = serde_json::json!([
+        {"surface": "Wing", "name": "elevator", "span_start": 0, "span_end": 3,
+         "hinge": [0.6, 0.8, 0.9, 1.1]},
+        {"surface": "Wing", "name": "aileron", "span_start": 1, "span_end": 3,
+         "hinge": 1.2, "gain": -0.7, "duplicate_sign": -1.0}
+    ]);
+    let configuration = options(&[
+        ("surface_names", "Wing".into()),
+        ("surface_nx", "2".into()),
+        ("surface_ny", "3".into()),
+        ("surface_y_duplicated", "true".into()),
+        ("consistent_forces", true.into()),
+        ("controls", controls.to_string().into()),
+    ]);
+    discipline.set_options(&configuration).unwrap();
+    discipline.setup().unwrap();
+    discipline.setup_partials().unwrap();
+    let mut inputs = vlm_inputs(2, 3, 1.0, 3.0);
+    inputs.insert("mach".into(), array(&[0.3]));
+    inputs.insert("pitch_rate".into(), array(&[0.005]));
+    inputs.insert("control_elevator".into(), array(&[0.13]));
+    inputs.insert("control_aileron".into(), array(&[-0.05]));
+    let original = discipline.compute(&inputs).await.unwrap();
+    let partials = discipline.compute_partials(&inputs).await.unwrap();
+    assert!(partials.contains_key(&("CL".into(), "control_elevator".into())));
+    assert_partials_match(&discipline, &inputs, &partials, 1e-7, 2e-5).await;
+    inputs.get_mut("control_elevator").unwrap()[0] += 0.04;
+    assert_ne!(original, discipline.compute(&inputs).await.unwrap());
+    inputs.get_mut("control_elevator").unwrap()[0] = 0.13;
+    assert_eq!(original, discipline.compute(&inputs).await.unwrap());
+
+    let mut fixed = VlmDiscipline::default();
+    fixed.initialize().unwrap();
+    let mut configuration = configuration.clone();
+    configuration.insert(
+        "fixed_inputs".into(),
+        "control_elevator,control_aileron".into(),
+    );
+    fixed.set_options(&configuration).unwrap();
+    fixed.setup().unwrap();
+    fixed.setup_partials().unwrap();
+    let partials = fixed.compute_partials(&inputs).await.unwrap();
+    assert!(
+        partials
+            .keys()
+            .all(|(_, input)| !input.starts_with("control_"))
+    );
+    assert_eq!(original, fixed.compute(&inputs).await.unwrap());
+}
+
+#[test]
+fn philote_rejects_invalid_control_metadata() {
+    for definition in [
+        serde_json::json!({"surface":"Wing", "name":"e", "span_start":0, "span_end":1, "hinge":0.5, "typo":1}),
+        serde_json::json!({"surface":"missing", "name":"e", "span_start":0, "span_end":1, "hinge":0.5}),
+        serde_json::json!({"surface":"Wing", "name":"e", "span_start":0, "span_end":2, "hinge":0.5}),
+        serde_json::json!({"surface":"Wing", "name":"e", "span_start":0, "span_end":1, "hinge":2.0}),
+    ] {
+        let mut discipline = VlmDiscipline::default();
+        discipline.initialize().unwrap();
+        assert!(
+            discipline
+                .set_options(&options(&[
+                    ("surface_names", "Wing".into()),
+                    ("controls", serde_json::json!([definition]))
+                ]))
+                .is_err()
+        );
+    }
+}
+
+// ============================================================================
+// Opt-in solver accelerations: `mirror_reuse` and `symmetric_factorization`
+// ============================================================================
+
+/// Relative bound on the symmetric factorization's departure from the full LU.
+const SYMMETRIC_BOUND: f64 = 1.0e-12;
+
+/// Every entry of two output or partial maps has the same bits.
+fn assert_bits<K: std::fmt::Debug + Eq + std::hash::Hash>(
+    label: &str,
+    actual: &HashMap<K, ArrayD<f64>>,
+    expected: &HashMap<K, ArrayD<f64>>,
+) {
+    assert_eq!(actual.len(), expected.len(), "{label}: key count");
+    for (key, values) in expected {
+        let other = actual
+            .get(key)
+            .unwrap_or_else(|| panic!("{label}: missing {key:?}"));
+        assert_eq!(values.len(), other.len(), "{label}: {key:?} length");
+        for (a, b) in other.iter().zip(values.iter()) {
+            assert_eq!(a.to_bits(), b.to_bits(), "{label}: {key:?}: {a} != {b}");
+        }
+    }
+}
+
+/// Every entry agrees to [`SYMMETRIC_BOUND`] relative to the largest magnitude
+/// in its group, and returns the largest such relative deviation.
+///
+/// `group` maps a key to its group. Outputs are grouped by themselves; partials
+/// by output, i.e. by Jacobian row, because a derivative that vanishes by
+/// symmetry (`dCm/droll_rate` on a symmetric wing) is a cancellation of terms
+/// as large as the rest of its row, and its rounding is of their size, not of
+/// its own.
+fn assert_near<K: std::fmt::Debug + Eq + std::hash::Hash>(
+    label: &str,
+    actual: &HashMap<K, ArrayD<f64>>,
+    expected: &HashMap<K, ArrayD<f64>>,
+    group: impl Fn(&K) -> String,
+) -> f64 {
+    assert_eq!(actual.len(), expected.len(), "{label}: key count");
+    let mut scales: HashMap<String, f64> = HashMap::new();
+    for (key, values) in expected {
+        let scale = scales.entry(group(key)).or_default();
+        *scale = values.iter().fold(*scale, |m, v| m.max(v.abs()));
+    }
+    let mut largest = 0.0_f64;
+    for (key, values) in expected {
+        let other = actual
+            .get(key)
+            .unwrap_or_else(|| panic!("{label}: missing {key:?}"));
+        assert_eq!(values.len(), other.len(), "{label}: {key:?} length");
+        let scale = scales[&group(key)];
+        for (a, b) in other.iter().zip(values.iter()) {
+            let deviation = (a - b).abs();
+            assert!(
+                deviation <= SYMMETRIC_BOUND * scale,
+                "{label}: {key:?}: {a} vs {b} (scale {scale})"
+            );
+            if scale > 0.0 {
+                largest = largest.max(deviation / scale);
+            }
+        }
+    }
+    largest
+}
+
+/// A y-duplicated wing with a symmetric elevator and an antisymmetric aileron.
+fn accelerated_configuration(
+    extra: &[(&str, serde_json::Value)],
+) -> HashMap<String, serde_json::Value> {
+    let controls = serde_json::json!([
+        {"surface": "Wing", "name": "elevator", "span_start": 0, "span_end": 3,
+         "hinge": [0.6, 0.8, 0.9, 1.1]},
+        {"surface": "Wing", "name": "aileron", "span_start": 1, "span_end": 3,
+         "hinge": 1.2, "duplicate_sign": -1.0}
+    ]);
+    let mut configuration = options(&[
+        ("surface_names", "Wing".into()),
+        ("surface_nx", "2".into()),
+        ("surface_ny", "3".into()),
+        ("surface_y_duplicated", "true".into()),
+        ("controls", controls),
+    ]);
+    configuration.extend(options(extra));
+    configuration
+}
+
+/// Groups output values by themselves.
+fn by_output(key: &str) -> String {
+    key.to_owned()
+}
+
+/// Groups partials by Jacobian row.
+fn by_row(key: &(String, String)) -> String {
+    key.0.clone()
+}
+
+fn configured(configuration: &HashMap<String, serde_json::Value>) -> VlmDiscipline {
+    let mut discipline = VlmDiscipline::default();
+    discipline.initialize().unwrap();
+    discipline.set_options(configuration).unwrap();
+    discipline.setup().unwrap();
+    discipline.setup_partials().unwrap();
+    discipline
+}
+
+/// Nonzero sideslip, rates and Mach so every output and partial is populated;
+/// none of them enters the system matrix.
+fn accelerated_inputs(aileron: f64) -> ArrayMap {
+    let mut inputs = vlm_inputs(2, 3, 1.0, 3.0);
+    inputs.insert("beta".into(), array(&[0.03]));
+    inputs.insert("mach".into(), array(&[0.3]));
+    inputs.insert("roll_rate".into(), array(&[0.01]));
+    inputs.insert("pitch_rate".into(), array(&[0.005]));
+    inputs.insert("yaw_rate".into(), array(&[-0.004]));
+    inputs.insert("control_elevator".into(), array(&[0.13]));
+    inputs.insert("control_aileron".into(), array(&[aileron]));
+    inputs
+}
+
+/// Outputs, partials and the applies flag of one discipline at one point.
+async fn evaluate(
+    configuration: &HashMap<String, serde_json::Value>,
+    inputs: &ArrayMap,
+) -> (ArrayMap, PartialMap, Option<bool>) {
+    let discipline = configured(configuration);
+    let partials = discipline.compute_partials(inputs).await.unwrap();
+    let outputs = discipline.compute(inputs).await.unwrap();
+    let applies = discipline.symmetric_factorization_applies().unwrap();
+    (outputs, partials, applies)
+}
+
+#[test]
+fn acceleration_options_are_declared_as_booleans() {
+    let mut discipline = VlmDiscipline::default();
+    discipline.initialize().unwrap();
+    let declared = discipline.get_available_options().unwrap();
+    for name in ["mirror_reuse", "symmetric_factorization"] {
+        assert_eq!(
+            declared.get(name).map(String::as_str),
+            Some("bool"),
+            "{name}"
+        );
+    }
+}
+
+#[tokio::test]
+async fn acceleration_options_default_off_and_parse_boolean_spellings() {
+    let inputs = accelerated_inputs(0.0);
+    // Off by default: the mesh qualifies, yet the full LU is used.
+    let default = configured(&accelerated_configuration(&[]));
+    assert_eq!(default.symmetric_factorization_applies().unwrap(), None);
+    default.compute(&inputs).await.unwrap();
+    assert_eq!(
+        default.symmetric_factorization_applies().unwrap(),
+        Some(false)
+    );
+
+    let spellings: [(serde_json::Value, bool); 10] = [
+        (true.into(), true),
+        (false.into(), false),
+        ("true".into(), true),
+        ("False".into(), false),
+        (" yes ".into(), true),
+        ("no".into(), false),
+        ("1".into(), true),
+        ("0".into(), false),
+        (1.into(), true),
+        (0.into(), false),
+    ];
+    for (value, expected) in spellings {
+        let discipline = configured(&accelerated_configuration(&[(
+            "symmetric_factorization",
+            value.clone(),
+        )]));
+        discipline.compute(&inputs).await.unwrap();
+        assert_eq!(
+            discipline.symmetric_factorization_applies().unwrap(),
+            Some(expected),
+            "{value}"
+        );
+        // Mirror reuse never changes results, so a parse is all that shows.
+        configured(&accelerated_configuration(&[("mirror_reuse", value)]));
+    }
+}
+
+#[test]
+fn acceleration_options_reject_values_that_are_not_booleans() {
+    for name in ["mirror_reuse", "symmetric_factorization"] {
+        for value in [
+            serde_json::json!("maybe"),
+            serde_json::json!(""),
+            serde_json::json!(2),
+            serde_json::json!(0.5),
+            serde_json::json!(null),
+            serde_json::json!([true]),
+            serde_json::json!({"enabled": true}),
+        ] {
+            let mut discipline = VlmDiscipline::default();
+            discipline.initialize().unwrap();
+            let error = discipline
+                .set_options(&accelerated_configuration(&[(name, value.clone())]))
+                .expect_err(&format!("{name} = {value} must be rejected"));
+            let message = error.to_string();
+            assert!(
+                message.contains(name) && message.contains("true or false"),
+                "{name} = {value}: {message}"
+            );
+        }
+    }
+}
+
+#[tokio::test]
+async fn mirror_reuse_is_bit_identical_on_the_ordinary_path() {
+    let all_outputs = serde_json::json!([
+        "CL", "CD", "CY", "Cl", "Cm", "Cn", "Fx", "Fy", "Fz", "Mx", "My", "Mz"
+    ]);
+    // Coefficients take the adjoint branch, dimensional outputs the
+    // linearization branch; aileron deflection takes the deflected system.
+    for (extra, aileron) in [
+        (vec![], 0.0),
+        (vec![], -0.05),
+        (vec![("outputs", all_outputs.clone())], 0.0),
+        (vec![("outputs", all_outputs)], -0.05),
+    ] {
+        let inputs = accelerated_inputs(aileron);
+        let (outputs, partials, _) = evaluate(&accelerated_configuration(&extra), &inputs).await;
+        let mut on = extra.clone();
+        on.push(("mirror_reuse", true.into()));
+        let (fast, fast_partials, _) = evaluate(&accelerated_configuration(&on), &inputs).await;
+        assert_bits("outputs", &fast, &outputs);
+        assert_bits("partials", &fast_partials, &partials);
+        // Also with the symmetric factorization on: mirror reuse changes no
+        // bit of what that produces either.
+        let mut both = on.clone();
+        both.push(("symmetric_factorization", true.into()));
+        let mut symmetric = extra.clone();
+        symmetric.push(("symmetric_factorization", true.into()));
+        let (a, a_partials, _) = evaluate(&accelerated_configuration(&both), &inputs).await;
+        let (b, b_partials, _) = evaluate(&accelerated_configuration(&symmetric), &inputs).await;
+        assert_bits("outputs with symmetric", &a, &b);
+        assert_bits("partials with symmetric", &a_partials, &b_partials);
+    }
+}
+
+#[tokio::test]
+async fn symmetric_factorization_matches_the_full_lu_on_the_ordinary_path() {
+    let all_outputs = serde_json::json!([
+        "CL", "CD", "CY", "Cl", "Cm", "Cn", "Fx", "Fy", "Fz", "Mx", "My", "Mz"
+    ]);
+    let mut largest = 0.0_f64;
+    for extra in [vec![], vec![("outputs", all_outputs)]] {
+        let inputs = accelerated_inputs(0.0);
+        let (outputs, partials, applies) =
+            evaluate(&accelerated_configuration(&extra), &inputs).await;
+        assert_eq!(applies, Some(false));
+        let mut on = extra.clone();
+        on.push(("symmetric_factorization", true.into()));
+        let (fast, fast_partials, applies) =
+            evaluate(&accelerated_configuration(&on), &inputs).await;
+        assert_eq!(applies, Some(true));
+        largest = largest.max(assert_near("outputs", &fast, &outputs, |k| by_output(k)));
+        largest = largest.max(assert_near("partials", &fast_partials, &partials, by_row));
+        // Control partials are present, so the deflected system was used.
+        assert!(fast_partials.contains_key(&("CL".into(), "control_elevator".into())));
+    }
+    println!("ordinary path: largest symmetric-factorization deviation {largest:e}");
+}
+
+#[tokio::test]
+async fn symmetric_factorization_falls_back_bit_for_bit_where_it_cannot_apply() {
+    // An antisymmetric aileron deflection breaks the block structure.
+    let inputs = accelerated_inputs(-0.05);
+    let (outputs, partials, _) = evaluate(&accelerated_configuration(&[]), &inputs).await;
+    let (fast, fast_partials, applies) = evaluate(
+        &accelerated_configuration(&[("symmetric_factorization", true.into())]),
+        &inputs,
+    )
+    .await;
+    assert_eq!(applies, Some(false));
+    assert_bits("antisymmetric outputs", &fast, &outputs);
+    assert_bits("antisymmetric partials", &fast_partials, &partials);
+
+    // A surface that is not y-duplicated has no mirror pairs.
+    let plain = |extra: &[(&str, serde_json::Value)]| {
+        let mut configuration = options(&[
+            ("surface_names", "Wing".into()),
+            ("surface_nx", "2".into()),
+            ("surface_ny", "3".into()),
+        ]);
+        configuration.extend(options(extra));
+        configuration
+    };
+    let inputs = vlm_inputs(2, 3, 1.0, 3.0);
+    let (outputs, partials, _) = evaluate(&plain(&[]), &inputs).await;
+    let (fast, fast_partials, applies) = evaluate(
+        &plain(&[
+            ("symmetric_factorization", true.into()),
+            ("mirror_reuse", true.into()),
+        ]),
+        &inputs,
+    )
+    .await;
+    assert_eq!(applies, Some(false));
+    assert_bits("unduplicated outputs", &fast, &outputs);
+    assert_bits("unduplicated partials", &fast_partials, &partials);
+}
+
+/// The selective interface on a y-duplicated wing in the given mode.
+fn selective_configuration(
+    mode: &str,
+    extra: &[(&str, serde_json::Value)],
+) -> HashMap<String, serde_json::Value> {
+    let mut configuration = options(&[
+        ("surface_names", serde_json::json!(["Wing"])),
+        ("surface_nx", serde_json::json!([2])),
+        ("surface_ny", serde_json::json!([3])),
+        ("surface_y_duplicated", serde_json::json!([true])),
+        ("analysis_mode", mode.into()),
+        (
+            "analysis_outputs",
+            serde_json::json!(["CL", "CD", "Cm", "CDi", "e"]),
+        ),
+        (
+            "analysis_gradients",
+            serde_json::json!({
+                "CL": ["alpha", "Wing", "mach", "reference_area"],
+                "CD": ["Wing", "pitch_rate"],
+                "Cm": ["alpha", "Wing", "moment_ref_x"],
+                "CDi": ["Wing", "alpha"]
+            }),
+        ),
+    ]);
+    configuration.extend(options(extra));
+    configuration
+}
+
+fn selective_inputs() -> ArrayMap {
+    let mut inputs = vlm_inputs(2, 3, 1.0, 3.0);
+    inputs.insert("mach".into(), array(&[0.3]));
+    inputs.insert("pitch_rate".into(), array(&[0.005]));
+    inputs
+}
+
+#[tokio::test]
+async fn acceleration_options_reach_the_selective_path() {
+    let inputs = selective_inputs();
+    let mut largest = 0.0_f64;
+    for mode in ["full", "half_wing"] {
+        let (outputs, partials, applies) =
+            evaluate(&selective_configuration(mode, &[]), &inputs).await;
+        assert_eq!(applies, Some(false), "{mode}");
+        assert!(!partials.is_empty());
+
+        let (fast, fast_partials, _) = evaluate(
+            &selective_configuration(mode, &[("mirror_reuse", true.into())]),
+            &inputs,
+        )
+        .await;
+        assert_bits(&format!("{mode} mirror outputs"), &fast, &outputs);
+        assert_bits(
+            &format!("{mode} mirror partials"),
+            &fast_partials,
+            &partials,
+        );
+
+        let symmetric = selective_configuration(mode, &[("symmetric_factorization", true.into())]);
+        let (fast, fast_partials, applies) = evaluate(&symmetric, &inputs).await;
+        let both = selective_configuration(
+            mode,
+            &[
+                ("symmetric_factorization", true.into()),
+                ("mirror_reuse", true.into()),
+            ],
+        );
+        let (both_outputs, both_partials, _) = evaluate(&both, &inputs).await;
+        assert_bits(&format!("{mode} both outputs"), &both_outputs, &fast);
+        assert_bits(
+            &format!("{mode} both partials"),
+            &both_partials,
+            &fast_partials,
+        );
+        if mode == "full" {
+            assert_eq!(applies, Some(true));
+            largest = largest.max(assert_near("selective outputs", &fast, &outputs, |k| {
+                by_output(k)
+            }));
+            largest = largest.max(assert_near(
+                "selective partials",
+                &fast_partials,
+                &partials,
+                by_row,
+            ));
+        } else {
+            // Half-wing mode solves one semispan, which has no mirror pairs.
+            assert_eq!(applies, Some(false));
+            assert_bits("half-wing outputs", &fast, &outputs);
+            assert_bits("half-wing partials", &fast_partials, &partials);
+        }
+    }
+    println!("selective full path: largest symmetric-factorization deviation {largest:e}");
+}
+
+#[tokio::test]
+async fn acceleration_option_changes_invalidate_the_solved_state() {
+    let inputs = accelerated_inputs(0.0);
+    let off = accelerated_configuration(&[("symmetric_factorization", false.into())]);
+    let on = accelerated_configuration(&[("symmetric_factorization", true.into())]);
+    let mut discipline = configured(&off);
+    let original = discipline.compute(&inputs).await.unwrap();
+    let original_partials = discipline.compute_partials(&inputs).await.unwrap();
+    assert_eq!(
+        discipline.symmetric_factorization_applies().unwrap(),
+        Some(false)
+    );
+
+    // After setup without trim, options are re-sent in full, as for every
+    // other option; the cached state goes with them.
+    discipline.set_options(&on).unwrap();
+    assert_eq!(discipline.symmetric_factorization_applies().unwrap(), None);
+    let partials = discipline.compute_partials(&inputs).await.unwrap();
+    let changed = discipline.compute(&inputs).await.unwrap();
+    assert_eq!(
+        discipline.symmetric_factorization_applies().unwrap(),
+        Some(true)
+    );
+    let (fresh, fresh_partials, _) = evaluate(&on, &inputs).await;
+    assert_bits("flipped on", &changed, &fresh);
+    assert_bits("flipped on partials", &partials, &fresh_partials);
+
+    discipline.set_options(&off).unwrap();
+    assert_eq!(discipline.symmetric_factorization_applies().unwrap(), None);
+    assert_bits(
+        "flipped back",
+        &discipline.compute(&inputs).await.unwrap(),
+        &original,
+    );
+    assert_bits(
+        "flipped back partials",
+        &discipline.compute_partials(&inputs).await.unwrap(),
+        &original_partials,
+    );
+    assert_eq!(
+        discipline.symmetric_factorization_applies().unwrap(),
+        Some(false)
+    );
+
+    // Mirror reuse changes no result bit, so a stale state could only be seen
+    // through the cache itself: the flag reads `None` once it is cleared.
+    discipline
+        .set_options(&accelerated_configuration(&[("mirror_reuse", true.into())]))
+        .unwrap();
+    assert_eq!(discipline.symmetric_factorization_applies().unwrap(), None);
+    assert_bits(
+        "mirror reuse",
+        &discipline.compute(&inputs).await.unwrap(),
+        &original,
+    );
+    // Options absent from a later request keep their value, like `outputs`.
+    discipline
+        .set_options(&accelerated_configuration(&[(
+            "symmetric_factorization",
+            true.into(),
+        )]))
+        .unwrap();
+    discipline.compute(&inputs).await.unwrap();
+    discipline
+        .set_options(&accelerated_configuration(&[]))
+        .unwrap();
+    discipline.compute(&inputs).await.unwrap();
+    assert_eq!(
+        discipline.symmetric_factorization_applies().unwrap(),
+        Some(true)
+    );
+}
+
+#[tokio::test]
+async fn acceleration_option_changes_invalidate_the_selective_analysis() {
+    let inputs = selective_inputs();
+    let off = selective_configuration("full", &[]);
+    let on = selective_configuration("full", &[("symmetric_factorization", true.into())]);
+    let mut discipline = configured(&off);
+    let original = discipline.compute(&inputs).await.unwrap();
+    assert_eq!(
+        discipline.symmetric_factorization_applies().unwrap(),
+        Some(false)
+    );
+    discipline.set_options(&on).unwrap();
+    assert_eq!(discipline.symmetric_factorization_applies().unwrap(), None);
+    let changed = discipline.compute(&inputs).await.unwrap();
+    let partials = discipline.compute_partials(&inputs).await.unwrap();
+    assert_eq!(
+        discipline.symmetric_factorization_applies().unwrap(),
+        Some(true)
+    );
+    let (fresh, fresh_partials, _) = evaluate(&on, &inputs).await;
+    assert_bits("selective flipped on", &changed, &fresh);
+    assert_bits("selective flipped on partials", &partials, &fresh_partials);
+
+    discipline
+        .set_options(&selective_configuration(
+            "full",
+            &[
+                ("symmetric_factorization", false.into()),
+                ("mirror_reuse", true.into()),
+            ],
+        ))
+        .unwrap();
+    assert_eq!(discipline.symmetric_factorization_applies().unwrap(), None);
+    assert_bits(
+        "selective flipped back",
+        &discipline.compute(&inputs).await.unwrap(),
+        &original,
+    );
+    assert_eq!(
+        discipline.symmetric_factorization_applies().unwrap(),
+        Some(false)
+    );
 }

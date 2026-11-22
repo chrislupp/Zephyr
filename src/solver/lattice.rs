@@ -333,6 +333,13 @@ impl VortexLattice {
         input.validate()?;
         self.clear();
         self.mesh_input = Some(input.clone());
+        self.control_surface_names = input
+            .surfaces
+            .iter()
+            .flat_map(|surface| surface.controls.iter().map(|control| control.name.clone()))
+            .collect::<std::collections::BTreeSet<_>>()
+            .into_iter()
+            .collect();
         for surface in &input.surfaces {
             self.generate_mesh_surface(surface)?;
             if surface.y_duplicated {
@@ -421,7 +428,23 @@ impl VortexLattice {
                     enforce_flow_tangency: true,
                     ..HorseshoeVortex::default()
                 });
-                self.control_influences.push(Vec::new());
+                self.control_influences.push(
+                    mesh.controls
+                        .iter()
+                        .filter_map(|control| {
+                            let gain = control.panel_gain(i, j);
+                            (gain.abs() > EPSILON).then(|| ControlSurfaceInfluence {
+                                name: control.name.clone(),
+                                gain,
+                                hinge_axis: control.hinge_vector(mesh, j).normalize(),
+                                hinge_point: 0.5
+                                    * (control.hinge_point(mesh, j)
+                                        + control.hinge_point(mesh, j + 1)),
+                                reflection_sign: control.duplicate_sign,
+                            })
+                        })
+                        .collect(),
+                );
             }
             let direction = self.vortices[strip.first_vortex_index].bound_vortex_right
                 - self.vortices[strip.first_vortex_index].bound_vortex_left;

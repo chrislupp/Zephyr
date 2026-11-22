@@ -134,6 +134,31 @@ fn analysis_rejects_invalid_derivative_requests() {
 }
 
 #[test]
+fn analysis_rejects_unknown_control_names_like_the_solver() {
+    let mesh = rectangular_mesh(2, 4);
+    let mut misspelled = condition();
+    misspelled.control_deflections.push(("typo".into(), 0.3));
+    let request = AnalysisRequest {
+        outputs: vec![Output::Lift],
+        ..AnalysisRequest::default()
+    };
+
+    let mut solver = VortexLatticeSolver::new();
+    solver.set_mesh(&mesh).unwrap();
+    assert!(matches!(
+        solver.solve(&misspelled),
+        Err(ZephyrError::InvalidFlightCondition(_))
+    ));
+    let mut analysis = Analysis::from_mesh(&mesh);
+    assert!(matches!(
+        analysis.evaluate(&misspelled, &request),
+        Err(ZephyrError::InvalidFlightCondition(_))
+    ));
+    // The rejection must not poison the context for a valid condition.
+    assert!(analysis.evaluate(&condition(), &request).is_ok());
+}
+
+#[test]
 fn analysis_rejects_degenerate_references_and_empty_lattices() {
     // Aircraft sources skip mesh-input validation, so the analysis checks its
     // own reference quantities and lattice.
@@ -217,9 +242,12 @@ fn geometry_adjoints_reject_unsupported_solutions() {
             .is_err()
     );
 
+    // Deflected control normals were once rejected here. The geometry adjoint
+    // now differentiates through them (checked against re-solves in
+    // tests/mesh_controls.rs), so the deflected solve must succeed.
     let mut controlled = GradientCalculator::new();
     controlled.set_aircraft(&controlled_wing());
-    assert!(controlled.compute_geometry_gradients(&deflected()).is_err());
+    assert!(controlled.compute_geometry_gradients(&deflected()).is_ok());
 
     let mut symmetric = VortexLatticeSolver::new();
     symmetric.set_mesh(&mesh).unwrap();

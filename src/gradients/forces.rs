@@ -415,7 +415,9 @@ pub fn force_circulation_gradient(
             }
         }
     }
-    direct + solver.velocity_matrix().transpose() * velocity_cotangent
+    // `tr_mul` contracts the columns in place; `transpose()` would first copy
+    // the whole 3N x N matrix.
+    direct + solver.velocity_matrix().tr_mul(&velocity_cotangent)
 }
 
 /// Selected circulation gradients, with unselected vectors left at zero.

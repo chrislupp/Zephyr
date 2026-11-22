@@ -31,7 +31,7 @@ use crate::geometry::{Aircraft, MeshInput};
 use crate::solver::{FlightCondition, VortexLatticeSolver};
 
 use super::geometry_adjoint::{GeometryAdjointContext, scatter_mesh_node_cotangents};
-use super::mach::velocity_influence_mach_derivative;
+use super::mach::velocity_influence_mach_derivative_times;
 use super::section_geometry::section_direction;
 use super::{
     AdjointSolver, AeroOutput, OutputSelection, force_alpha_gradient, force_beta_gradient,
@@ -74,6 +74,15 @@ impl AeroGradients {
             AeroOutput::InducedDrag => self.induced_drag = value,
         }
     }
+}
+
+/// Coefficient derivatives per radian of one named control command.
+#[derive(Clone, Debug, Default)]
+pub struct ControlGradient {
+    /// Command name, shared across matching surface definitions.
+    pub name: String,
+    /// All requested coefficient and Trefftz induced-drag derivatives.
+    pub by_deflection: AeroGradients,
 }
 
 /// Complete flight-condition derivative set.
@@ -344,7 +353,7 @@ impl GradientCalculator {
     ) -> Result<FullGradients> {
         let mut solver = self.configured_solver()?;
         solver.solve(condition)?;
-        self.flight_condition_gradients_from(&solver, condition)
+        self.flight_gradients_at_solution(&solver, condition, false)
     }
 
     /// As [`Self::compute_flight_condition_gradients`], reusing a solution the
@@ -358,11 +367,68 @@ impl GradientCalculator {
         solver: &VortexLatticeSolver,
         condition: &FlightCondition,
     ) -> Result<FullGradients> {
+        self.flight_gradients_at_solution(solver, condition, false)
+    }
+
+    // Internal adapter entry point: the caller owns a solved, matching state.
+    pub(crate) fn flight_gradients_at_solution(
+        &self,
+        solver: &VortexLatticeSolver,
+        condition: &FlightCondition,
+        alpha_only: bool,
+    ) -> Result<FullGradients> {
         let mut result = FullGradients::default();
-        let velocity_mach = velocity_influence_mach_derivative(solver, true);
-        let induced_velocity_mach = &velocity_mach * &solver.solution().circulation;
+        if alpha_only {
+            debug_assert!(!self.output_selection.induced_drag);
+            let selected: Vec<_> = OUTPUTS
+                .into_iter()
+                .filter(|o| self.output_selection.contains(*o))
+                .collect();
+            if selected.is_empty() {
+                return Ok(result);
+            }
+            let mut gradients = MatX::zeros(solver.mesh().vortex_count(), selected.len());
+            for (column, &output) in selected.iter().enumerate() {
+                gradients.set_column(
+                    column,
+                    &force_circulation_gradient(solver, condition, output),
+                );
+            }
+            let lambdas = AdjointSolver::new(solver)?.solve_batched(&gradients)?;
+            let (sin_alpha, cos_alpha) = condition.alpha.sin_cos();
+            let velocity = Vec3::new(
+                -sin_alpha * condition.beta.cos(),
+                0.0,
+                cos_alpha * condition.beta.cos(),
+            );
+            let rhs = VecX::from_fn(solver.mesh().vortex_count(), |i, _| {
+                if solver.mesh().vortices()[i].affected_by_freestream {
+                    -solver.linearized_normals()[i].dot(&velocity)
+                } else {
+                    0.0
+                }
+            });
+            let explicit = force_alpha_gradient(
+                solver.mesh(),
+                solver.solution(),
+                condition,
+                solver.reference_quantities(),
+            );
+            for (column, &output) in selected.iter().enumerate() {
+                let index = OUTPUTS
+                    .iter()
+                    .position(|o| *o == output)
+                    .expect("selected output");
+                result
+                    .by_alpha
+                    .set(output, explicit[index] + lambdas.column(column).dot(&rhs));
+            }
+            return Ok(result);
+        }
+        let induced_velocity_mach =
+            velocity_influence_mach_derivative_times(solver, true, &solver.solution().circulation);
         let control_velocity_mach =
-            velocity_influence_mach_derivative(solver, false) * &solver.solution().circulation;
+            velocity_influence_mach_derivative_times(solver, false, &solver.solution().circulation);
         let residual_mach = VecX::from_fn(solver.mesh().vortex_count(), |row, _| {
             -solver.linearized_normals()[row].dot(&Vec3::new(
                 control_velocity_mach[3 * row],
@@ -458,9 +524,9 @@ impl GradientCalculator {
         }
         // The explicit half is the moment-arm change at frozen circulation.
         // `force_geometry_jvp` already expresses exactly that: moving the
-        // reference point by `+e_k` is moving every control point by `-e_k`
-        // relative to it, with the vortex lines held still. Reusing it rather
-        // than rewriting the contraction keeps this tied to the same force
+        // reference point by `+e_k` is translating every force point by `-e_k`
+        // relative to it, with the vortex line vectors held unchanged. Reusing
+        // the contraction keeps this tied to the same force
         // convention and normalization the primal uses.
         let still = vec![Vec3::zeros(); unknowns];
         let mut explicit_moment_reference = [[0.0; 6]; 3];
@@ -684,6 +750,71 @@ impl GradientCalculator {
         Ok(gradient)
     }
 
+    /// Analytical derivatives per radian of each declared control command.
+    /// An omitted command is evaluated at zero; if entries repeat, the
+    /// derivative varies all entries of that name together. Rotations follow
+    /// flight-condition entry order. An omitted command is appended at zero.
+    pub fn compute_control_gradients(
+        &self,
+        condition: &FlightCondition,
+    ) -> Result<Vec<ControlGradient>> {
+        let mut solver = self.configured_solver()?;
+        solver.solve(condition)?;
+        self.control_gradients_at_solution(&solver, condition)
+    }
+
+    pub(crate) fn control_gradients_at_solution(
+        &self,
+        solver: &VortexLatticeSolver,
+        condition: &FlightCondition,
+    ) -> Result<Vec<ControlGradient>> {
+        solver.check_solved_condition(condition)?;
+        let mut outputs: Vec<_> = OUTPUTS
+            .into_iter()
+            .filter(|o| self.output_selection.contains(*o))
+            .collect();
+        if self.output_selection.induced_drag {
+            outputs.push(AeroOutput::InducedDrag);
+        }
+        let mut seeds = MatX::zeros(solver.mesh().vortex_count(), outputs.len());
+        for (column, output) in outputs.iter().enumerate() {
+            let gradient = if *output == AeroOutput::InducedDrag {
+                trefftz_circulation_gradients(
+                    solver.mesh(),
+                    solver.solution(),
+                    solver.reference_quantities().area,
+                    0.01,
+                    0.1,
+                )
+                .induced_drag
+            } else {
+                force_circulation_gradient(solver, condition, *output)
+            };
+            seeds.set_column(column, &gradient);
+        }
+        let adjoints = if outputs.is_empty() {
+            seeds
+        } else {
+            AdjointSolver::new(solver)?.solve_batched(&seeds)?
+        };
+        solver
+            .mesh()
+            .control_surface_names()
+            .iter()
+            .map(|name| {
+                let rhs = solver.control_residual_derivative(condition, name)?;
+                let mut by_deflection = AeroGradients::default();
+                for (column, output) in outputs.iter().enumerate() {
+                    by_deflection.set(*output, adjoints.column(column).dot(&rhs));
+                }
+                Ok(ControlGradient {
+                    name: name.clone(),
+                    by_deflection,
+                })
+            })
+            .collect()
+    }
+
     /// Compute gradients with respect to every direct-mesh node coordinate.
     pub fn compute_mesh_node_gradients(
         &self,
@@ -709,6 +840,48 @@ impl GradientCalculator {
                 "node gradients require a direct mesh source".into(),
             ));
         };
+        self.node_gradients_at_solution(mesh, solver, condition)
+    }
+
+    // Reuses the same primal state as the adapter's coefficient/flight calculations.
+    pub(crate) fn node_gradients_at_solution(
+        &self,
+        mesh: &MeshInput,
+        solver: &VortexLatticeSolver,
+        condition: &FlightCondition,
+    ) -> Result<Vec<SurfaceMeshNodeGradients>> {
+        if !self.output_selection.induced_drag {
+            let outputs: Vec<_> = OUTPUTS
+                .into_iter()
+                .filter(|o| self.output_selection.contains(*o))
+                .collect();
+            let reference = solver.reference_quantities();
+            let points = vec![reference.moment_reference_point; solver.mesh().strip_count()];
+            let adjoint = super::StripLoadAdjoint::new(solver, condition, &points)?;
+            let columns: Vec<_> = outputs
+                .iter()
+                .map(|&output| {
+                    let (force, moment) =
+                        super::forces::body_output_cotangent(output, condition.alpha);
+                    super::StripLoadCotangent {
+                        force: vec![force / reference.area; points.len()],
+                        moment: vec![moment / (reference.area * reference.chord); points.len()],
+                    }
+                })
+                .collect();
+            let values = adjoint.mesh_node_cotangents(mesh, &columns)?;
+            let mut result: Vec<_> = mesh
+                .surfaces
+                .iter()
+                .map(|s| SurfaceMeshNodeGradients::zeros(s.name.clone(), s.nx, s.ny))
+                .collect();
+            for (output, value) in outputs.into_iter().zip(values) {
+                for (surface, nodes) in result.iter_mut().zip(value.surfaces) {
+                    surface.output_mut(output).nodes = nodes;
+                }
+            }
+            return Ok(result);
+        }
         let context = GeometryAdjointContext::new(solver, condition, self.output_selection)?;
         let mut result: Vec<_> = mesh
             .surfaces
