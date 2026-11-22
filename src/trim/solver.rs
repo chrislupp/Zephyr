@@ -25,10 +25,16 @@
 //! Newton–Raphson trim iteration.
 
 use crate::aero::{
-    AerodynamicResults, ForceCalculator, StabilityDerivativeCalculator, StabilityDerivatives,
+    AerodynamicResults, Coefficients, ForceCalculator, StabilityDerivativeCalculator,
+    StabilityDerivatives,
 };
-use crate::core::{MatX, Scalar, VecX};
+use crate::core::{MatX, Scalar, Vec3, VecX};
+use crate::error::Result;
 use crate::geometry::Aircraft;
+use crate::gradients::{
+    AdjointSolver, AeroOutput, force_alpha_gradient, force_beta_gradient,
+    force_circulation_gradient,
+};
 use crate::solver::{FlightCondition, VortexLatticeSolver};
 
 use super::{ConstraintType, OperatingVariables, TrimConstraints, VariableConstraint};
@@ -157,18 +163,16 @@ impl TrimSolver {
             if !result.aerodynamic_results.is_valid {
                 return aerodynamic_failure(result, "force computation failed".into());
             }
+            // The reported derivatives keep their frozen-induced-velocity
+            // convention; `compute` reuses the solution just obtained rather
+            // than solving the same condition again.
             result.derivatives = match derivative_calculator.compute(aircraft, solver, &condition) {
                 Ok(derivatives) => derivatives,
                 Err(error) => {
                     return aerodynamic_failure(result, error.to_string());
                 }
             };
-            let (jacobian, residual) = build_system(
-                &result.aerodynamic_results,
-                &result.derivatives,
-                &result.state,
-                constraints,
-            );
+            let residual = trim_residual(&result.aerodynamic_results, &result.state, constraints);
             result.residual_norm = residual.norm();
             if self.options.verbose {
                 eprintln!(
@@ -181,6 +185,18 @@ impl TrimSolver {
                 result.converged = true;
                 return result;
             }
+            // The Newton step uses exact total derivatives of the residual,
+            // not the reported ones: those hold the induced velocity frozen
+            // and, for alpha and beta, also leave out the turning of the
+            // freestream and of the stability axes, so a step built on them
+            // converges only linearly.
+            let sensitivities = match TrimSensitivities::compute(solver, &condition, constraints) {
+                Ok(sensitivities) => sensitivities,
+                Err(error) => {
+                    return aerodynamic_failure(result, error.to_string());
+                }
+            };
+            let jacobian = trim_jacobian(&sensitivities, constraints);
             let Some(mut delta) = jacobian.lu().solve(&(-residual)) else {
                 result.status = TrimStatus::SingularJacobian;
                 result.diagnostic = "trim Jacobian is singular".into();
@@ -218,185 +234,318 @@ fn active(constraint: VariableConstraint) -> bool {
     constraint.kind != ConstraintType::Free
 }
 
-fn variable_index(constraints: &TrimConstraints, target: usize) -> usize {
+/// Coefficient an equation of the given kind drives, if any.
+fn output_of(kind: ConstraintType) -> Option<AeroOutput> {
+    match kind {
+        ConstraintType::Lift => Some(AeroOutput::Lift),
+        ConstraintType::Side => Some(AeroOutput::Side),
+        ConstraintType::RollMoment => Some(AeroOutput::Roll),
+        ConstraintType::PitchMoment => Some(AeroOutput::Pitch),
+        ConstraintType::YawMoment => Some(AeroOutput::Yaw),
+        ConstraintType::Free | ConstraintType::Fixed => None,
+    }
+}
+
+fn select(coefficients: Coefficients, output: AeroOutput) -> Scalar {
+    match output {
+        AeroOutput::Lift => coefficients.lift,
+        AeroOutput::Drag => coefficients.drag,
+        AeroOutput::Side => coefficients.side,
+        AeroOutput::Roll => coefficients.roll,
+        AeroOutput::Pitch => coefficients.pitch,
+        AeroOutput::Yaw => coefficients.yaw,
+        AeroOutput::InducedDrag => 0.0,
+    }
+}
+
+fn select_mut(coefficients: &mut Coefficients, output: AeroOutput) -> Option<&mut Scalar> {
+    match output {
+        AeroOutput::Lift => Some(&mut coefficients.lift),
+        AeroOutput::Drag => Some(&mut coefficients.drag),
+        AeroOutput::Side => Some(&mut coefficients.side),
+        AeroOutput::Roll => Some(&mut coefficients.roll),
+        AeroOutput::Pitch => Some(&mut coefficients.pitch),
+        AeroOutput::Yaw => Some(&mut coefficients.yaw),
+        AeroOutput::InducedDrag => None,
+    }
+}
+
+/// Index of a coefficient in the six-component explicit-gradient arrays.
+fn explicit_index(output: AeroOutput) -> usize {
+    match output {
+        AeroOutput::Lift | AeroOutput::InducedDrag => 0,
+        AeroOutput::Drag => 1,
+        AeroOutput::Side => 2,
+        AeroOutput::Roll => 3,
+        AeroOutput::Pitch => 4,
+        AeroOutput::Yaw => 5,
+    }
+}
+
+/// Exact total derivatives of the trimmed coefficients at a solved condition.
+///
+/// Only the coefficients some equation drives and the variables some
+/// constraint activates are computed; every other entry stays zero. The
+/// entries are the same adjoint contractions `GradientCalculator` uses, which
+/// differentiate the reported near-field forces including the induced
+/// velocity, so a Newton step on them converges quadratically.
+#[derive(Clone, Debug, Default)]
+struct TrimSensitivities {
+    /// Derivatives by alpha, beta, roll, pitch, and yaw rate.
+    states: [Coefficients; 5],
+    /// Derivatives by each constrained control; `None` for a name the lattice
+    /// does not declare.
+    controls: Vec<Option<Coefficients>>,
+}
+
+impl TrimSensitivities {
+    fn compute(
+        solver: &VortexLatticeSolver,
+        condition: &FlightCondition,
+        constraints: &TrimConstraints,
+    ) -> Result<Self> {
+        let states = state_constraints(constraints);
+        let known = |name: &str| {
+            solver
+                .mesh()
+                .control_surface_names()
+                .iter()
+                .any(|candidate| candidate == name)
+        };
+        let mut result = Self {
+            controls: constraints
+                .controls
+                .iter()
+                .map(|(name, _)| known(name).then(Coefficients::default))
+                .collect(),
+            ..Self::default()
+        };
+        let mut outputs: Vec<AeroOutput> = Vec::new();
+        for kind in states
+            .iter()
+            .chain(
+                constraints
+                    .controls
+                    .iter()
+                    .map(|(_, constraint)| constraint),
+            )
+            .filter(|constraint| active(**constraint))
+            .filter_map(|constraint| output_of(constraint.kind))
+        {
+            if !outputs.contains(&kind) {
+                outputs.push(kind);
+            }
+        }
+        if outputs.is_empty() {
+            return Ok(result);
+        }
+        let mesh = solver.mesh();
+        let solution = solver.solution();
+        let reference = solver.reference_quantities();
+        let n = mesh.vortex_count();
+        let mut seeds = MatX::zeros(n, outputs.len());
+        for (column, output) in outputs.iter().enumerate() {
+            seeds.set_column(
+                column,
+                &force_circulation_gradient(solver, condition, *output),
+            );
+        }
+        let adjoints = AdjointSolver::new(solver)?.solve_batched(&seeds)?;
+
+        // Freestream sensitivities of the boundary-condition residual.
+        let (sin_alpha, cos_alpha) = condition.alpha.sin_cos();
+        let (sin_beta, cos_beta) = condition.beta.sin_cos();
+        let onset = |velocity: Vec3| {
+            VecX::from_fn(n, |row, _| {
+                if mesh.vortices()[row].affected_by_freestream {
+                    -solver.linearized_normals()[row].dot(&velocity)
+                } else {
+                    0.0
+                }
+            })
+        };
+        let explicit_alpha = active(states[0]).then(|| {
+            (
+                force_alpha_gradient(mesh, solution, condition, reference),
+                onset(Vec3::new(-sin_alpha * cos_beta, 0.0, cos_alpha * cos_beta)),
+            )
+        });
+        let explicit_beta = active(states[1]).then(|| {
+            (
+                force_beta_gradient(mesh, solution, condition, reference),
+                onset(Vec3::new(
+                    -cos_alpha * sin_beta,
+                    cos_beta,
+                    -sin_alpha * sin_beta,
+                )),
+            )
+        });
+        let rate_circulations = [
+            &solution.circulation_per_p,
+            &solution.circulation_per_q,
+            &solution.circulation_per_r,
+        ];
+        let control_residuals = constraints
+            .controls
+            .iter()
+            .zip(&result.controls)
+            .map(|((name, constraint), known)| {
+                if active(*constraint) && known.is_some() {
+                    solver
+                        .control_residual_derivative(condition, name)
+                        .map(Some)
+                } else {
+                    Ok(None)
+                }
+            })
+            .collect::<Result<Vec<_>>>()?;
+
+        for (column, output) in outputs.iter().copied().enumerate() {
+            let seed = seeds.column(column);
+            let adjoint = adjoints.column(column);
+            let index = explicit_index(output);
+            let mut values = [0.0; 5];
+            if let Some((explicit, rhs)) = &explicit_alpha {
+                values[0] = explicit[index] + adjoint.dot(rhs);
+            }
+            if let Some((explicit, rhs)) = &explicit_beta {
+                values[1] = explicit[index] + adjoint.dot(rhs);
+            }
+            for (slot, circulation) in rate_circulations.iter().enumerate() {
+                if active(states[slot + 2]) {
+                    values[slot + 2] = seed.dot(*circulation);
+                }
+            }
+            for (state, value) in result.states.iter_mut().zip(values) {
+                if let Some(entry) = select_mut(state, output) {
+                    *entry = value;
+                }
+            }
+            for (control, rhs) in result.controls.iter_mut().zip(&control_residuals) {
+                if let (Some(control), Some(rhs)) = (control.as_mut(), rhs)
+                    && let Some(entry) = select_mut(control, output)
+                {
+                    *entry = adjoint.dot(rhs);
+                }
+            }
+        }
+        Ok(result)
+    }
+}
+
+fn state_constraints(constraints: &TrimConstraints) -> [VariableConstraint; 5] {
     [
         constraints.alpha,
         constraints.beta,
         constraints.roll_rate,
         constraints.pitch_rate,
         constraints.yaw_rate,
-    ][..target]
-        .iter()
-        .filter(|constraint| active(**constraint))
-        .count()
+    ]
 }
 
-fn build_system(
+/// Active equations in row order, each with the coefficient it drives (`None`
+/// for a fixed-value equation). Row `k` belongs to active variable `k`.
+fn equations(constraints: &TrimConstraints) -> Vec<(VariableConstraint, Option<AeroOutput>)> {
+    state_constraints(constraints)
+        .into_iter()
+        .chain(
+            constraints
+                .controls
+                .iter()
+                .map(|(_, constraint)| *constraint),
+        )
+        .filter(|constraint| active(*constraint))
+        .map(|constraint| (constraint, output_of(constraint.kind)))
+        .collect()
+}
+
+/// Trim residual `r`, one entry per active equation.
+fn trim_residual(
     aero: &AerodynamicResults,
-    derivatives: &StabilityDerivatives,
     state: &OperatingVariables,
     constraints: &TrimConstraints,
-) -> (MatX, VecX) {
-    let count = constraints.constraint_count();
-    let mut jacobian = MatX::zeros(count, count);
-    let mut residual = VecX::zeros(count);
-    let mut row = 0;
-    let base = [
-        constraints.alpha,
-        constraints.beta,
-        constraints.roll_rate,
-        constraints.pitch_rate,
-        constraints.yaw_rate,
-    ];
-    let state_values = [
+) -> VecX {
+    let deflection = |name: &str| {
+        state
+            .control_deflections
+            .iter()
+            .find(|(candidate, _)| candidate == name)
+            .map_or(0.0, |(_, value)| *value)
+    };
+    let values = [
         state.alpha,
         state.beta,
         state.roll_rate,
         state.pitch_rate,
         state.yaw_rate,
-    ];
-    for (slot, constraint) in base.iter().copied().enumerate() {
-        if !active(constraint) {
-            continue;
-        }
-        match constraint.kind {
-            ConstraintType::Fixed => {
-                residual[row] = state_values[slot] - constraint.target;
-                jacobian[(row, variable_index(constraints, slot))] = 1.0;
-            }
-            ConstraintType::Lift => {
-                residual[row] = aero.coefficients.lift - constraint.target;
-                coefficient_row(
-                    &mut jacobian,
-                    row,
-                    constraints,
-                    derivatives,
-                    |coefficient| coefficient.lift,
-                );
-            }
-            ConstraintType::Side => {
-                residual[row] = aero.coefficients.side - constraint.target;
-                coefficient_row(
-                    &mut jacobian,
-                    row,
-                    constraints,
-                    derivatives,
-                    |coefficient| coefficient.side,
-                );
-            }
-            ConstraintType::RollMoment => {
-                residual[row] = aero.coefficients.roll - constraint.target;
-                coefficient_row(
-                    &mut jacobian,
-                    row,
-                    constraints,
-                    derivatives,
-                    |coefficient| coefficient.roll,
-                );
-            }
-            ConstraintType::PitchMoment => {
-                residual[row] = aero.coefficients.pitch - constraint.target;
-                coefficient_row(
-                    &mut jacobian,
-                    row,
-                    constraints,
-                    derivatives,
-                    |coefficient| coefficient.pitch,
-                );
-            }
-            ConstraintType::YawMoment => {
-                residual[row] = aero.coefficients.yaw - constraint.target;
-                coefficient_row(
-                    &mut jacobian,
-                    row,
-                    constraints,
-                    derivatives,
-                    |coefficient| coefficient.yaw,
-                );
-            }
-            ConstraintType::Free => {}
-        }
-        row += 1;
-    }
-    let control_offset = base
-        .iter()
-        .filter(|constraint| active(**constraint))
-        .count();
-    for (control_slot, (name, constraint)) in constraints.controls.iter().enumerate() {
-        if !active(*constraint) {
-            continue;
-        }
-        let column = control_offset
-            + constraints.controls[..control_slot]
-                .iter()
-                .filter(|(_, prior)| active(*prior))
-                .count();
-        let deflection = state
-            .control_deflections
+    ]
+    .into_iter()
+    .zip(state_constraints(constraints))
+    .chain(
+        constraints
+            .controls
             .iter()
-            .find(|(candidate, _)| candidate == name)
-            .map_or(0.0, |(_, value)| *value);
-        match constraint.kind {
-            ConstraintType::Fixed => {
-                residual[row] = deflection - constraint.target;
-                jacobian[(row, column)] = 1.0;
-            }
-            kind => {
-                let output = match kind {
-                    ConstraintType::Lift => aero.coefficients.lift,
-                    ConstraintType::Side => aero.coefficients.side,
-                    ConstraintType::RollMoment => aero.coefficients.roll,
-                    ConstraintType::PitchMoment => aero.coefficients.pitch,
-                    ConstraintType::YawMoment => aero.coefficients.yaw,
-                    ConstraintType::Free | ConstraintType::Fixed => 0.0,
-                };
-                residual[row] = output - constraint.target;
-                let derivative = derivatives
-                    .control_derivatives
-                    .iter()
-                    .find(|control| control.name == *name)
-                    .map_or(1.0, |control| match kind {
-                        ConstraintType::Lift => control.coefficients.lift,
-                        ConstraintType::Side => control.coefficients.side,
-                        ConstraintType::RollMoment => control.coefficients.roll,
-                        ConstraintType::PitchMoment => control.coefficients.pitch,
-                        ConstraintType::YawMoment => control.coefficients.yaw,
-                        ConstraintType::Free | ConstraintType::Fixed => 1.0,
-                    });
-                jacobian[(row, column)] = derivative;
-            }
-        }
-        row += 1;
-    }
-    (jacobian, residual)
+            .map(|(name, constraint)| (deflection(name), *constraint)),
+    )
+    .filter(|(_, constraint)| active(*constraint))
+    .map(|(value, _)| value);
+    VecX::from_iterator(
+        constraints.constraint_count(),
+        equations(constraints)
+            .into_iter()
+            .zip(values)
+            .map(|((constraint, output), value)| {
+                output.map_or(value, |output| select(aero.coefficients, output)) - constraint.target
+            }),
+    )
 }
 
-fn coefficient_row(
-    jacobian: &mut MatX,
-    row: usize,
-    constraints: &TrimConstraints,
-    derivatives: &StabilityDerivatives,
-    select: impl Fn(crate::aero::Coefficients) -> Scalar,
-) {
-    let values = [
-        select(derivatives.by_alpha),
-        select(derivatives.by_beta),
-        select(derivatives.by_roll_rate),
-        select(derivatives.by_pitch_rate),
-        select(derivatives.by_yaw_rate),
-    ];
-    let base = [
-        constraints.alpha,
-        constraints.beta,
-        constraints.roll_rate,
-        constraints.pitch_rate,
-        constraints.yaw_rate,
-    ];
-    for (slot, constraint) in base.iter().enumerate() {
-        if active(*constraint) {
-            jacobian[(row, variable_index(constraints, slot))] = values[slot];
+/// Newton Jacobian `dr/dx` over the active variables.
+///
+/// Every coefficient equation is differentiated with respect to every active
+/// variable, state and control alike. Assembling each equation only against
+/// variables of its own kind left out the control column of a state equation
+/// and the state columns of a control equation; for a lift-and-elevator trim
+/// that dropped `dCL/d(elevator)` and `dCm/d(alpha)` and turned Newton into a
+/// fixed-point iteration contracting by about 0.3 per step.
+fn trim_jacobian(sensitivities: &TrimSensitivities, constraints: &TrimConstraints) -> MatX {
+    // Derivatives of every coefficient by each active variable, in column
+    // order; `None` marks a control the lattice does not declare.
+    let columns: Vec<Option<Coefficients>> = state_constraints(constraints)
+        .into_iter()
+        .zip(sensitivities.states.iter().copied().map(Some))
+        .chain(
+            constraints
+                .controls
+                .iter()
+                .map(|(_, constraint)| *constraint)
+                .zip(sensitivities.controls.iter().copied()),
+        )
+        .filter(|(constraint, _)| active(*constraint))
+        .map(|(_, derivative)| derivative)
+        .collect();
+    let count = columns.len();
+    let mut jacobian = MatX::zeros(count, count);
+    // Equation `k` belongs to variable `k`, so its own column is the diagonal.
+    for (row, (_, output)) in equations(constraints).into_iter().enumerate() {
+        match output {
+            Some(output) => {
+                for (column, derivative) in columns.iter().enumerate() {
+                    if let Some(derivative) = derivative {
+                        jacobian[(row, column)] = select(*derivative, output);
+                    }
+                }
+                if columns[row].is_none() {
+                    // A control the lattice does not declare has no
+                    // derivative. The unit placeholder lets the step be taken
+                    // so the next aerodynamic solve reports the unknown name.
+                    jacobian[(row, row)] = 1.0;
+                }
+            }
+            None => jacobian[(row, row)] = 1.0,
         }
     }
+    jacobian
 }
 
 fn update_state(state: &mut OperatingVariables, delta: &VecX, constraints: &TrimConstraints) {

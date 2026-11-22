@@ -61,10 +61,7 @@ impl StabilityDerivativeCalculator {
         solver: &mut VortexLatticeSolver,
         condition: &FlightCondition,
     ) -> Result<StabilityDerivatives> {
-        if !solver.are_unit_responses_valid() {
-            solver.solve_unit_responses()?;
-        }
-        solver.solve(condition)?;
+        ensure_solved(solver, condition)?;
         let solution = solver.solution();
         let mesh = solver.mesh();
         let unit = [
@@ -179,10 +176,7 @@ impl StabilityDerivativeCalculator {
         solver: &mut VortexLatticeSolver,
         condition: &FlightCondition,
     ) -> Result<BodyAxisDerivatives> {
-        if !solver.are_unit_responses_valid() {
-            solver.solve_unit_responses()?;
-        }
-        solver.solve(condition)?;
+        ensure_solved(solver, condition)?;
         let solution = solver.solution();
         let mesh = solver.mesh();
         let unit = [
@@ -247,6 +241,29 @@ impl StabilityDerivativeCalculator {
             by_yaw_rate_moment: unit[5].body_moment,
         })
     }
+}
+
+/// Solve `condition` unless `solver` already holds a complete solution of it.
+///
+/// Solving the same condition again reproduces the stored solution bit for
+/// bit, so a caller that has just solved — the trim loop does, every
+/// iteration — need not pay for the right-hand side, the six unit responses
+/// and the induced-velocity product a second time. A solution is reused only
+/// when the unit responses it was built from are still current (moving the
+/// reference point or rebuilding the AIC invalidates them without discarding
+/// the solution) and it carries the per-unit circulations read below, which
+/// the selective solve path does not produce.
+fn ensure_solved(solver: &mut VortexLatticeSolver, condition: &FlightCondition) -> Result<()> {
+    let current = solver.are_unit_responses_valid()
+        && solver.check_solved_condition(condition).is_ok()
+        && solver.solution().circulation_per_u.len() == solver.mesh().vortex_count();
+    if !current {
+        if !solver.are_unit_responses_valid() {
+            solver.solve_unit_responses()?;
+        }
+        solver.solve(condition)?;
+    }
+    Ok(())
 }
 
 fn combine_vec(unit: &[AerodynamicResults; 6], weights: [Scalar; 3], moment: bool) -> Vec3 {
