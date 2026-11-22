@@ -24,7 +24,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Philote `VlmDiscipline` options `analysis_outputs`, `analysis_gradients` and
   `analysis_mode` expose selective requests and half-wing symmetry. The discipline
   declares the selected outputs and derivative pairs and reuses the primal
-  analysis when computing partials at the same mesh and flight condition.
+  analysis when computing partials at the same mesh and flight condition. These
+  options select their own outputs and partials and cannot be combined with the
+  `trim`, `outputs` or `fixed_inputs` options.
 - The public release statement (case number AFRL-2026-2198) and the
   accompanying DoD disclaimers, in the README and in the header of every Rust
   and Python source file. Source headers now also carry the GPL notice, which
@@ -34,7 +36,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   and footer.
 - `GradientCalculator::mesh_node_gradients_from` and
   `flight_condition_gradients_from` reuse a solver's existing solution. The
-  legacy Philote derivative path uses them to avoid repeating the primal solve.
+  Philote derivative path reuses its solved state the same way.
 - `VortexLatticeSolver::control_velocity_matrix` exposes the velocity influence
   at boundary-condition control points, separately from the bound-force operator
   returned by `velocity_matrix`.
@@ -43,6 +45,37 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   Cases include cosine and negative-sine spacing, nonuniform CLAF, wing–tail
   interference, and 40-/680-panel symmetric uCRM wings. Matching section cases
   agree within 2e-8 for coefficients/circulation and 2e-7 for alpha derivatives.
+- Optional internal trim in the explicit Philote VLM discipline and a
+  transport-independent `MeshTrimSolver`: selected operating-variable outputs,
+  dimensional force/moment balances or coefficient targets, linked controls,
+  scaled damped Newton with bounds and conditioning diagnostics, and exact
+  direct/adjoint sensitivities through the converged trim solution.
+- A runnable SciPy sizing optimization through explicit Philote RPCs, with
+  analytical gradients through internal trim, independent gradient checks,
+  and a recorded optimization maintaining Fz/My equilibrium at every evaluation.
+- Dimensional Philote body resultants `Fx,Fy,Fz,Mx,My,Mz`, including analytical
+  scaling and frame-conversion partials; native and explicit-client trim examples.
+- `MeshControlSurface` definitions on structured meshes: material hinge
+  coordinates, span intervals, leading/trailing-edge coverage, gains and mirrored
+  signs. Hinges follow the incoming deformed mesh; commands rotate normals.
+- Analytical `GradientCalculator::compute_control_gradients` for coefficients
+  and induced drag, and `StripLoadAdjoint::control_cotangents` for distributed
+  force/moment functionals. External applications own coupled solves and can
+  supply commands directly or use internal trim.
+- Philote `controls` metadata and per-command `control_<name>` inputs with exact
+  partials, cache invalidation and `fixed_inputs` support; native usage example
+  and independent re-solve checks for controls and deformed geometry.
+- Philote `VlmDiscipline` declares a `consistent_forces` option for clients
+  written against the unreleased opt-in force convention.
+  Forces always use the bound-center convention described under Fixed, so the
+  option accepts only `true`, which is the default and changes nothing; `false`
+  is rejected because the legacy v0.2 force convention was removed. There is no
+  corresponding `MeshInput` field.
+- Batched strip-adjoint calculation of the six mesh-node coefficient gradients
+  when Trefftz induced drag is not requested. Philote uses this path to avoid
+  one aerodynamic geometry sweep per mesh node.
+- Exact single-horseshoe force/moment and mesh-gradient regression checks for
+  the bound-center force convention.
 
 ### Changed
 
@@ -72,6 +105,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   geometry argument, including any subtraction for motion of the moment
   reference point. Callers that supplied control-point directions must update
   them to match the corrected moment arms.
+- Geometry and strip-load adjoints now support deflected control normals,
+  including hinge-direction changes with mesh deformation and section-control
+  coverage changes. The reverse geometry sweep differentiates the rotated
+  normals and pulls their cotangents back onto the base normals, hinge axes and
+  gains. Symmetry-plane and viscous geometry restrictions remain.
+- Control derivative calls reject stale solved states and unknown commands;
+  solves reject unknown control names. Fixed-control angle/rate updates reuse
+  the deflected factorization.
+- The `parallel` feature also threads the strip-load mesh-adjoint pairwise
+  geometry sweep at 128 or more panels. Sixteen fixed blocks and an ordered
+  reduction preserve reproducibility across thread counts and serial/parallel
+  builds, with bounded O(N * outputs) scratch storage. Smaller meshes retain
+  serial accumulation.
+- Philote VLM function and derivative requests reuse one solved state, keyed by
+  all input arrays and invalidated when options change. Node and flight
+  derivatives reuse that factorization instead of rebuilding separate solvers.
+- Optional Philote `outputs` and `fixed_inputs` selections restrict returned
+  coefficients and declared partials. Defaults retain the complete interface.
+  Alpha-only requests bypass unused Mach/rate/reference derivative calculations.
 
 ### Fixed
 
@@ -96,6 +148,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   remain, trim must reach its requested lift, and mesh/section gradients are
   checked against re-solves. The finite-wing lift-slope test uses the corrected
   Helmbold formula.
+
 
 ## [0.5.0] - 2026-09-05
 

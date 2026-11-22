@@ -2372,6 +2372,7 @@ dependencies = [
  "tempfile",
  "thiserror 2.0.19",
  "tokio",
+ "tokio-stream",
  "tonic",
  "vtkio",
 ]

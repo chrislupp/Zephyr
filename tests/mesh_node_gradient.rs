@@ -376,3 +376,160 @@ fn node_gradients_agree_with_resolves_at_mach_0_6() {
     }
     assert!(worst < 1.0e-5, "worst relative error {worst}");
 }
+
+#[test]
+fn consistent_single_horseshoe_exact_force_and_moment() {
+    let input = mesh_input(1, 1, 1.0, 10.0, false);
+    let condition = FlightCondition {
+        alpha: 0.05,
+        ..FlightCondition::default()
+    };
+    let mut solver = VortexLatticeSolver::new();
+    solver.set_mesh(&input).unwrap();
+    let solution = solver.solve(&condition).unwrap();
+    let result = ForceCalculator::new().compute_with_references(
+        &input.reference,
+        solver.mesh(),
+        &solution,
+        &condition,
+    );
+    let s: f64 = 5.0;
+    let d: f64 = 0.5;
+    let w = (1.0 + (d * d + s * s).sqrt() / d) / (2.0 * std::f64::consts::PI * s);
+    let gamma = condition.alpha.sin() / w;
+    let vz = -gamma / (2.0 * std::f64::consts::PI * s);
+    let fx = -2.0 * gamma * (condition.alpha.sin() + vz);
+    let fz = 2.0 * gamma * condition.alpha.cos();
+    assert!(
+        (result.coefficients.lift - (fz * condition.alpha.cos() - fx * condition.alpha.sin()))
+            .abs()
+            < 1e-10
+    );
+    assert!(
+        (result.coefficients.drag - (fx * condition.alpha.cos() + fz * condition.alpha.sin()))
+            .abs()
+            < 1e-10
+    );
+    assert!(result.coefficients.pitch.abs() < 1e-12);
+}
+
+/// The relative-error form of [`validate`] that the oracle check below was
+/// written against: step `1e-6`, agreement within `1e-4 * (|d| + 1e-6)`, and
+/// the worst error relative to `max(|d|, 1e-6)`.
+fn validate_relative(input: &MeshInput, nx: usize, ny: usize) -> (f64, f64) {
+    let mut calculator = GradientCalculator::new();
+    calculator.set_mesh(input).unwrap();
+    let gradients = calculator
+        .compute_mesh_node_gradients(&condition())
+        .unwrap();
+    assert_eq!(gradients.len(), 1);
+    let lift = &gradients[0].lift;
+    let drag = &gradients[0].drag;
+
+    let step = 1.0e-6;
+    let node_count = (nx + 1) * (ny + 1);
+    let mut checked = 0usize;
+    let mut agreed = 0usize;
+    let mut worst = 0.0f64;
+
+    for node in 0..node_count {
+        for direction in 0..3 {
+            let mut plus = input.clone();
+            let mut minus = input.clone();
+            plus.surfaces[0].nodes[node][direction] += step;
+            minus.surfaces[0].nodes[node][direction] -= step;
+            let (lift_plus, drag_plus) = coefficients(&plus);
+            let (lift_minus, drag_minus) = coefficients(&minus);
+
+            for (exact, forward, backward) in [
+                (lift.nodes[node][direction], lift_plus, lift_minus),
+                (drag.nodes[node][direction], drag_plus, drag_minus),
+            ] {
+                let difference = (forward - backward) / (2.0 * step);
+                let tolerance = 1.0e-4 * (difference.abs() + 1.0e-6);
+                let error = (exact - difference).abs();
+                checked += 1;
+                if error <= tolerance {
+                    agreed += 1;
+                }
+                let scale = difference.abs().max(1.0e-6);
+                worst = worst.max(error / scale);
+            }
+        }
+    }
+    (agreed as f64 / checked as f64, worst)
+}
+
+#[test]
+fn consistent_node_gradients_match_independent_oracle() {
+    let input = mesh_input(2, 3, 1.0, 3.0, true);
+    let (fraction, worst) = validate_relative(&input, 2, 3);
+    assert_eq!(fraction, 1.0);
+    assert!(worst < 0.02, "{worst}");
+}
+
+#[test]
+fn consistent_batched_gradients_match_geometry_adjoints() {
+    use zephyr_vlm::gradients::OutputSelection;
+    let input = mesh_input(2, 3, 1.0, 3.0, true);
+    let mut calculator = GradientCalculator::new();
+    calculator.set_mesh(&input).unwrap();
+    let generic = calculator
+        .compute_mesh_node_gradients(&condition())
+        .unwrap();
+    calculator.set_output_selection(OutputSelection {
+        induced_drag: false,
+        ..OutputSelection::all()
+    });
+    let batched = calculator
+        .compute_mesh_node_gradients(&condition())
+        .unwrap();
+    for (a, b) in [
+        (&generic[0].lift, &batched[0].lift),
+        (&generic[0].drag, &batched[0].drag),
+        (&generic[0].side, &batched[0].side),
+        (&generic[0].roll, &batched[0].roll),
+        (&generic[0].pitch, &batched[0].pitch),
+        (&generic[0].yaw, &batched[0].yaw),
+    ] {
+        for (x, y) in a.nodes.iter().zip(&b.nodes) {
+            assert!((x - y).norm() < 1e-11, "{x:?} != {y:?}");
+        }
+    }
+}
+
+#[test]
+fn consistent_mach_gradient_matches_independent_resolves() {
+    let input = mesh_input(2, 3, 1.0, 3.0, true);
+    let flight = FlightCondition {
+        mach: 0.45,
+        ..condition()
+    };
+    let mut calculator = GradientCalculator::new();
+    calculator.set_mesh(&input).unwrap();
+    let gradient = calculator
+        .compute_flight_condition_gradients(&flight)
+        .unwrap();
+    let evaluate = |mach| {
+        let flight = FlightCondition {
+            mach,
+            ..flight.clone()
+        };
+        let mut solver = VortexLatticeSolver::new();
+        solver.set_mesh(&input).unwrap();
+        let solution = solver.solve(&flight).unwrap();
+        ForceCalculator::new()
+            .compute_with_references(&input.reference, solver.mesh(), &solution, &flight)
+            .coefficients
+    };
+    let h = 1e-6;
+    let plus = evaluate(flight.mach + h);
+    let minus = evaluate(flight.mach - h);
+    for (analytic, p, m) in [
+        (gradient.by_mach.coefficients.lift, plus.lift, minus.lift),
+        (gradient.by_mach.coefficients.drag, plus.drag, minus.drag),
+        (gradient.by_mach.coefficients.pitch, plus.pitch, minus.pitch),
+    ] {
+        assert!((analytic - (p - m) / (2.0 * h)).abs() < 1e-8);
+    }
+}

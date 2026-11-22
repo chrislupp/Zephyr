@@ -217,9 +217,12 @@ fn geometry_adjoints_reject_unsupported_solutions() {
             .is_err()
     );
 
+    // Deflected control normals were once rejected here. The geometry adjoint
+    // now differentiates through them (checked against re-solves in
+    // tests/mesh_controls.rs), so the deflected solve must succeed.
     let mut controlled = GradientCalculator::new();
     controlled.set_aircraft(&controlled_wing());
-    assert!(controlled.compute_geometry_gradients(&deflected()).is_err());
+    assert!(controlled.compute_geometry_gradients(&deflected()).is_ok());
 
     let mut symmetric = VortexLatticeSolver::new();
     symmetric.set_mesh(&mesh).unwrap();

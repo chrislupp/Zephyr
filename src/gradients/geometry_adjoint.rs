@@ -55,6 +55,8 @@ pub(crate) struct LatticeDirections {
     pub control_point: Vec<Vec3>,
     pub bound_center: Vec<Vec3>,
     pub normal: Vec<Vec3>,
+    pub control_axes: Vec<Vec<Vec3>>,
+    pub control_gains: Vec<Vec<Scalar>>,
     pub local_chord: Vec<Scalar>,
     pub strip_chord: Vec<Scalar>,
 }
@@ -67,6 +69,16 @@ impl LatticeDirections {
             control_point: vec![Vec3::zeros(); mesh.vortex_count()],
             bound_center: vec![Vec3::zeros(); mesh.vortex_count()],
             normal: vec![Vec3::zeros(); mesh.vortex_count()],
+            control_axes: mesh
+                .control_influences()
+                .iter()
+                .map(|v| vec![Vec3::zeros(); v.len()])
+                .collect(),
+            control_gains: mesh
+                .control_influences()
+                .iter()
+                .map(|v| vec![0.0; v.len()])
+                .collect(),
             local_chord: vec![0.0; mesh.vortex_count()],
             strip_chord: vec![0.0; mesh.strip_count()],
         }
@@ -84,6 +96,10 @@ pub(crate) struct LatticeCotangents {
     pub control_point: Vec<Vec3>,
     pub bound_center: Vec<Vec3>,
     pub normal: Vec<Vec3>,
+    /// With respect to each control influence's normalized hinge axis.
+    pub control_axes: Vec<Vec<Vec3>>,
+    /// With respect to each control influence's gain.
+    pub control_gains: Vec<Vec<Scalar>>,
     pub local_chord: Vec<Scalar>,
     pub strip_chord: Vec<Scalar>,
 }
@@ -96,6 +112,16 @@ impl LatticeCotangents {
             control_point: vec![Vec3::zeros(); mesh.vortex_count()],
             bound_center: vec![Vec3::zeros(); mesh.vortex_count()],
             normal: vec![Vec3::zeros(); mesh.vortex_count()],
+            control_axes: mesh
+                .control_influences()
+                .iter()
+                .map(|v| vec![Vec3::zeros(); v.len()])
+                .collect(),
+            control_gains: mesh
+                .control_influences()
+                .iter()
+                .map(|v| vec![0.0; v.len()])
+                .collect(),
             local_chord: vec![0.0; mesh.vortex_count()],
             strip_chord: vec![0.0; mesh.strip_count()],
         }
@@ -111,6 +137,12 @@ impl LatticeCotangents {
             .chain(self.control_point.iter().zip(&direction.control_point))
             .chain(self.bound_center.iter().zip(&direction.bound_center))
             .chain(self.normal.iter().zip(&direction.normal))
+            .chain(
+                self.control_axes
+                    .iter()
+                    .zip(&direction.control_axes)
+                    .flat_map(|(cotangents, tangents)| cotangents.iter().zip(tangents)),
+            )
             .map(|(cotangent, tangent)| cotangent.dot(tangent))
             .sum::<Scalar>();
         let scalars = self
@@ -118,6 +150,12 @@ impl LatticeCotangents {
             .iter()
             .zip(&direction.local_chord)
             .chain(self.strip_chord.iter().zip(&direction.strip_chord))
+            .chain(
+                self.control_gains
+                    .iter()
+                    .zip(&direction.control_gains)
+                    .flat_map(|(cotangents, tangents)| cotangents.iter().zip(tangents)),
+            )
             .map(|(cotangent, tangent)| cotangent * tangent)
             .sum::<Scalar>();
         vectors + scalars
@@ -139,11 +177,7 @@ impl<'a> GeometryAdjointContext<'a> {
         if !solver.solution().is_valid {
             return Err(ZephyrError::InvalidSolution);
         }
-        if !condition.control_deflections.is_empty() {
-            return Err(ZephyrError::InvalidFlightCondition(
-                "geometry adjoints with deflected control normals are not supported".into(),
-            ));
-        }
+        solver.check_solved_condition(condition)?;
         if solver.symmetry().y_symmetry != SymmetryType::None
             || solver.symmetry().z_symmetry != SymmetryType::None
         {
@@ -241,6 +275,16 @@ impl<'a> GeometryAdjointContext<'a> {
             || direction.normal.len() != mesh.vortex_count()
             || direction.local_chord.len() != mesh.vortex_count()
             || direction.strip_chord.len() != mesh.strip_count()
+            || direction.control_axes.len() != mesh.vortex_count()
+            || direction.control_gains.len() != mesh.vortex_count()
+            || direction
+                .control_axes
+                .iter()
+                .zip(&direction.control_gains)
+                .zip(mesh.control_influences())
+                .any(|((axes, gains), influences)| {
+                    axes.len() != influences.len() || gains.len() != influences.len()
+                })
         {
             return Err(ZephyrError::InvalidGeometry(
                 "lattice direction dimensions do not match the solved mesh".into(),
@@ -292,6 +336,7 @@ fn geometry_cotangents(
     );
     let sweep = SweepInputs {
         mesh,
+        normals: solver.linearized_normals(),
         solution,
         adjoints,
         velocity_influence,
@@ -315,6 +360,26 @@ fn geometry_cotangents(
         .collect();
     for chunk in drive_row_chunks(&ranges, &sweep) {
         chunk.accumulate_into(&mut result);
+    }
+
+    // The sweep differentiates against the rotated normals the system was
+    // solved with. Pull each one back through its control rotations onto the
+    // base panel normal, the hinge axes and the gains. Without deflections the
+    // rotations are the identity and the cotangents are left untouched.
+    if !condition.control_deflections.is_empty() {
+        for cotangent in &mut result {
+            for (index, vortex) in mesh.vortices().iter().enumerate() {
+                let (normal, axes, gains) = crate::solver::control::normal_vjp_with_gains(
+                    vortex.normal_at_control_point,
+                    cotangent.normal[index],
+                    &mesh.control_influences()[index],
+                    condition,
+                );
+                cotangent.normal[index] = normal;
+                cotangent.control_axes[index] = axes;
+                cotangent.control_gains[index] = gains;
+            }
+        }
     }
 
     for (index, output) in outputs.iter().enumerate() {
@@ -359,6 +424,8 @@ const PARALLEL_MIN_PANELS: usize = 128;
 /// Everything the row sweep reads. Shared immutably across chunks.
 struct SweepInputs<'a> {
     mesh: &'a VortexLattice,
+    /// Normals of the solved system, including control rotations.
+    normals: &'a [Vec3],
     solution: &'a SolutionState,
     adjoints: &'a MatX,
     velocity_influence: &'a MatX,
@@ -428,7 +495,7 @@ fn sweep_row_range(range: (usize, usize), sweep: &SweepInputs<'_>) -> SweepChunk
                 + sweep
                     .omega
                     .cross(&(target.control_point - sweep.reference_point));
-            let control_point_seed = -target.normal_at_control_point.cross(&sweep.omega);
+            let control_point_seed = -sweep.normals[row].cross(&sweep.omega);
             for index in 0..sweep.outputs {
                 let psi = sweep.adjoints[(row, index)];
                 chunk.control_point[index][local] += psi * control_point_seed;
@@ -436,7 +503,7 @@ fn sweep_row_range(range: (usize, usize), sweep: &SweepInputs<'_>) -> SweepChunk
             }
         }
 
-        let normal = target.normal_at_control_point;
+        let normal = sweep.normals[row];
         for (column, source) in sweep.mesh.vortices().iter().enumerate() {
             let core = core_radius(sweep.mesh, column, target.component_index);
             let gamma = sweep.solution.circulation[column];
@@ -893,6 +960,7 @@ pub(crate) fn scatter_mesh_node_cotangents(
     }
     let mut control_point = cotangent.control_point.clone();
     let mut normal = cotangent.normal.clone();
+    let mut control_axes = cotangent.control_axes.clone();
     let mut local_chord = cotangent.local_chord.clone();
     let mut strip_chord = cotangent.strip_chord.clone();
     if surface.y_duplicated {
@@ -917,6 +985,10 @@ pub(crate) fn scatter_mesh_node_cotangents(
                 let mirrored_normal = normal[mirrored];
                 control_point[original] += reflected_direction(mirrored_control);
                 normal[original] += reflected_direction(mirrored_normal);
+                let mirrored_axes = control_axes[mirrored].clone();
+                for (axis, mirrored_axis) in control_axes[original].iter_mut().zip(mirrored_axes) {
+                    *axis += reflected_direction(mirrored_axis);
+                }
                 local_chord[original] += local_chord[mirrored];
             }
         }
@@ -981,6 +1053,25 @@ pub(crate) fn scatter_mesh_node_cotangents(
             nodes[i00] -= by_diagonal_a;
             nodes[i10] += by_diagonal_b;
             nodes[i01] -= by_diagonal_b;
+
+            // Hinges follow the incoming deformed mesh. Pull the normalized
+            // axis cotangent back onto the material nodes that place it.
+            let mut influence = 0;
+            for control in &surface.controls {
+                if control.panel_gain(chord_offset, strip_offset).abs() <= EPSILON {
+                    continue;
+                }
+                let seed = normalized_direction(
+                    &control.hinge_vector(surface, strip_offset),
+                    &control_axes[vortex_index][influence],
+                );
+                for (j, sign) in [(strip_offset, -1.0), (strip_offset + 1, 1.0)] {
+                    for (k, weight) in control.weights(surface, j) {
+                        nodes[k] += sign * weight * seed;
+                    }
+                }
+                influence += 1;
+            }
         }
     }
     Ok(nodes)

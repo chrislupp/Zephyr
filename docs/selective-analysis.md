@@ -163,8 +163,10 @@ only selected partial pairs. Because Philote partials refer to registered output
 variables, outputs named by `analysis_gradients` are also registered and returned
 by the discipline's `compute`; the core Rust API allows gradient-only results.
 
-Without analysis options, the existing six-output/full-partials discipline is
-unchanged. The selective discipline caches its `Analysis` across `compute` and
+The analysis options cannot be combined with the discipline's `trim`, `outputs`
+or `fixed_inputs` options; setup rejects that combination. Without analysis
+options, the discipline keeps its ordinary six-output/full-partials behavior,
+including those options. The selective discipline caches its `Analysis` across `compute` and
 `compute_partials` calls on identical inputs.
 
 ## Validation
