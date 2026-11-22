@@ -94,6 +94,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   symmetric factorization agrees with the full LU to rounding. Neither has an
   effect in half-wing mode. `set_mesh`/`set_aircraft` keep both settings.
 
+- Philote `VlmDiscipline` options `mirror_reuse` and `symmetric_factorization`
+  (booleans, both off by default) apply the solver's mirror reuse and
+  block-symmetric factorization to every solve the discipline makes: ordinary
+  function and partial evaluations, the internal trim iteration and its
+  sensitivities, and the selective `analysis_*` path. They combine with every
+  other option, clear the cached state when changed, and may be changed after
+  setup even with trim configured. Values that are not booleans are rejected.
+  `VlmDiscipline::symmetric_factorization_applies` reports whether the cached
+  solve used the half-size factorization. `MeshTrimSolver::solve_with_solver`
+  converges trim with a caller-configured solver, keeping its settings;
+  `MeshTrimSolver::solve` is unchanged.
+
 ### Changed
 
 - **Breaking:** the project is now named Zephyr. The package is `zephyr-vlm`

@@ -97,9 +97,37 @@ impl MeshTrimSolver {
         targets: &[f64],
         external: &[f64; 6],
     ) -> Result<MeshTrimSolution> {
+        self.solve_with_solver(
+            VortexLatticeSolver::new(),
+            mesh,
+            base,
+            problem,
+            targets,
+            external,
+        )
+    }
+
+    /// [`Self::solve`] with a caller-configured solver.
+    ///
+    /// The solver's geometry is replaced by `mesh`; its other settings are
+    /// kept, as [`VortexLatticeSolver::set_mesh`] keeps them. This is how the
+    /// opt-in [`VortexLatticeSolver::set_mirror_reuse`] and
+    /// [`VortexLatticeSolver::set_symmetric_factorization`] reach every solve
+    /// of the Newton iteration and the returned
+    /// [`MeshTrimSolution::solver`], whose factorization the trim
+    /// sensitivities reuse. [`Self::solve`] passes
+    /// [`VortexLatticeSolver::new`].
+    pub fn solve_with_solver(
+        &self,
+        mut solver: VortexLatticeSolver,
+        mesh: &MeshInput,
+        base: &FlightCondition,
+        problem: &MeshTrimProblem,
+        targets: &[f64],
+        external: &[f64; 6],
+    ) -> Result<MeshTrimSolution> {
         problem.validate(mesh)?;
         problem.residual(&[0.0; 12], targets, external)?;
-        let mut solver = VortexLatticeSolver::new();
         solver.set_mesh(mesh)?;
         let mut z = VecX::from_iterator(
             problem.variables.len(),

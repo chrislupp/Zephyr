@@ -45,8 +45,8 @@ use philote_mdo::{
 
 use super::aero_evaluation::SolvedState;
 use super::{
-    flat, invalid, option_tokens, option_usize, parse_bool, rejected, scalar, scalar_input,
-    sized_input,
+    flat, invalid, option_flag, option_tokens, option_usize, parse_bool, rejected, scalar,
+    scalar_input, sized_input,
 };
 use crate::aero::ForceCalculator;
 use crate::core::Vec3;
@@ -106,6 +106,53 @@ impl SurfaceOption {
 /// The six coefficient outputs, in the order the C++ discipline used.
 const OUTPUTS: [&str; 6] = ["CL", "CD", "CY", "Cl", "Cm", "Cn"];
 
+/// Options that change neither the registry nor the trim configuration, so
+/// they may still be set after setup when trim is configured.
+const RUNTIME_OPTIONS: [&str; 3] = [
+    "consistent_forces",
+    "mirror_reuse",
+    "symmetric_factorization",
+];
+
+/// The opt-in solver accelerations, applied to every solver and [`Analysis`]
+/// the discipline builds.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+struct SolverSettings {
+    mirror_reuse: bool,
+    symmetric_factorization: bool,
+}
+
+impl SolverSettings {
+    /// These settings with any present in `options` replacing them. Absent
+    /// options keep their current value, as `outputs` and `fixed_inputs` do.
+    fn updated(self, options: &HashMap<String, serde_json::Value>) -> Result<Self> {
+        let mut settings = self;
+        if let Some(value) = options.get("mirror_reuse") {
+            settings.mirror_reuse = option_flag(value, "mirror_reuse")?;
+        }
+        if let Some(value) = options.get("symmetric_factorization") {
+            settings.symmetric_factorization = option_flag(value, "symmetric_factorization")?;
+        }
+        Ok(settings)
+    }
+
+    /// An empty solver carrying these settings.
+    fn solver(self) -> VortexLatticeSolver {
+        let mut solver = VortexLatticeSolver::new();
+        solver.set_mirror_reuse(self.mirror_reuse);
+        solver.set_symmetric_factorization(self.symmetric_factorization);
+        solver
+    }
+
+    /// A selective analysis of `mesh` carrying these settings.
+    fn analysis(self, mesh: &MeshInput) -> Analysis {
+        let mut analysis = Analysis::from_mesh(mesh);
+        analysis.set_mirror_reuse(self.mirror_reuse);
+        analysis.set_symmetric_factorization(self.symmetric_factorization);
+        analysis
+    }
+}
+
 /// Explicit discipline mapping a node mesh and flight condition to loads.
 ///
 /// `outputs` selects coefficient names (comma-separated, default all six).
@@ -122,10 +169,23 @@ const OUTPUTS: [&str; 6] = ["CL", "CD", "CY", "Cl", "Cm", "Cn"];
 /// variables become outputs; coefficient and dimensional load partials include
 /// their converged trim response. Configure trim before setup. `Fx,Fy,Fz` are
 /// dimensional mesh-axis forces; `Mx,My,Mz` are right-hand mesh-axis moments.
+///
+/// `mirror_reuse` and `symmetric_factorization` (booleans, both default
+/// `false`) switch on [`VortexLatticeSolver::set_mirror_reuse`] and
+/// [`VortexLatticeSolver::set_symmetric_factorization`] for every solve the
+/// discipline makes: the ordinary solved state, the internal trim iteration,
+/// and the selective `analysis_*` [`Analysis`]. Mirror reuse leaves results
+/// bit-identical; the symmetric factorization agrees with the full LU to
+/// rounding where it applies and is bit-identical where it falls back. They
+/// combine with every other option and, unlike the trim and registry options,
+/// may still be changed after setup when trim is configured. Changing either
+/// clears the cached state; [`Self::symmetric_factorization_applies`] reports
+/// whether the last solve used the half-size factorization.
 #[derive(Debug)]
 pub struct VlmDiscipline {
     registry: VariableRegistry,
     surfaces: Vec<SurfaceOption>,
+    settings: SolverSettings,
     analysis_request: Option<AnalysisRequest>,
     analysis_cache: Mutex<Option<(MeshInput, Analysis)>>,
     outputs: Vec<String>,
@@ -140,6 +200,7 @@ impl Default for VlmDiscipline {
         Self {
             registry: VariableRegistry::new(false),
             surfaces: vec![SurfaceOption::default()],
+            settings: SolverSettings::default(),
             analysis_request: None,
             analysis_cache: Mutex::new(None),
             outputs: OUTPUTS.iter().map(|s| (*s).into()).collect(),
@@ -158,6 +219,7 @@ impl VlmDiscipline {
         Self {
             registry: VariableRegistry::new(false),
             surfaces,
+            settings: SolverSettings::default(),
             analysis_request: None,
             analysis_cache: Mutex::new(None),
             outputs: OUTPUTS.iter().map(|s| (*s).into()).collect(),
@@ -187,11 +249,12 @@ impl VlmDiscipline {
             }
             let mesh = self.build_mesh(inputs)?;
             let condition = self.build_condition(inputs)?;
-            let mut solver = VortexLatticeSolver::new();
+            let mut solver = self.settings.solver();
             let trim = if let Some(problem) = &self.trim {
                 Some(
                     MeshTrimSolver
-                        .solve(
+                        .solve_with_solver(
+                            self.settings.solver(),
                             &mesh,
                             &condition,
                             problem,
@@ -292,6 +355,34 @@ impl VlmDiscipline {
             .as_ref()
             .and_then(|s| s.trim.as_ref())
             .map(|t| t.diagnostics.clone()))
+    }
+
+    /// Whether the cached solve factorized its system in the half-size block
+    /// form of the `symmetric_factorization` option.
+    ///
+    /// `None` when nothing is cached: before the first evaluation, after an
+    /// option change, or after a failed solve. `Some(false)` when the option is
+    /// off or the system fell back to the full LU (an antisymmetric control
+    /// deflection, a surface that is not y-duplicated, half-wing analysis
+    /// mode). With trim, this describes the converged trim solve; with the
+    /// `analysis_*` options, the cached selective analysis's last solve.
+    pub fn symmetric_factorization_applies(&self) -> Result<Option<bool>> {
+        if self.analysis_request.is_some() {
+            let cache = self
+                .analysis_cache
+                .lock()
+                .map_err(|_| invalid("analysis cache is poisoned"))?;
+            return Ok(cache
+                .as_ref()
+                .map(|(_, analysis)| analysis.symmetric_factorization_applies()));
+        }
+        let cache = self
+            .cache
+            .lock()
+            .map_err(|_| rejected("cache", "poisoned solution cache"))?;
+        Ok(cache
+            .as_ref()
+            .map(|state| state.solver().symmetric_factorization_applies()))
     }
 
     /// The configured surfaces.
@@ -407,6 +498,8 @@ impl Discipline for VlmDiscipline {
         self.add_option("analysis_gradients", "dict")?;
         self.add_option("analysis_mode", "str")?;
         self.add_option("consistent_forces", "bool")?;
+        self.add_option("mirror_reuse", "bool")?;
+        self.add_option("symmetric_factorization", "bool")?;
         self.add_option("outputs", "str")?;
         self.add_option("fixed_inputs", "str")?;
         self.add_option("controls", "str")?;
@@ -436,14 +529,28 @@ impl Discipline for VlmDiscipline {
         if let Some(value) = options.get("consistent_forces") {
             require_consistent_forces(value)?;
         }
+        let settings = self.settings.updated(options)?;
         if self.setup_complete && self.trim.is_some() {
-            if options.keys().any(|name| name != "consistent_forces") {
+            if options
+                .keys()
+                .any(|name| !RUNTIME_OPTIONS.contains(&name.as_str()))
+            {
                 return Err(invalid(
                     "trim configuration and registry options must be set before setup; create a new discipline to reconfigure",
                 ));
             }
+            // Only the solver settings can change here. Keep the cached trim
+            // unless they did, as a repeated `consistent_forces` keeps it.
+            if settings != self.settings {
+                self.settings = settings;
+                *self
+                    .cache
+                    .get_mut()
+                    .map_err(|_| rejected("cache", "poisoned solution cache"))? = None;
+            }
             return Ok(());
         }
+        self.settings = settings;
         *self
             .cache
             .get_mut()
@@ -1187,7 +1294,7 @@ impl VlmDiscipline {
             .lock()
             .map_err(|_| invalid("analysis cache is poisoned"))?;
         if cache.as_ref().is_none_or(|(previous, _)| previous != &mesh) {
-            let analysis = Analysis::from_mesh(&mesh);
+            let analysis = self.settings.analysis(&mesh);
             *cache = Some((mesh, analysis));
         }
         cache

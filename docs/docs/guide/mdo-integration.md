@@ -39,6 +39,41 @@ The `outputs` option selects coefficients or dimensional resultants
 `fixed_inputs` suppresses selected input derivative columns while retaining
 their physical effect. Geometry derivatives include moving control hinge axes.
 
+## Solver accelerations
+
+Two boolean options switch on the solver's opt-in accelerations for lattices
+built from y-duplicated surfaces. Both default to `false`:
+
+```json
+{
+  "surface_y_duplicated": [true, true],
+  "mirror_reuse": true,
+  "symmetric_factorization": true
+}
+```
+
+- `mirror_reuse` derives the mirrored half of the influence operators by
+  reflection instead of evaluating it. Results are bit-identical to having it
+  off.
+- `symmetric_factorization` factorizes two half-size systems instead of one
+  full one when the system matrix is exactly mirror-symmetric. Outputs and
+  partials then agree with the full factorization to rounding of the
+  elimination, not bit for bit. Where the half-size form
+  cannot apply, the discipline silently uses the full factorization and results
+  are bit-identical to having it off: antisymmetric control deflections such as
+  ailerons, surfaces that are not y-duplicated, and `analysis_mode` `half_wing`.
+
+Each accepts a JSON boolean, `0`/`1`, or the strings `true`/`false` (also
+`yes`/`no`); any other value is rejected. They apply to every solve the
+discipline makes: ordinary function and partial evaluations, every iteration of
+the internal trim and its sensitivities, and the selective `analysis_*` path.
+They combine with every other option. Changing either clears the cached solved
+state. Like `outputs`, an option omitted from a later request keeps its value.
+Unlike the registry and trim options, they may also be changed after setup when
+trim is configured; re-sending the current values there keeps the converged
+trim. `VlmDiscipline::symmetric_factorization_applies` tells native callers
+whether the cached solve used the half-size factorization.
+
 ## Internal trim configuration
 
 The `trim` option accepts a JSON object or a JSON-encoded string. Set it in the

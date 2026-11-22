@@ -145,8 +145,8 @@ assembly. `Analysis::set_symmetric_factorization` factorizes two half-size
 systems when the system matrix is exactly mirror-symmetric, and otherwise falls
 back to the full factorization; `symmetric_factorization_applies` reports which
 was used, and results agree with the full factorization to rounding. Neither
-setting has an effect in half-wing mode, and the Philote `analysis_*` options
-do not expose them.
+setting has an effect in half-wing mode. The Philote discipline exposes them as
+its `mirror_reuse` and `symmetric_factorization` options, described below.
 
 ## Philote options
 
@@ -178,6 +178,13 @@ The analysis options cannot be combined with the discipline's `trim`, `outputs`,
 options, the discipline keeps its ordinary six-output/full-partials behavior,
 including those options. The selective discipline caches its `Analysis` across `compute` and
 `compute_partials` calls on identical inputs.
+
+The boolean `mirror_reuse` and `symmetric_factorization` options (both default
+`false`) call `Analysis::set_mirror_reuse` and
+`Analysis::set_symmetric_factorization` on that `Analysis`, and apply the same
+settings to the discipline's ordinary and trim solves. They may be combined with
+the analysis options and with every other option; changing either discards the
+cached `Analysis`. In `half_wing` mode they have no effect, bit for bit.
 
 ## Validation
 

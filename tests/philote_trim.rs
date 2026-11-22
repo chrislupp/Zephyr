@@ -400,3 +400,249 @@ async fn explicit_rpc_discovers_solved_states_and_returns_trimmed_gradients() {
     stop.send(()).unwrap();
     task.await.unwrap().unwrap();
 }
+
+// ============================================================================
+// Opt-in solver accelerations through the internal trim solve
+// ============================================================================
+
+/// Relative bound on the symmetric factorization's departure from the full LU.
+const SYMMETRIC_BOUND: f64 = 1.0e-12;
+
+fn assert_bits<K: std::fmt::Debug + Eq + std::hash::Hash>(
+    label: &str,
+    actual: &HashMap<K, ArrayD<f64>>,
+    expected: &HashMap<K, ArrayD<f64>>,
+) {
+    assert_eq!(actual.len(), expected.len(), "{label}: key count");
+    for (key, values) in expected {
+        let other = &actual[key];
+        assert_eq!(values.len(), other.len(), "{label}: {key:?} length");
+        for (a, b) in other.iter().zip(values.iter()) {
+            assert_eq!(a.to_bits(), b.to_bits(), "{label}: {key:?}: {a} != {b}");
+        }
+    }
+}
+
+/// Agreement to [`SYMMETRIC_BOUND`] relative to `scale(key)`, returning the
+/// largest such relative deviation.
+fn assert_near<K: std::fmt::Debug + Eq + std::hash::Hash>(
+    label: &str,
+    actual: &HashMap<K, ArrayD<f64>>,
+    expected: &HashMap<K, ArrayD<f64>>,
+    scale: impl Fn(&K) -> f64,
+) -> f64 {
+    assert_eq!(actual.len(), expected.len(), "{label}: key count");
+    let mut largest = 0.0_f64;
+    for (key, values) in expected {
+        let scale = scale(key);
+        for (a, b) in actual[key].iter().zip(values.iter()) {
+            let deviation = (a - b).abs();
+            assert!(
+                deviation <= SYMMETRIC_BOUND * scale,
+                "{label}: {key:?}: {a} vs {b} (scale {scale})"
+            );
+            if scale > 0.0 {
+                largest = largest.max(deviation / scale);
+            }
+        }
+    }
+    largest
+}
+
+fn largest(values: &ArrayD<f64>) -> f64 {
+    values.iter().fold(0.0, |m, v| m.max(v.abs()))
+}
+
+/// The magnitude a trimmed partial rounds at.
+///
+/// Ordinarily that of its Jacobian row: a derivative that vanishes by symmetry
+/// is a cancellation of terms as large as the rest of the row. A balanced
+/// quantity (`Fz`, `My` here) is held at its target, so its derivatives with
+/// respect to everything but targets and external loads vanish identically,
+/// as the direct load derivative cancelling the trim response. Those terms are
+/// untrimmed load derivatives, the size of the largest dimensional partial in
+/// the same input column, so that is their scale.
+fn trim_scale(partials: &philote_mdo::PartialMap, (output, input): &(String, String)) -> f64 {
+    let row = partials
+        .iter()
+        .filter(|((o, _), _)| o == output)
+        .fold(0.0_f64, |m, (_, v)| m.max(largest(v)));
+    if !["Fz", "My"].contains(&output.as_str()) {
+        return row;
+    }
+    let column = partials
+        .iter()
+        .filter(|((o, i), _)| i == input && AeroQuantity::ALL[6..].iter().any(|q| q.name() == o))
+        .fold(0.0_f64, |m, (_, v)| m.max(largest(v)));
+    row.max(column)
+}
+
+fn with(extra: &[(&str, Value)]) -> HashMap<String, Value> {
+    let mut config = configuration();
+    for (key, value) in extra {
+        config.insert((*key).into(), value.clone());
+    }
+    config
+}
+
+async fn trimmed(
+    config: &HashMap<String, Value>,
+    inputs: &ArrayMap,
+) -> (ArrayMap, philote_mdo::PartialMap, Option<bool>) {
+    let d = discipline(config);
+    let partials = d.compute_partials(inputs).await.unwrap();
+    let outputs = d.compute(inputs).await.unwrap();
+    assert!(d.trim_diagnostics().unwrap().is_some());
+    (
+        outputs,
+        partials,
+        d.symmetric_factorization_applies().unwrap(),
+    )
+}
+
+#[tokio::test]
+async fn acceleration_options_reach_every_trim_solve() {
+    let inputs = inputs();
+    let (outputs, partials, applies) = trimmed(&configuration(), &inputs).await;
+    assert_eq!(applies, Some(false));
+
+    let (fast, fast_partials, _) = trimmed(&with(&[("mirror_reuse", json!(true))]), &inputs).await;
+    assert_bits("trim mirror outputs", &fast, &outputs);
+    assert_bits("trim mirror partials", &fast_partials, &partials);
+
+    // The fixture's flap and tab deflections are symmetric, so the converged
+    // trim solve and its sensitivities use the half-size factorization.
+    let (fast, fast_partials, applies) =
+        trimmed(&with(&[("symmetric_factorization", json!(true))]), &inputs).await;
+    assert_eq!(applies, Some(true));
+    let values = assert_near("trim outputs", &fast, &outputs, |k| largest(&outputs[k]));
+    let derivatives = assert_near("trim partials", &fast_partials, &partials, |k| {
+        trim_scale(&partials, k)
+    });
+    println!(
+        "trim path: largest symmetric-factorization deviation {values:e} (outputs), \
+         {derivatives:e} (partials)"
+    );
+
+    let (both, both_partials, _) = trimmed(
+        &with(&[
+            ("symmetric_factorization", json!("true")),
+            ("mirror_reuse", json!("yes")),
+        ]),
+        &inputs,
+    )
+    .await;
+    assert_bits("trim both outputs", &both, &fast);
+    assert_bits("trim both partials", &both_partials, &fast_partials);
+}
+
+#[tokio::test]
+async fn trim_with_an_antisymmetric_deflection_falls_back_bit_for_bit() {
+    let aileron = |extra: &[(&str, Value)]| {
+        let mut config = with(extra);
+        config
+            .get_mut("controls")
+            .unwrap()
+            .as_array_mut()
+            .unwrap()
+            .push(json!({"surface":"Wing", "name":"aileron", "span_start":1,
+                         "span_end":3, "hinge":1.2, "duplicate_sign":-1.0}));
+        config
+    };
+    let mut inputs = inputs();
+    inputs.insert("control_aileron".into(), array(vec![0.02]));
+    let (outputs, partials, _) = trimmed(&aileron(&[]), &inputs).await;
+    let (fast, fast_partials, applies) = trimmed(
+        &aileron(&[
+            ("symmetric_factorization", json!(true)),
+            ("mirror_reuse", json!(true)),
+        ]),
+        &inputs,
+    )
+    .await;
+    assert_eq!(applies, Some(false));
+    assert_bits("aileron outputs", &fast, &outputs);
+    assert_bits("aileron partials", &fast_partials, &partials);
+}
+
+#[tokio::test]
+async fn acceleration_options_change_after_trim_setup_and_invalidate_the_trim() {
+    let inputs = inputs();
+    let mut d = discipline(&configuration());
+    let original = d.compute(&inputs).await.unwrap();
+    let original_partials = d.compute_partials(&inputs).await.unwrap();
+    assert_eq!(d.symmetric_factorization_applies().unwrap(), Some(false));
+
+    // Re-sending current values keeps the converged trim, as a repeated
+    // `consistent_forces` does.
+    d.set_options(&HashMap::from([
+        ("mirror_reuse".into(), json!(false)),
+        ("symmetric_factorization".into(), json!(false)),
+        ("consistent_forces".into(), json!(true)),
+    ]))
+    .unwrap();
+    assert_eq!(d.symmetric_factorization_applies().unwrap(), Some(false));
+
+    // Mirror reuse changes no result bit; the cleared cache is what shows.
+    d.set_options(&HashMap::from([("mirror_reuse".into(), json!(true))]))
+        .unwrap();
+    assert_eq!(d.symmetric_factorization_applies().unwrap(), None);
+    assert!(d.trim_diagnostics().unwrap().is_none());
+    assert_bits(
+        "mirror reuse",
+        &d.compute(&inputs).await.unwrap(),
+        &original,
+    );
+
+    d.set_options(&HashMap::from([(
+        "symmetric_factorization".into(),
+        json!(true),
+    )]))
+    .unwrap();
+    assert_eq!(d.symmetric_factorization_applies().unwrap(), None);
+    let partials = d.compute_partials(&inputs).await.unwrap();
+    let outputs = d.compute(&inputs).await.unwrap();
+    assert_eq!(d.symmetric_factorization_applies().unwrap(), Some(true));
+    let (fresh, fresh_partials, _) = trimmed(
+        &with(&[
+            ("mirror_reuse", json!(true)),
+            ("symmetric_factorization", json!(true)),
+        ]),
+        &inputs,
+    )
+    .await;
+    assert_bits("after setup", &outputs, &fresh);
+    assert_bits("after setup partials", &partials, &fresh_partials);
+
+    // Registry and trim options stay fixed after setup, and a rejected request
+    // changes nothing, including an acceleration option in the same request.
+    for rejected in [
+        HashMap::from([
+            ("symmetric_factorization".into(), json!(false)),
+            ("outputs".into(), json!(["CL"])),
+        ]),
+        HashMap::from([("symmetric_factorization".into(), json!("sometimes"))]),
+    ] {
+        assert!(d.set_options(&rejected).is_err());
+        assert_eq!(d.symmetric_factorization_applies().unwrap(), Some(true));
+    }
+
+    // A repeated setup keeps the settings.
+    d.registry_mut().clear();
+    d.setup().unwrap();
+    d.setup_partials().unwrap();
+    assert_bits("re-setup", &d.compute(&inputs).await.unwrap(), &fresh);
+
+    d.set_options(&HashMap::from([(
+        "symmetric_factorization".into(),
+        json!(false),
+    )]))
+    .unwrap();
+    assert_bits("back off", &d.compute(&inputs).await.unwrap(), &original);
+    assert_bits(
+        "back off partials",
+        &d.compute_partials(&inputs).await.unwrap(),
+        &original_partials,
+    );
+    assert_eq!(d.symmetric_factorization_applies().unwrap(), Some(false));
+}

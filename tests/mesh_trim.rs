@@ -418,3 +418,68 @@ fn sideslip_trim_with_a_coefficient_target_has_analytical_state_sensitivities() 
     );
     fixture::close(exact[&("CY".into(), "trim_target_CY".into())][0], 1.0);
 }
+
+#[test]
+fn a_supplied_solver_keeps_its_settings_through_the_trim() {
+    let mesh = fixture::mesh();
+    let condition = fixture::condition();
+    let problem = fixture::problem();
+    let external = [5.0, 0.0, -900.0, 0.0, 20.0, 0.0];
+    let targets = fixture::targets(&mesh, &condition, &problem, &external);
+    let plain = MeshTrimSolver
+        .solve(&mesh, &condition, &problem, &targets, &external)
+        .unwrap();
+    // A default solver is exactly `solve`; mirror reuse changes no bit.
+    for mirror_reuse in [false, true] {
+        let mut solver = VortexLatticeSolver::new();
+        solver.set_mirror_reuse(mirror_reuse);
+        let supplied = MeshTrimSolver
+            .solve_with_solver(solver, &mesh, &condition, &problem, &targets, &external)
+            .unwrap();
+        assert_eq!(supplied.solver.mirror_reuse(), mirror_reuse);
+        assert_eq!(supplied.states, plain.states);
+        assert_eq!(
+            supplied.values.map(f64::to_bits),
+            plain.values.map(f64::to_bits)
+        );
+        assert!(!supplied.solver.symmetric_factorization_applies());
+    }
+    // The fixture is mirrored with symmetric deflections, so the converged
+    // solver, whose factorization the sensitivities reuse, uses the block form.
+    let mut solver = VortexLatticeSolver::new();
+    solver.set_symmetric_factorization(true);
+    let symmetric = MeshTrimSolver
+        .solve_with_solver(solver, &mesh, &condition, &problem, &targets, &external)
+        .unwrap();
+    assert!(symmetric.solver.symmetric_factorization_applies());
+    for (a, b) in symmetric.values.iter().zip(&plain.values) {
+        assert!((a - b).abs() <= 1e-12 * b.abs().max(1.0), "{a} vs {b}");
+    }
+    let exact = plain
+        .compute_partials(&mesh, &AeroQuantity::ALL, true)
+        .unwrap();
+    let fast = symmetric
+        .compute_partials(&mesh, &AeroQuantity::ALL, true)
+        .unwrap();
+    // Each partial rounds at the size of its Jacobian row; a balanced
+    // quantity's derivatives vanish identically as cancelling untrimmed load
+    // derivatives, the size of the largest dimensional entry in the column.
+    let magnitude = |filter: &dyn Fn(&(String, String)) -> bool| {
+        exact
+            .iter()
+            .filter(|(key, _)| filter(key))
+            .flat_map(|(_, b)| b.iter())
+            .fold(0.0_f64, |m, v| m.max(v.abs()))
+    };
+    for (key, block) in &exact {
+        let mut scale = magnitude(&|k| k.0 == key.0);
+        if problem.balances.iter().any(|b| b.quantity.name() == key.0) {
+            scale = scale.max(magnitude(&|k| {
+                k.1 == key.1 && AeroQuantity::ALL[6..].iter().any(|q| q.name() == k.0)
+            }));
+        }
+        for (a, b) in fast[key].iter().zip(block.iter()) {
+            assert!((a - b).abs() <= 1e-12 * scale, "{key:?}: {a} vs {b}");
+        }
+    }
+}
