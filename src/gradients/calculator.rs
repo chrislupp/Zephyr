@@ -31,7 +31,7 @@ use crate::geometry::{Aircraft, MeshInput};
 use crate::solver::{FlightCondition, VortexLatticeSolver};
 
 use super::geometry_adjoint::{GeometryAdjointContext, scatter_mesh_node_cotangents};
-use super::mach::velocity_influence_mach_derivative;
+use super::mach::velocity_influence_mach_derivative_times;
 use super::section_geometry::section_direction;
 use super::{
     AdjointSolver, AeroOutput, OutputSelection, force_alpha_gradient, force_beta_gradient,
@@ -425,10 +425,10 @@ impl GradientCalculator {
             }
             return Ok(result);
         }
-        let velocity_mach = velocity_influence_mach_derivative(solver, true);
-        let induced_velocity_mach = &velocity_mach * &solver.solution().circulation;
+        let induced_velocity_mach =
+            velocity_influence_mach_derivative_times(solver, true, &solver.solution().circulation);
         let control_velocity_mach =
-            velocity_influence_mach_derivative(solver, false) * &solver.solution().circulation;
+            velocity_influence_mach_derivative_times(solver, false, &solver.solution().circulation);
         let residual_mach = VecX::from_fn(solver.mesh().vortex_count(), |row, _| {
             -solver.linearized_normals()[row].dot(&Vec3::new(
                 control_velocity_mach[3 * row],
