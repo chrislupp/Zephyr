@@ -324,3 +324,98 @@ fn reflection_reuse_leaves_the_default_path_alone() {
     assert_eq!(observed, explicit[..observed.len()].to_vec());
     assert!(solution.is_valid);
 }
+
+/// Raw bits of every matrix the builder assembles, with reuse on or off.
+fn builder_bits(
+    input: &MeshInput,
+    symmetry: SymmetryConfig,
+    mach: Scalar,
+    mirror: bool,
+) -> (Vec<u64>, Vec<u64>, Vec<u64>) {
+    let mut solver = VortexLatticeSolver::new();
+    solver.set_mesh(input).unwrap();
+    let mut builder = InfluenceMatrixBuilder::new(solver.mesh());
+    builder.set_mach_number(mach);
+    builder.set_symmetry(symmetry);
+    builder.set_mirror_reuse(mirror);
+    let to_bits = |matrix: &zephyr_vlm::core::MatX| -> Vec<u64> {
+        matrix.iter().map(|value| value.to_bits()).collect()
+    };
+    let bound_only = builder.velocity_influence_matrix();
+    let (aic, bound) = builder.normalwash_and_velocity();
+    (to_bits(&bound_only), to_bits(&bound), to_bits(&aic))
+}
+
+/// The bound-centre (force-velocity) pass excludes each target's own bound
+/// leg, a rule the control-point pass does not have. Reflection reuse must
+/// still reproduce every one of its entries bit for bit, including the
+/// diagonal and the mirror-image diagonal.
+#[test]
+fn bound_centre_reuse_is_bit_identical_entry_by_entry() {
+    let none = SymmetryConfig::default();
+    let z_image = SymmetryConfig {
+        z_symmetry: SymmetryType::Symmetric,
+        z_symmetry_plane: 0.4,
+        ..SymmetryConfig::default()
+    };
+    for (label, input, symmetry, mach, engages) in [
+        ("flat even span", duplicated_wing(6, 8), none, 0.0, true),
+        ("flat odd span", duplicated_wing(6, 7), none, 0.0, true),
+        ("flat compressible", duplicated_wing(6, 8), none, 0.2, true),
+        ("oblique normals", oblique_duplicated(4, 6), none, 0.0, true),
+        (
+            "oblique compressible",
+            oblique_duplicated(4, 6),
+            none,
+            0.3,
+            true,
+        ),
+        (
+            "single chordwise row",
+            duplicated_wing(1, 5),
+            none,
+            0.0,
+            true,
+        ),
+        // Over both parallel gates (256 panels, 128 per half).
+        ("256 panels", duplicated_wing(8, 16), none, 0.0, true),
+        (
+            "256 panels oblique",
+            oblique_duplicated(8, 16),
+            none,
+            0.25,
+            true,
+        ),
+        // Declined: the plan refuses, so both runs evaluate every entry.
+        ("offset plane", offset_plane_wing(4, 6), none, 0.0, false),
+        ("z image", oblique_duplicated(4, 6), z_image, 0.0, false),
+        ("not duplicated", plain_wing(4, 6), none, 0.0, false),
+        (
+            "not duplicated, 160 panels",
+            plain_wing(8, 20),
+            none,
+            0.0,
+            false,
+        ),
+    ] {
+        assert_eq!(applies(&input, symmetry, mach), engages, "{label}");
+        let plain = builder_bits(&input, symmetry, mach, false);
+        let mirrored = builder_bits(&input, symmetry, mach, true);
+        for (name, left, right) in [
+            ("velocity_influence_matrix", &plain.0, &mirrored.0),
+            ("normalwash_and_velocity bound", &plain.1, &mirrored.1),
+            ("normalwash_and_velocity aic", &plain.2, &mirrored.2),
+        ] {
+            assert_eq!(left.len(), right.len(), "{label}: {name} shape changed");
+            let differing = left.iter().zip(right).filter(|(a, b)| a != b).count();
+            assert_eq!(
+                differing,
+                0,
+                "{label}: {name} changed {differing} of {} entries",
+                left.len()
+            );
+        }
+        // Both passes of one builder agree with each other too.
+        assert_eq!(plain.0, plain.1, "{label}: bound passes disagree");
+    }
+}
