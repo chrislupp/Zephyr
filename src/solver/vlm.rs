@@ -35,6 +35,7 @@ use crate::geometry::{Aircraft, MeshInput, ReferenceQuantities};
 
 use super::{
     FlightCondition, InfluenceMatrixBuilder, SolutionState, SymmetryConfig, VortexLattice,
+    influence::mirror_pairs,
 };
 
 type DynamicLu = PartialPivLu<Scalar>;
@@ -42,6 +43,164 @@ type DynamicLu = PartialPivLu<Scalar>;
 fn factorize(matrix: &MatX) -> DynamicLu {
     MatRef::from_column_major_slice(matrix.as_slice(), matrix.nrows(), matrix.ncols())
         .partial_piv_lu()
+}
+
+/// Block-diagonalized LU of a mirror-symmetric system.
+///
+/// With `o_k` the original and `m_k` the mirrored panel of pair `k`, grouping
+/// each panel with its image puts the system matrix in the form
+///
+/// ```text
+/// A = [[P, Q],      P[k, l] = A[o_k, o_l] = A[m_k, m_l]
+///      [Q, P]]      Q[k, l] = A[o_k, m_l] = A[m_k, o_l]
+/// ```
+///
+/// which the orthogonal change of variables `s = x1 + x2`, `d = x1 - x2`
+/// splits into the two half-size systems `(P + Q) s = b1 + b2` and
+/// `(P - Q) d = b1 - b2`. Then `x1 = (s + d) / 2` and `x2 = (s - d) / 2`.
+/// `Aᵀ` has the same structure with `Pᵀ` and `Qᵀ`, so a transpose solve uses
+/// the transposed half systems. Two half-size factorizations cost a quarter
+/// of the full one.
+///
+/// The eigenvalues of `A` are exactly those of `P + Q` together with those of
+/// `P - Q`, so neither half is worse conditioned than `A` itself.
+#[derive(Clone, Debug)]
+struct BlockLu {
+    originals: Vec<usize>,
+    mirrors: Vec<usize>,
+    sum: DynamicLu,
+    difference: DynamicLu,
+}
+
+impl BlockLu {
+    /// Factorizes `matrix` by blocks if, and only if, it is exactly
+    /// block-symmetric under `pairs`.
+    ///
+    /// The criterion is exact IEEE equality, `A[m_k, m_l] == A[o_k, o_l]` and
+    /// `A[m_k, o_l] == A[o_k, m_l]` for every `k, l`; no tolerance. Under it
+    /// the block matrix the half systems represent *is* `A`, entry for entry,
+    /// so the only difference from the full LU is the order of rounding in
+    /// the elimination, never the system being solved. Any unequal pair --
+    /// including a NaN, which compares unequal to itself -- rejects the block
+    /// form and the caller falls back to the full LU. The scan is `O(N²)`
+    /// next to an `O(N³)` factorization, and it is fused with forming
+    /// `P + Q` and `P - Q`, which needs the same reads.
+    fn try_new(matrix: &MatX, pairs: &[(usize, usize)]) -> Option<Self> {
+        let h = pairs.len();
+        if h == 0 || matrix.nrows() != 2 * h || matrix.ncols() != 2 * h {
+            return None;
+        }
+        let mut sum = MatX::zeros(h, h);
+        let mut difference = MatX::zeros(h, h);
+        for (l, &(original_l, mirror_l)) in pairs.iter().enumerate() {
+            for (k, &(original_k, mirror_k)) in pairs.iter().enumerate() {
+                let p = matrix[(original_k, original_l)];
+                let q = matrix[(original_k, mirror_l)];
+                if matrix[(mirror_k, mirror_l)] != p || matrix[(mirror_k, original_l)] != q {
+                    return None;
+                }
+                sum[(k, l)] = p + q;
+                difference[(k, l)] = p - q;
+            }
+        }
+        let (sum, difference) = factorize_pair(&sum, &difference);
+        Some(Self {
+            originals: pairs.iter().map(|pair| pair.0).collect(),
+            mirrors: pairs.iter().map(|pair| pair.1).collect(),
+            sum,
+            difference,
+        })
+    }
+
+    /// Solves `A X = B` (or `Aᵀ X = B`) in place for a column-major `B` with
+    /// `ncols` columns.
+    fn solve_in_place(&self, data: &mut [Scalar], ncols: usize, transpose: bool) {
+        let h = self.originals.len();
+        let n = 2 * h;
+        let mut sum = vec![0.0; h * ncols];
+        let mut difference = vec![0.0; h * ncols];
+        for column in 0..ncols {
+            let rhs = &data[column * n..(column + 1) * n];
+            for (k, (&original, &mirror)) in self.originals.iter().zip(&self.mirrors).enumerate() {
+                sum[column * h + k] = rhs[original] + rhs[mirror];
+                difference[column * h + k] = rhs[original] - rhs[mirror];
+            }
+        }
+        for (lu, values) in [(&self.sum, &mut sum), (&self.difference, &mut difference)] {
+            let view = MatMut::from_column_major_slice_mut(values.as_mut_slice(), h, ncols);
+            if transpose {
+                lu.solve_transpose_in_place(view);
+            } else {
+                lu.solve_in_place(view);
+            }
+        }
+        for column in 0..ncols {
+            let solution = &mut data[column * n..(column + 1) * n];
+            for (k, (&original, &mirror)) in self.originals.iter().zip(&self.mirrors).enumerate() {
+                let s = sum[column * h + k];
+                let d = difference[column * h + k];
+                solution[original] = 0.5 * (s + d);
+                solution[mirror] = 0.5 * (s - d);
+            }
+        }
+    }
+}
+
+/// Factorizes the two half systems, concurrently under `parallel`.
+///
+/// Each LU is computed by the same serial faer call either way and the two
+/// share nothing, so the results are bit-identical between builds and
+/// independent of the thread count.
+#[cfg(feature = "parallel")]
+fn factorize_pair(sum: &MatX, difference: &MatX) -> (DynamicLu, DynamicLu) {
+    rayon::join(|| factorize(sum), || factorize(difference))
+}
+
+#[cfg(not(feature = "parallel"))]
+fn factorize_pair(sum: &MatX, difference: &MatX) -> (DynamicLu, DynamicLu) {
+    (factorize(sum), factorize(difference))
+}
+
+/// The one factorization type every solve in this solver goes through.
+///
+/// `Full` is the plain partial-pivot LU and is what every path used before
+/// the block form existed; with symmetric factorization off it is the only
+/// variant ever built, so default results are unchanged bit for bit.
+#[derive(Clone, Debug)]
+enum Factorization {
+    Full(DynamicLu),
+    Block(Box<BlockLu>),
+}
+
+impl Factorization {
+    /// Full LU, or the block form when `pairs` is given and `matrix` is
+    /// exactly block-symmetric under it.
+    fn new(matrix: &MatX, pairs: Option<&[(usize, usize)]>) -> Self {
+        pairs
+            .and_then(|pairs| BlockLu::try_new(matrix, pairs))
+            .map_or_else(
+                || Self::Full(factorize(matrix)),
+                |block| Self::Block(Box::new(block)),
+            )
+    }
+
+    fn is_block(&self) -> bool {
+        matches!(self, Self::Block(_))
+    }
+
+    fn solve_in_place(&self, data: &mut [Scalar], nrows: usize, ncols: usize, transpose: bool) {
+        match self {
+            Self::Full(lu) => {
+                let view = MatMut::from_column_major_slice_mut(data, nrows, ncols);
+                if transpose {
+                    lu.solve_transpose_in_place(view);
+                } else {
+                    lu.solve_in_place(view);
+                }
+            }
+            Self::Block(block) => block.solve_in_place(data, ncols, transpose),
+        }
+    }
 }
 
 /// A partial-pivot LU of a singular matrix still "succeeds"; the breakdown
@@ -54,50 +213,34 @@ fn ensure_finite(solution: &[Scalar]) -> Result<()> {
     }
 }
 
-fn solve_matrix(factorization: &DynamicLu, rhs: &MatX) -> Result<MatX> {
+fn solve_matrix(factorization: &Factorization, rhs: &MatX) -> Result<MatX> {
     let mut solution = rhs.clone();
     let (nrows, ncols) = solution.shape();
-    factorization.solve_in_place(MatMut::from_column_major_slice_mut(
-        solution.as_mut_slice(),
-        nrows,
-        ncols,
-    ));
+    factorization.solve_in_place(solution.as_mut_slice(), nrows, ncols, false);
     ensure_finite(solution.as_slice())?;
     Ok(solution)
 }
 
-fn solve_vector(factorization: &DynamicLu, rhs: &VecX) -> Result<VecX> {
+fn solve_vector(factorization: &Factorization, rhs: &VecX) -> Result<VecX> {
     let mut solution = rhs.clone();
     let nrows = solution.nrows();
-    factorization.solve_in_place(MatMut::from_column_major_slice_mut(
-        solution.as_mut_slice(),
-        nrows,
-        1,
-    ));
+    factorization.solve_in_place(solution.as_mut_slice(), nrows, 1, false);
     ensure_finite(solution.as_slice())?;
     Ok(solution)
 }
 
-fn solve_transpose_matrix(factorization: &DynamicLu, rhs: &MatX) -> Result<MatX> {
+fn solve_transpose_matrix(factorization: &Factorization, rhs: &MatX) -> Result<MatX> {
     let mut solution = rhs.clone();
     let (nrows, ncols) = solution.shape();
-    factorization.solve_transpose_in_place(MatMut::from_column_major_slice_mut(
-        solution.as_mut_slice(),
-        nrows,
-        ncols,
-    ));
+    factorization.solve_in_place(solution.as_mut_slice(), nrows, ncols, true);
     ensure_finite(solution.as_slice())?;
     Ok(solution)
 }
 
-fn solve_transpose_vector(factorization: &DynamicLu, rhs: &VecX) -> Result<VecX> {
+fn solve_transpose_vector(factorization: &Factorization, rhs: &VecX) -> Result<VecX> {
     let mut solution = rhs.clone();
     let nrows = solution.nrows();
-    factorization.solve_transpose_in_place(MatMut::from_column_major_slice_mut(
-        solution.as_mut_slice(),
-        nrows,
-        1,
-    ));
+    factorization.solve_in_place(solution.as_mut_slice(), nrows, 1, true);
     ensure_finite(solution.as_slice())?;
     Ok(solution)
 }
@@ -108,14 +251,19 @@ pub struct VortexLatticeSolver {
     mesh: VortexLattice,
     symmetry: SymmetryConfig,
     mirror_reuse: bool,
+    symmetric_factorization: bool,
     reference_point: Vec3,
     reference_quantities: ReferenceQuantities,
     aic_matrix: MatX,
     velocity_influence_matrix: MatX,
     control_influence_matrix: MatX,
     solution_aic_matrix: Option<MatX>,
-    aic_lu: Option<DynamicLu>,
-    solution_lu: Option<DynamicLu>,
+    aic_lu: Option<Factorization>,
+    solution_lu: Option<Factorization>,
+    /// Unit responses of the deflected system `solution_lu` factorizes. They
+    /// depend only on that factorization, the normals and the reference
+    /// point, so a repeated solve at unchanged deflections reuses them.
+    solution_units: Option<MatX>,
     solution_normals: Vec<Vec3>,
     aic_valid: bool,
     unit_circulation: MatX,
@@ -131,6 +279,7 @@ impl Default for VortexLatticeSolver {
             mesh: VortexLattice::default(),
             symmetry: SymmetryConfig::default(),
             mirror_reuse: false,
+            symmetric_factorization: false,
             reference_point: Vec3::zeros(),
             reference_quantities: ReferenceQuantities::default(),
             aic_matrix: MatX::zeros(0, 0),
@@ -139,6 +288,7 @@ impl Default for VortexLatticeSolver {
             solution_aic_matrix: None,
             aic_lu: None,
             solution_lu: None,
+            solution_units: None,
             solution_normals: Vec::new(),
             aic_valid: false,
             unit_circulation: MatX::zeros(0, 6),
@@ -184,6 +334,8 @@ impl VortexLatticeSolver {
     /// Off by default. Results are unaffected: assembly takes the fast path
     /// only when it can prove the mesh satisfies the reflection identity
     /// exactly, and the derived entries are bit-identical to evaluated ones.
+    /// Both assembly passes use it: the control-point pass that builds the
+    /// AIC and the bound-centre pass that builds the force-velocity operator.
     /// Meshes that do not qualify -- symmetry images in use, partially
     /// duplicated geometry, or a mirror plane that is not a pure sign flip --
     /// fall back to evaluating every entry.
@@ -197,9 +349,79 @@ impl VortexLatticeSolver {
         self.mirror_reuse
     }
 
+    /// Lets the solver factorize a mirror-symmetric system as two half-size
+    /// systems instead of one full one, for lattices built from
+    /// `y_duplicated` surfaces.
+    ///
+    /// Off by default, and with it off every result is exactly what it was
+    /// before this option existed. When on, each system the solver factorizes
+    /// -- the undeflected AIC, a control-deflected system, the operator of the
+    /// selective [`crate::analysis::Analysis`] path -- is checked for the
+    /// block form `[[P, Q], [Q, P]]` under the lattice's original/mirror
+    /// pairing, and if it has it, `P + Q` and `P - Q` are factorized in place
+    /// of the whole matrix, costing about a quarter of the full LU. Every
+    /// solve that uses the factorization, including the transpose solves of
+    /// the adjoints, goes through the same block form.
+    ///
+    /// The check is exact: every entry must equal its mirror-image entry
+    /// bit for bit, so the block system is the assembled matrix itself, not
+    /// an approximation of it. Results then agree with the full LU to within
+    /// rounding of the elimination, not bit for bit: relative differences of a
+    /// few `1e-15` in circulations, forces and gradients on the meshes in the
+    /// test suite, with residuals as small as the full LU's. Serial and
+    /// `parallel` builds give identical bits.
+    ///
+    /// The structure holds for an undeflected mirrored lattice at any flight
+    /// condition, since angles and rates only enter the right-hand side, and
+    /// for symmetrically deflected controls. It does not hold for
+    /// antisymmetric deflections such as ailerons, for meshes that are not
+    /// fully duplicated, or for half-wing models; those silently use the full
+    /// LU. [`Self::symmetric_factorization_applies`] reports which happened.
+    pub fn set_symmetric_factorization(&mut self, enabled: bool) {
+        self.symmetric_factorization = enabled;
+        self.invalidate();
+    }
+
+    #[must_use]
+    pub fn symmetric_factorization(&self) -> bool {
+        self.symmetric_factorization
+    }
+
+    /// Whether the factorization behind the current solution is the
+    /// half-size block form of [`Self::set_symmetric_factorization`].
+    ///
+    /// This is the factorization the linearized solves -- control
+    /// derivatives and adjoints -- use: the control-deflected system's when
+    /// the last solve had deflections, otherwise the undeflected AIC's.
+    /// `false` before anything has been factorized, when the setting is off,
+    /// and whenever the system failed the block-structure check and fell back
+    /// to the full LU.
+    #[must_use]
+    pub fn symmetric_factorization_applies(&self) -> bool {
+        self.active_factorization()
+            .is_some_and(Factorization::is_block)
+    }
+
+    /// The factorization linearized solves use: the deflected system's when
+    /// one is cached, else the undeflected AIC's.
+    fn active_factorization(&self) -> Option<&Factorization> {
+        self.solution_lu.as_ref().or(self.aic_lu.as_ref())
+    }
+
+    /// The single place every factorization is built.
+    fn factorize_system(&self, matrix: &MatX) -> Factorization {
+        let pairs = if self.symmetric_factorization {
+            mirror_pairs(&self.mesh)
+        } else {
+            None
+        };
+        Factorization::new(matrix, pairs.as_deref())
+    }
+
     pub fn set_reference_point(&mut self, point: Vec3) {
         self.reference_point = point;
         self.unit_responses_valid = false;
+        self.solution_units = None;
     }
 
     /// Apply a scoped mesh mutation and invalidate all dependent caches.
@@ -214,6 +436,7 @@ impl VortexLatticeSolver {
         self.solution_aic_matrix = None;
         self.aic_lu = None;
         self.solution_lu = None;
+        self.solution_units = None;
         self.solution_normals.clear();
         self.solution.is_valid = false;
         self.solved_condition = None;
@@ -249,7 +472,7 @@ impl VortexLatticeSolver {
         self.aic_matrix = aic_matrix;
         self.control_influence_matrix = control_influence_matrix;
         self.velocity_influence_matrix = velocity_influence_matrix;
-        self.aic_lu = Some(factorize(&self.aic_matrix));
+        self.aic_lu = Some(self.factorize_system(&self.aic_matrix));
         self.aic_valid = true;
         self.unit_responses_valid = false;
         Ok(())
@@ -429,7 +652,7 @@ impl VortexLatticeSolver {
 
     fn unit_responses_for_normals(
         &self,
-        factorization: &DynamicLu,
+        factorization: &Factorization,
         normals: &[Vec3],
     ) -> Result<MatX> {
         let n = self.mesh.vortex_count();
@@ -459,9 +682,7 @@ impl VortexLatticeSolver {
     ) -> Result<VecX> {
         let rhs = self.control_residual_derivative(condition, control_name)?;
         let lu = self
-            .solution_lu
-            .as_ref()
-            .or(self.aic_lu.as_ref())
+            .active_factorization()
             .ok_or(ZephyrError::InvalidSolution)?;
         solve_vector(lu, &rhs)
     }
@@ -555,8 +776,9 @@ impl VortexLatticeSolver {
             self.aic_matrix = matrix;
             self.control_influence_matrix = control;
             self.velocity_influence_matrix = velocities;
-            self.aic_lu = Some(factorize(&self.aic_matrix));
+            self.aic_lu = Some(self.factorize_system(&self.aic_matrix));
             self.solution_lu = None;
+            self.solution_units = None;
             self.solution_aic_matrix = None;
             self.aic_valid = true;
             self.solution_normals = normals;
@@ -656,6 +878,7 @@ impl VortexLatticeSolver {
         let (circulation, solution_units) = if condition.control_deflections.is_empty() {
             self.solution_aic_matrix = None;
             self.solution_lu = None;
+            self.solution_units = None;
             self.solution_normals = self
                 .mesh
                 .vortices()
@@ -672,13 +895,21 @@ impl VortexLatticeSolver {
             // updates at fixed controls can reuse the deflected factorization.
             if self.solution_lu.is_none() || self.solution_normals != normals {
                 let matrix = self.matrix_for_normals(&normals);
-                self.solution_lu = Some(factorize(&matrix));
+                self.solution_lu = Some(self.factorize_system(&matrix));
+                self.solution_units = None;
                 self.solution_aic_matrix = Some(matrix);
             }
             let rhs = self.rhs_for_normals(condition, &normals);
             let factorization = self.solution_lu.as_ref().expect("deflected factorization");
             let circulation = solve_vector(factorization, &rhs)?;
-            let units = self.unit_responses_for_normals(factorization, &normals)?;
+            // The unit responses depend on the factorization, the normals and
+            // the reference point only, none of which changed if they are
+            // cached, so reusing them returns the same bits as recomputing.
+            let units = match self.solution_units.take() {
+                Some(units) => units,
+                None => self.unit_responses_for_normals(factorization, &normals)?,
+            };
+            self.solution_units = Some(units.clone());
             self.solution_normals = normals;
             (circulation, units)
         };
@@ -758,18 +989,14 @@ impl VortexLatticeSolver {
 
     pub(crate) fn solve_linearized_transpose(&self, rhs: &VecX) -> Result<VecX> {
         let factorization = self
-            .solution_lu
-            .as_ref()
-            .or(self.aic_lu.as_ref())
+            .active_factorization()
             .ok_or(ZephyrError::InvalidSolution)?;
         solve_transpose_vector(factorization, rhs)
     }
 
     pub(crate) fn solve_linearized_transpose_batched(&self, rhs: &MatX) -> Result<MatX> {
         let factorization = self
-            .solution_lu
-            .as_ref()
-            .or(self.aic_lu.as_ref())
+            .active_factorization()
             .ok_or(ZephyrError::InvalidSolution)?;
         solve_transpose_matrix(factorization, rhs)
     }
