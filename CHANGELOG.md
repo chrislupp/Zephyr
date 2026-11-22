@@ -77,6 +77,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Exact single-horseshoe force/moment and mesh-gradient regression checks for
   the bound-center force convention.
 
+- `VortexLatticeSolver::set_symmetric_factorization` (off by default), with
+  `symmetric_factorization()` and `symmetric_factorization_applies()`. For
+  lattices built from `y_duplicated` surfaces whose system matrix is exactly
+  block-symmetric under the mirror pairing, the solver factorizes two half-size
+  systems instead of one full one (about a quarter of the LU cost); every solve
+  and adjoint solve uses the same factorization. Antisymmetric deflections,
+  unpaired meshes and half-wing models fall back to the full LU. Results agree
+  with the full LU to a few 1e-15 relative; with the setting off they are
+  unchanged.
+
 ### Changed
 
 - **Breaking:** the project is now named Zephyr. The package is `zephyr-vlm`
@@ -124,6 +134,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Optional Philote `outputs` and `fixed_inputs` selections restrict returned
   coefficients and declared partials. Defaults retain the complete interface.
   Alpha-only requests bypass unused Mach/rate/reference derivative calculations.
+- `set_mirror_reuse` now also derives the bound-centre (force-velocity)
+  influence pass by reflection, halving its kernel evaluations. Output remains
+  bit-identical to plain assembly.
+- A repeated `solve()` at unchanged control deflections reuses the deflected
+  unit responses as well as the deflected factorization; results are unchanged.
 - Gradient kernels compute the shared horseshoe geometry once per vortex pair.
   Flight-condition gradients at nonzero Mach are about 5x faster serially and
   about 20x faster with `parallel`: the Mach derivative is applied to the
