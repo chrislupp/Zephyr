@@ -766,6 +766,7 @@ impl VortexLatticeSolver {
                         half,
                         true,
                         velocity,
+                        self.mirror_reuse,
                         work,
                     )
                 };
@@ -791,6 +792,7 @@ impl VortexLatticeSolver {
                 half,
                 false,
                 true,
+                self.mirror_reuse,
                 work,
             )
             .2;

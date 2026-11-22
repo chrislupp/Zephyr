@@ -86,8 +86,10 @@ impl Source {
             Self::Mesh(_) => 0.0,
         }
     }
-    fn solver(&self) -> Result<VortexLatticeSolver> {
+    fn solver(&self, settings: Settings) -> Result<VortexLatticeSolver> {
         let mut solver = VortexLatticeSolver::new();
+        solver.set_mirror_reuse(settings.mirror_reuse);
+        solver.set_symmetric_factorization(settings.symmetric_factorization);
         match self {
             Self::Aircraft(a) => solver.set_aircraft(a)?,
             Self::Mesh(m) => solver.set_mesh(m)?,
@@ -118,11 +120,19 @@ pub(crate) fn unsupported(message: &str) -> ZephyrError {
     ))
 }
 
+/// Opt-in performance settings, carried across source changes.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+struct Settings {
+    mirror_reuse: bool,
+    symmetric_factorization: bool,
+}
+
 /// Reusable analysis context. Source changes invalidate all caches. Requests can
 /// grow or shrink without rebuilding an unchanged circulation system.
 #[derive(Clone, Debug)]
 pub struct Analysis {
     source: Source,
+    settings: Settings,
     active: Option<Source>,
     solver: Option<VortexLatticeSolver>,
     mode: SolverMode,
@@ -145,6 +155,7 @@ impl Analysis {
     fn new(source: Source) -> Self {
         Self {
             source,
+            settings: Settings::default(),
             active: None,
             solver: None,
             mode: SolverMode::Full,
@@ -155,11 +166,99 @@ impl Analysis {
             cached_loads: None,
         }
     }
+    /// Replaces the geometry and drops every cache. The opt-in settings below
+    /// are kept, as [`VortexLatticeSolver::set_mesh`] keeps its own.
     pub fn set_mesh(&mut self, input: &MeshInput) {
+        let settings = self.settings;
         *self = Self::from_mesh(input);
+        self.settings = settings;
     }
+    /// Aircraft counterpart of [`Self::set_mesh`].
     pub fn set_aircraft(&mut self, aircraft: &Aircraft) {
+        let settings = self.settings;
         *self = Self::from_aircraft(aircraft);
+        self.settings = settings;
+    }
+
+    /// Lets full-mode operator assembly derive the mirrored half of a
+    /// `y_duplicated` lattice by reflection instead of evaluating it, as
+    /// [`VortexLatticeSolver::set_mirror_reuse`] does for the solver.
+    ///
+    /// Off by default. Results are bit-identical either way: reflection is
+    /// used only where it is proven exact, and a lattice that does not qualify
+    /// falls back to evaluating every entry. Both full-mode passes use it, the
+    /// control-point pass behind the circulation system and the bound-centre
+    /// pass behind near-field loads, roughly halving their kernel evaluations.
+    ///
+    /// [`SolverMode::HalfWing`] already solves only one semispan, whose
+    /// lattice has no mirrored panels, so there the setting has no effect.
+    ///
+    /// Changing the setting discards the assembled operators, factorization
+    /// and cached results; setting the current value again keeps them.
+    pub fn set_mirror_reuse(&mut self, enabled: bool) {
+        if self.settings.mirror_reuse != enabled {
+            self.settings.mirror_reuse = enabled;
+            if let Some(solver) = self.solver.as_mut() {
+                solver.set_mirror_reuse(enabled);
+            }
+            self.condition = None;
+        }
+    }
+
+    #[must_use]
+    pub fn mirror_reuse(&self) -> bool {
+        self.settings.mirror_reuse
+    }
+
+    /// Lets full mode factorize the circulation system of a mirror-symmetric
+    /// lattice as two half-size systems, as
+    /// [`VortexLatticeSolver::set_symmetric_factorization`] does for the
+    /// solver. The primal solve and every adjoint solve then use the block
+    /// form.
+    ///
+    /// Off by default, and with it off results are unchanged bit for bit.
+    /// When on, the assembled system is checked for the exact block structure
+    /// `[[P, Q], [Q, P]]`; if it has it, `P + Q` and `P - Q` are factorized in
+    /// place of the whole matrix at about a quarter of the cost, and results
+    /// agree with the full LU to rounding of the elimination (a few `1e-15`
+    /// relative on the meshes in the test suite). Antisymmetric deflections
+    /// and lattices that are not fully duplicated fail the check and silently
+    /// use the full LU.
+    ///
+    /// In [`SolverMode::HalfWing`] the lattice is one semispan, which has no
+    /// mirror pairs, so the full LU is always used and results are those with
+    /// the setting off, bit for bit. [`Self::symmetric_factorization_applies`]
+    /// reports which factorization the last solve used.
+    ///
+    /// Changing the setting discards the assembled operators, factorization
+    /// and cached results; setting the current value again keeps them.
+    pub fn set_symmetric_factorization(&mut self, enabled: bool) {
+        if self.settings.symmetric_factorization != enabled {
+            self.settings.symmetric_factorization = enabled;
+            if let Some(solver) = self.solver.as_mut() {
+                solver.set_symmetric_factorization(enabled);
+            }
+            self.condition = None;
+        }
+    }
+
+    #[must_use]
+    pub fn symmetric_factorization(&self) -> bool {
+        self.settings.symmetric_factorization
+    }
+
+    /// Whether the system behind the last evaluation was factorized in the
+    /// half-size block form of [`Self::set_symmetric_factorization`]. `false`
+    /// before the first solve, after a setting change, with the setting off,
+    /// in half-wing mode, and whenever the block check fell back to the full
+    /// LU.
+    #[must_use]
+    pub fn symmetric_factorization_applies(&self) -> bool {
+        self.condition.is_some()
+            && self
+                .solver
+                .as_ref()
+                .is_some_and(VortexLatticeSolver::symmetric_factorization_applies)
     }
 
     pub fn evaluate(
@@ -187,7 +286,7 @@ impl Analysis {
             } else {
                 self.source.clone()
             };
-            let solver = source.solver()?;
+            let solver = source.solver(self.settings)?;
             self.active = Some(source);
             self.solver = Some(solver);
             self.mode = request.mode;

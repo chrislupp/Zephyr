@@ -23,7 +23,7 @@
 */
 
 //! Selected analytical derivatives. One adjoint per requested scalar output.
-use super::operator::{core, reflect};
+use super::operator::{SourcePanel, reflect, source_panels};
 use super::{
     AnalysisRequest, GradientRequest, GradientResult, GradientValue, Input, Output, SolverMode,
     Source, Work, unsupported,
@@ -32,8 +32,8 @@ use crate::core::{EPSILON, MatX, Scalar, Vec3, VecX};
 use crate::error::{Result, ZephyrError};
 use crate::gradients::geometry_adjoint::{LatticeCotangents, scatter_mesh_node_cotangents};
 use crate::gradients::section_geometry::section_direction;
-use crate::gradients::{horseshoe_velocity_jacobians, horseshoe_velocity_pg_derivative};
-use crate::solver::{FlightCondition, VortexLatticeSolver, horseshoe_vortex_velocity};
+use crate::gradients::{HorseshoeVelocityJacobians, horseshoe_velocity_pg_derivative};
+use crate::solver::{FlightCondition, VortexLatticeSolver};
 
 pub(crate) fn validate(
     source: &Source,
@@ -303,7 +303,9 @@ fn near_seeds(
         }
     }
     let flat = VecX::from_iterator(3 * n, out.velocity.iter().flat_map(|v| v.iter().copied()));
-    out.gamma += s.velocity_matrix().transpose() * flat;
+    // `tr_mul` contracts in place; `transpose() *` would first copy the whole
+    // `3N x N` operator.
+    out.gamma += s.velocity_matrix().tr_mul(&flat);
     work.force_derivative_panels += n;
     if needs.alpha {
         work.alpha_derivative_panels += n;
@@ -579,6 +581,18 @@ fn evaluate_implicit(
     Ok(result)
 }
 
+/// Mach derivative of the induced velocity at fixed circulation, at every
+/// control point and bound centre: `(dV_control/dM Γ, dV_bound/dM Γ)`.
+///
+/// Zero, with no lattice work at all, at Mach `<= EPSILON`, where the
+/// derivative of a `sqrt(1 - M²)` factor vanishes. Full mode is exactly the
+/// solver's operator (no image planes, the same core radii and bound flags),
+/// so it reuses the solver's fused row kernel,
+/// `VortexLatticeSolver::velocity_mach_derivative_times`. Half-wing mode
+/// adds each source's reflection, which that kernel does not know, so it runs
+/// the same row-wise structure here: one self-contained, column-ordered sum
+/// per target row, rows threaded under `parallel` and collected in order, so
+/// results are bit-identical between builds and across thread counts.
 fn mach_velocity(
     s: &VortexLatticeSolver,
     c: &FlightCondition,
@@ -586,49 +600,94 @@ fn mach_velocity(
     work: &mut Work,
 ) -> (Vec<Vec3>, Vec<Vec3>) {
     let n = s.mesh().vortex_count();
+    if c.mach <= EPSILON {
+        return (vec![Vec3::zeros(); n], vec![Vec3::zeros(); n]);
+    }
+    let gamma = &s.solution().circulation;
+    work.mach_interactions += 2 * n * n * if half { 2 } else { 1 };
+    if !half {
+        let triples = |flat: VecX| -> Vec<Vec3> {
+            (0..n)
+                .map(|i| Vec3::new(flat[3 * i], flat[3 * i + 1], flat[3 * i + 2]))
+                .collect()
+        };
+        return (
+            triples(s.velocity_mach_derivative_times(false, gamma)),
+            triples(s.velocity_mach_derivative_times(true, gamma)),
+        );
+    }
     let pg = (1.0 - c.mach * c.mach).sqrt();
-    let mut result = (vec![Vec3::zeros(); n], vec![Vec3::zeros(); n]);
-    if c.mach == 0.0 {
-        return result;
-    }
-    for (i, target) in s.mesh().vortices().iter().enumerate() {
-        for (j, source) in s.mesh().vortices().iter().enumerate() {
-            for image in 0..if half { 2 } else { 1 } {
-                let left = if image == 0 {
-                    source.bound_vortex_left
-                } else {
-                    reflect(source.bound_vortex_right)
-                };
-                let right = if image == 0 {
-                    source.bound_vortex_right
-                } else {
-                    reflect(source.bound_vortex_left)
-                };
-                let control = horseshoe_velocity_pg_derivative(
-                    &target.control_point,
-                    &left,
-                    &right,
-                    pg,
-                    core(s.mesh(), i, j),
-                    true,
-                );
-                let derivative = horseshoe_velocity_pg_derivative(
-                    &target.bound_vortex_center,
-                    &left,
-                    &right,
-                    pg,
-                    core(s.mesh(), i, j),
-                    image == 1 || i != j,
-                );
-                result.0[i] += (-c.mach / pg) * s.solution().circulation[j] * control;
-                result.1[i] += (-c.mach / pg) * s.solution().circulation[j] * derivative;
-                work.mach_interactions += 2;
-            }
+    let direction = -c.mach / pg;
+    let sources = source_panels(s.mesh());
+    let vortices = s.mesh().vortices();
+    let row = |i: usize| -> (Vec3, Vec3) {
+        let target = &vortices[i];
+        let (mut control, mut bound) = (Vec3::zeros(), Vec3::zeros());
+        for (j, (source, g)) in sources.iter().zip(gamma.iter()).enumerate() {
+            let core = source.core(target.component_index);
+            let derivative = |point: &Vec3, image: usize, include_bound: bool| {
+                let (left, right) = source.endpoints(image);
+                horseshoe_velocity_pg_derivative(point, &left, &right, pg, core, include_bound)
+            };
+            let at_control = derivative(&target.control_point, 0, true)
+                + derivative(&target.control_point, 1, true);
+            let at_bound = derivative(&target.bound_vortex_center, 0, i != j)
+                + derivative(&target.bound_vortex_center, 1, true);
+            control += *g * (at_control * direction);
+            bound += *g * (at_bound * direction);
         }
-    }
-    result
+        (control, bound)
+    };
+    drive_rows(n, row).into_iter().unzip()
 }
 
+/// Evaluates `row` for every target row and returns the values in row order:
+/// one rayon task per row under `parallel` above the threading threshold.
+/// Rows share nothing, so the result never depends on the schedule.
+fn drive_rows<T: Send>(n: usize, row: impl Fn(usize) -> T + Sync) -> Vec<T> {
+    #[cfg(feature = "parallel")]
+    if n >= super::operator::PARALLEL_MIN_PANELS {
+        use rayon::prelude::*;
+        return (0..n).into_par_iter().map(&row).collect();
+    }
+    (0..n).map(row).collect()
+}
+
+/// Seeds at or below this count are contracted as separate single-seed VJPs;
+/// above it one set of Jacobians is cheaper. Matches the geometry adjoint.
+const MAX_SEPARATE_SEEDS: usize = 3;
+
+/// Adds the endpoint cotangents of a direct source (`image == 0`) or of its
+/// reflection, which maps back to the swapped, reflected endpoints.
+#[inline]
+fn add_endpoints(
+    geometry: &mut LatticeCotangents,
+    j: usize,
+    image: usize,
+    left: Vec3,
+    right: Vec3,
+) {
+    if image == 0 {
+        geometry.bound_left[j] += left;
+        geometry.bound_right[j] += right;
+    } else {
+        geometry.bound_right[j] += reflect(left);
+        geometry.bound_left[j] += reflect(right);
+    }
+}
+
+/// Geometry cotangents of the residual and near-field loads for each column in
+/// `columns`.
+///
+/// Per (target, source, image) the residual term contracts the control-point
+/// Jacobian with the single seed `normal`, shared by every output, so one
+/// endpoint VJP replaces the three Jacobians and each output only scales it by
+/// `-λ Γ`. The normal's own cotangent is `-λ` times the induced velocity at the
+/// control point, `Σ_j Γ_j V_c(i, j)`, which is the stored control-point
+/// operator times the circulation; it is formed once rather than re-evaluating
+/// every kernel. The load term has one seed per output, contracted as separate
+/// VJPs for a few outputs and through one set of Jacobians for many, and is
+/// skipped for outputs with no near-field seed at that row (far-field ones).
 fn geometry_reverse(
     s: &VortexLatticeSolver,
     c: &FlightCondition,
@@ -642,6 +701,10 @@ fn geometry_reverse(
     let u = VortexLatticeSolver::freestream_direction(c);
     let omega = Vec3::new(c.roll_rate, c.pitch_rate, c.yaw_rate);
     let n = s.mesh().vortex_count();
+    let images = if half { 2 } else { 1 };
+    let gamma = &s.solution().circulation;
+    let sources: Vec<SourcePanel> = source_panels(s.mesh());
+    let control_velocity = s.control_velocity_matrix() * gamma;
     // Fixed ranges preserve reduction order across serial/parallel builds and
     // pool sizes. Workers own their partial cotangents; no shared additions.
     let rows_per_chunk = n.div_ceil(32).max(1);
@@ -649,14 +712,22 @@ fn geometry_reverse(
         .step_by(rows_per_chunk)
         .map(|first| (first, (first + rows_per_chunk).min(n)))
         .collect();
+    let seeds_ref = &*seeds;
     let sweep = |&(first, last): &(usize, usize)| {
         let mut geometry: Vec<_> = columns
             .iter()
             .map(|_| LatticeCotangents::zeros(s.mesh()))
             .collect();
+        let mut residual_weights = Vec::with_capacity(columns.len());
+        let mut load_seeds = Vec::with_capacity(columns.len());
         for i in first..last {
             let target = &s.mesh().vortices()[i];
             let normal = s.linearized_normals()[i];
+            let induced = Vec3::new(
+                control_velocity[3 * i],
+                control_velocity[3 * i + 1],
+                control_velocity[3 * i + 2],
+            );
             for (local, &k) in columns.iter().enumerate() {
                 let lambda = adjoints[(i, k)];
                 if target.affected_by_freestream {
@@ -664,63 +735,86 @@ fn geometry_reverse(
                         lambda * (u + omega.cross(&(target.control_point - s.reference_point())));
                     geometry[local].control_point[i] -= lambda * normal.cross(&omega);
                 }
+                geometry[local].normal[i] -= lambda * induced;
             }
-            for (j, source) in s.mesh().vortices().iter().enumerate() {
-                for image in 0..if half { 2 } else { 1 } {
-                    let left = if image == 0 {
-                        source.bound_vortex_left
-                    } else {
-                        reflect(source.bound_vortex_right)
-                    };
-                    let right = if image == 0 {
-                        source.bound_vortex_right
-                    } else {
-                        reflect(source.bound_vortex_left)
-                    };
-                    let radius = core(s.mesh(), i, j);
-                    let bound = image == 1 || i != j;
-                    let jac = horseshoe_velocity_jacobians(
-                        &target.control_point,
-                        &left,
-                        &right,
-                        pg,
-                        radius,
-                        true,
-                    );
-                    let velocity = horseshoe_vortex_velocity(
-                        &target.control_point,
-                        &left,
-                        &right,
-                        pg,
-                        radius,
-                        true,
-                    );
-                    let load_jac = horseshoe_velocity_jacobians(
+            residual_weights.clear();
+            residual_weights.extend(
+                columns
+                    .iter()
+                    .enumerate()
+                    .map(|(local, &k)| (local, adjoints[(i, k)]))
+                    .filter(|(_, lambda)| *lambda != 0.0),
+            );
+            load_seeds.clear();
+            load_seeds.extend(
+                columns
+                    .iter()
+                    .enumerate()
+                    .map(|(local, &k)| (local, seeds_ref[k].velocity[i]))
+                    .filter(|(_, seed)| seed.norm_squared() > 0.0),
+            );
+            for (j, source) in sources.iter().enumerate() {
+                let g = gamma[j];
+                if g == 0.0 {
+                    continue;
+                }
+                let core = source.core(target.component_index);
+                for image in 0..images {
+                    let (left, right) = source.endpoints(image);
+                    if !residual_weights.is_empty() {
+                        let (by_left, by_right) = HorseshoeVelocityJacobians::shared_terms(
+                            &target.control_point,
+                            &left,
+                            &right,
+                            pg,
+                            core,
+                            true,
+                        )
+                        .endpoint_vjp(&normal);
+                        let by_point = -(by_left + by_right);
+                        for &(local, lambda) in &residual_weights {
+                            let weight = -lambda * g;
+                            add_endpoints(
+                                &mut geometry[local],
+                                j,
+                                image,
+                                weight * by_left,
+                                weight * by_right,
+                            );
+                            geometry[local].control_point[i] += weight * by_point;
+                        }
+                    }
+                    if load_seeds.is_empty() {
+                        continue;
+                    }
+                    let kernel = HorseshoeVelocityJacobians::shared_terms(
                         &target.bound_vortex_center,
                         &left,
                         &right,
                         pg,
-                        radius,
-                        bound,
+                        core,
+                        image == 1 || i != j,
                     );
-                    let gamma = s.solution().circulation[j];
-                    for (local, &k) in columns.iter().enumerate() {
-                        let seed = -gamma * adjoints[(i, k)] * normal;
-                        let load_seed = gamma * seeds[k].velocity[i];
-                        let l =
-                            jac.bound_left.tr_mul(&seed) + load_jac.bound_left.tr_mul(&load_seed);
-                        let r =
-                            jac.bound_right.tr_mul(&seed) + load_jac.bound_right.tr_mul(&load_seed);
-                        geometry[local].bound_center[i] += load_jac.field_point.tr_mul(&load_seed);
-                        if image == 0 {
-                            geometry[local].bound_left[j] += l;
-                            geometry[local].bound_right[j] += r;
-                        } else {
-                            geometry[local].bound_right[j] += reflect(l);
-                            geometry[local].bound_left[j] += reflect(r);
+                    if load_seeds.len() <= MAX_SEPARATE_SEEDS {
+                        for &(local, seed) in &load_seeds {
+                            let (by_left, by_right) = kernel.endpoint_vjp(&(g * seed));
+                            geometry[local].bound_center[i] -= by_left + by_right;
+                            add_endpoints(&mut geometry[local], j, image, by_left, by_right);
                         }
-                        geometry[local].control_point[i] += jac.field_point.tr_mul(&seed);
-                        geometry[local].normal[i] -= adjoints[(i, k)] * gamma * velocity;
+                    } else {
+                        let jacobians = kernel.jacobians();
+                        for &(local, seed) in &load_seeds {
+                            let scaled = g * seed;
+                            geometry[local].bound_center[i] +=
+                                jacobians.field_point.tr_mul(&scaled);
+                            add_endpoints(
+                                &mut geometry[local],
+                                j,
+                                image,
+                                jacobians.bound_left.tr_mul(&scaled),
+                                jacobians.bound_right.tr_mul(&scaled),
+                            );
+                        }
                     }
                 }
             }
@@ -750,5 +844,314 @@ fn geometry_reverse(
             }
         }
     }
-    work.geometry_interactions += 2 * n * n * if half { 2 } else { 1 };
+    work.geometry_interactions += 2 * n * n * images;
+}
+
+#[cfg(test)]
+mod tests {
+    use super::super::Settings;
+    use super::*;
+    use crate::geometry::{MeshInput, SurfaceMesh};
+    use crate::gradients::horseshoe_velocity_jacobians;
+    use crate::solver::horseshoe_vortex_velocity;
+
+    /// A wing and a tail on separate components, duplicated about `y = 0`.
+    fn input(ny: usize) -> MeshInput {
+        let surface = |name: &str, nx: usize, ny: usize, component: usize, offset: Vec3| {
+            let mut surface = SurfaceMesh::new(name, nx, ny);
+            surface.y_duplicated = true;
+            surface.component_index = component;
+            for i in 0..=nx {
+                for j in 0..=ny {
+                    let eta = j as Scalar / ny as Scalar;
+                    let chord = i as Scalar / nx as Scalar;
+                    let point = Vec3::new(
+                        0.6 * eta + chord * (1.0 - 0.4 * eta),
+                        0.05 + 3.0 * eta,
+                        0.3 * eta - 0.05 * chord * eta,
+                    );
+                    surface.set_node(i, j, offset + point).unwrap();
+                }
+            }
+            surface
+        };
+        let mut input = MeshInput {
+            surfaces: vec![
+                surface("wing", 3, ny, 0, Vec3::zeros()),
+                surface("tail", 2, 3, 1, Vec3::new(4.0, 0.0, 0.5)),
+            ],
+            ..MeshInput::default()
+        };
+        input.reference.area = 6.0;
+        input.reference.chord = 0.8;
+        input.reference.span = 6.0;
+        input.reference.moment_reference_point = Vec3::new(0.3, 0.0, 0.1);
+        input
+    }
+
+    fn solved(half: bool, mach: Scalar, ny: usize) -> (VortexLatticeSolver, FlightCondition) {
+        let source = Source::Mesh(input(ny));
+        let source = if half { source.half().unwrap() } else { source };
+        let mut solver = source.solver(Settings::default()).unwrap();
+        let condition = FlightCondition {
+            alpha: 0.08,
+            mach,
+            pitch_rate: 0.01,
+            ..FlightCondition::default()
+        };
+        solver
+            .solve_selective(&condition, half, true, false, &mut Work::default())
+            .unwrap();
+        (solver, condition)
+    }
+
+    fn core(mesh: &crate::solver::VortexLattice, row: usize, column: usize) -> Scalar {
+        let source = &mesh.vortices()[column];
+        let width = (source.bound_vortex_right.y - source.bound_vortex_left.y)
+            .hypot(source.bound_vortex_right.z - source.bound_vortex_left.z);
+        if mesh.vortices()[row].component_index == source.component_index {
+            0.0001 * width
+        } else {
+            (0.0001 * source.local_chord).max(0.0001 * width)
+        }
+    }
+
+    fn image_endpoints(source: &crate::solver::HorseshoeVortex, image: usize) -> (Vec3, Vec3) {
+        if image == 0 {
+            (source.bound_vortex_left, source.bound_vortex_right)
+        } else {
+            (
+                reflect(source.bound_vortex_right),
+                reflect(source.bound_vortex_left),
+            )
+        }
+    }
+
+    /// The baseline Mach derivative: serial, one pair at a time.
+    fn reference_mach(
+        s: &VortexLatticeSolver,
+        c: &FlightCondition,
+        half: bool,
+    ) -> (Vec<Vec3>, Vec<Vec3>) {
+        let n = s.mesh().vortex_count();
+        let pg = (1.0 - c.mach * c.mach).sqrt();
+        let mut result = (vec![Vec3::zeros(); n], vec![Vec3::zeros(); n]);
+        for (i, target) in s.mesh().vortices().iter().enumerate() {
+            for (j, source) in s.mesh().vortices().iter().enumerate() {
+                for image in 0..if half { 2 } else { 1 } {
+                    let (left, right) = image_endpoints(source, image);
+                    let radius = core(s.mesh(), i, j);
+                    let control = horseshoe_velocity_pg_derivative(
+                        &target.control_point,
+                        &left,
+                        &right,
+                        pg,
+                        radius,
+                        true,
+                    );
+                    let bound = horseshoe_velocity_pg_derivative(
+                        &target.bound_vortex_center,
+                        &left,
+                        &right,
+                        pg,
+                        radius,
+                        image == 1 || i != j,
+                    );
+                    result.0[i] += (-c.mach / pg) * s.solution().circulation[j] * control;
+                    result.1[i] += (-c.mach / pg) * s.solution().circulation[j] * bound;
+                }
+            }
+        }
+        result
+    }
+
+    /// The baseline geometry reverse: two full Jacobians and a primal velocity
+    /// per pair, contracted per output.
+    fn reference_geometry(
+        s: &VortexLatticeSolver,
+        c: &FlightCondition,
+        half: bool,
+        adjoints: &MatX,
+        columns: &[usize],
+        seeds: &mut [Seeds],
+    ) {
+        let pg = (1.0 - c.mach * c.mach).sqrt();
+        let u = VortexLatticeSolver::freestream_direction(c);
+        let omega = Vec3::new(c.roll_rate, c.pitch_rate, c.yaw_rate);
+        for (i, target) in s.mesh().vortices().iter().enumerate() {
+            let normal = s.linearized_normals()[i];
+            for &k in columns {
+                let lambda = adjoints[(i, k)];
+                let geometry = &mut seeds[k].geometry;
+                if target.affected_by_freestream {
+                    geometry.normal[i] -=
+                        lambda * (u + omega.cross(&(target.control_point - s.reference_point())));
+                    geometry.control_point[i] -= lambda * normal.cross(&omega);
+                }
+            }
+            for (j, source) in s.mesh().vortices().iter().enumerate() {
+                for image in 0..if half { 2 } else { 1 } {
+                    let (left, right) = image_endpoints(source, image);
+                    let radius = core(s.mesh(), i, j);
+                    let jac = horseshoe_velocity_jacobians(
+                        &target.control_point,
+                        &left,
+                        &right,
+                        pg,
+                        radius,
+                        true,
+                    );
+                    let velocity = horseshoe_vortex_velocity(
+                        &target.control_point,
+                        &left,
+                        &right,
+                        pg,
+                        radius,
+                        true,
+                    );
+                    let load_jac = horseshoe_velocity_jacobians(
+                        &target.bound_vortex_center,
+                        &left,
+                        &right,
+                        pg,
+                        radius,
+                        image == 1 || i != j,
+                    );
+                    let gamma = s.solution().circulation[j];
+                    for &k in columns {
+                        let seed = -gamma * adjoints[(i, k)] * normal;
+                        let load_seed = gamma * seeds[k].velocity[i];
+                        let l =
+                            jac.bound_left.tr_mul(&seed) + load_jac.bound_left.tr_mul(&load_seed);
+                        let r =
+                            jac.bound_right.tr_mul(&seed) + load_jac.bound_right.tr_mul(&load_seed);
+                        let geometry = &mut seeds[k].geometry;
+                        geometry.bound_center[i] += load_jac.field_point.tr_mul(&load_seed);
+                        add_endpoints(geometry, j, image, l, r);
+                        geometry.control_point[i] += jac.field_point.tr_mul(&seed);
+                        geometry.normal[i] -= adjoints[(i, k)] * gamma * velocity;
+                    }
+                }
+            }
+        }
+    }
+
+    fn assert_close(actual: &[Vec3], expected: &[Vec3], tolerance: Scalar) {
+        let scale = expected.iter().map(|v| v.amax()).fold(0.0, Scalar::max);
+        let error = actual
+            .iter()
+            .zip(expected)
+            .map(|(a, b)| (a - b).amax())
+            .fold(0.0, Scalar::max);
+        assert!(scale > 0.0);
+        assert!(
+            error <= tolerance * scale,
+            "error {error:e}, scale {scale:e}"
+        );
+    }
+
+    #[test]
+    fn mach_velocity_matches_the_baseline_in_both_modes() {
+        for half in [false, true] {
+            let (s, c) = solved(half, 0.4, 6);
+            let mut work = Work::default();
+            let (control, bound) = mach_velocity(&s, &c, half, &mut work);
+            let (expected_control, expected_bound) = reference_mach(&s, &c, half);
+            assert_close(&control, &expected_control, 1e-13);
+            assert_close(&bound, &expected_bound, 1e-13);
+            let n = s.mesh().vortex_count();
+            assert_eq!(work.mach_interactions, 2 * n * n * if half { 2 } else { 1 });
+        }
+    }
+
+    #[test]
+    fn mach_velocity_does_no_work_when_incompressible() {
+        for half in [false, true] {
+            for mach in [0.0, 0.5 * EPSILON] {
+                let (s, c) = solved(half, mach, 4);
+                let mut work = Work::default();
+                let (control, bound) = mach_velocity(&s, &c, half, &mut work);
+                assert!(control.iter().chain(&bound).all(|v| *v == Vec3::zeros()));
+                assert_eq!(work.mach_interactions, 0);
+            }
+        }
+    }
+
+    /// Both load-seed branches (separate VJPs for up to three near-field
+    /// outputs, Jacobians above), plus a far-field output with no load seed.
+    #[test]
+    fn geometry_reverse_matches_the_baseline_in_both_modes() {
+        let output_sets: [&[Output]; 2] = [
+            &[Output::Lift, Output::FarFieldInducedDrag],
+            &[
+                Output::Lift,
+                Output::Drag,
+                Output::Pitch,
+                Output::NearFieldInducedDrag,
+            ],
+        ];
+        for half in [false, true] {
+            let (s, c) = solved(half, 0.3, 6);
+            let n = s.mesh().vortex_count();
+            for outputs in output_sets {
+                let needs = Needs {
+                    geometry: true,
+                    alpha: false,
+                    beta: false,
+                    reference: false,
+                };
+                let make_seeds = || -> Vec<Seeds> {
+                    outputs
+                        .iter()
+                        .map(|&o| {
+                            if o.far() {
+                                let (gamma, geometry) = crate::analysis::trefftz::reverse(
+                                    &s,
+                                    half,
+                                    o,
+                                    true,
+                                    &mut Work::default(),
+                                );
+                                Seeds {
+                                    gamma,
+                                    geometry,
+                                    velocity: vec![Vec3::zeros(); n],
+                                    alpha: 0.0,
+                                    beta: 0.0,
+                                    reference: [0.0; 3],
+                                }
+                            } else {
+                                near_seeds(&s, &c, half, o, needs, &mut Work::default())
+                            }
+                        })
+                        .collect()
+                };
+                let adjoints = MatX::from_fn(n, outputs.len(), |i, k| {
+                    0.3 + 0.1 * ((i * 7 + k * 3) as Scalar).sin()
+                });
+                let columns: Vec<_> = (0..outputs.len()).collect();
+                let mut actual = make_seeds();
+                let mut expected = make_seeds();
+                let mut work = Work::default();
+                geometry_reverse(&s, &c, half, &adjoints, &columns, &mut actual, &mut work);
+                reference_geometry(&s, &c, half, &adjoints, &columns, &mut expected);
+                assert_eq!(
+                    work.geometry_interactions,
+                    2 * n * n * if half { 2 } else { 1 }
+                );
+                for (a, e) in actual.iter().zip(&expected) {
+                    let (a, e) = (&a.geometry, &e.geometry);
+                    assert_close(&a.bound_left, &e.bound_left, 1e-13);
+                    assert_close(&a.bound_right, &e.bound_right, 1e-13);
+                    assert_close(&a.control_point, &e.control_point, 1e-13);
+                    assert_close(&a.normal, &e.normal, 1e-13);
+                    if e.bound_center.iter().any(|v| *v != Vec3::zeros()) {
+                        assert_close(&a.bound_center, &e.bound_center, 1e-13);
+                    } else {
+                        assert!(a.bound_center.iter().all(|v| *v == Vec3::zeros()));
+                    }
+                }
+            }
+        }
+    }
 }
