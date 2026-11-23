@@ -5,7 +5,7 @@ import remarkMath from "remark-math";
 import rehypeKatex from "rehype-katex";
 
 const config: Config = {
-    title: "VLM",
+    title: "Zephyr",
     tagline:
         "Vortex Lattice Method Library for Aerodynamic Analysis",
     favicon: "img/favicon.ico",
@@ -63,7 +63,7 @@ const config: Config = {
             respectPrefersColorScheme: true,
         },
         navbar: {
-            title: "VLM",
+            title: "Zephyr",
             items: [
                 {
                     type: "docSidebar",

@@ -56,5 +56,42 @@ stack and async runtime it pulls in are not dependencies of the library itself.
 clean, which is what keeps the core crate's dependency graph unchanged for
 consumers who do not want MDO transport.
 
+## Versioning and releases
+
 `CHANGELOG.md` follows Keep a Changelog. Every user-visible change must update
 its Unreleased section.
+
+The release workflow owns the version. Do not hand-edit `version` in
+`Cargo.toml`, do not add a dated heading to `CHANGELOG.md`, and do not create a
+`v*` tag by hand — `.github/workflows/release.yml` does all three.
+
+For the same reason, no document outside `CHANGELOG.md` states the crate's
+version. `README.md` and `docs/docs/getting-started/installation.md` install
+with `cargo add zephyr-vlm`, which resolves the current release on its own, so
+a bump leaves them correct and nothing has to be edited alongside it. Do not
+introduce a pinned version into prose, install snippets or examples.
+
+A release runs when a pull request into `main` merges carrying a `release` or
+`prerelease` label plus exactly one of `major`, `minor`, or `patch`; a
+`prerelease` additionally needs exactly one of `alpha`, `beta`, or `rc`. The
+workflow derives the current version from the highest stable `v*` git tag, not
+from `Cargo.toml` — the manifest is only a fallback used when no tag exists, so
+a stale version there is harmless and self-correcting. It then writes the new
+version via `scripts/update_copyright.py`, propagates it into `Cargo.lock`,
+rewrites `## [Unreleased]` into a dated release heading with updated compare
+links, snapshots the Docusaurus docs, commits, signs a tag, and attaches the
+packaged `.crate` to a GitHub release.
+
+The project is pre-1.0: a breaking change takes a `minor` bump.
+
+The workflow publishes to crates.io once it has pushed the tag and created the
+GitHub release, authenticating with the `CARGO_REGISTRY_TOKEN` repository
+secret. That step runs `cargo publish --locked` against the committed release
+tree and so needs no `--allow-dirty`, unlike the earlier `cargo package` step,
+which carries that flag because the version and changelog edits are still
+uncommitted at that point. Prereleases publish too, keeping their
+`-alpha.N`/`-beta.N`/`-rc.N` qualifier.
+
+A published version number can never be reused or overwritten, only yanked, so
+the publish step first asks crates.io whether that exact version exists and
+skips when it does, which keeps a re-run of the workflow safe.

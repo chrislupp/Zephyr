@@ -4,10 +4,9 @@ Zephyr is a safe, Rust-only vortex-lattice-method library for aircraft
 geometry, aerodynamic analysis, stability and control derivatives, trim,
 eigenmodes, analytical/adjoint gradients, AVL input, and VTK output.
 
-The package is named `zephyr-vlm` and imported as `zephyr_vlm`. The
-unreleased Rust API is a breaking replacement for the former C++ API. The
-repository is publication-ready, but this port does not publish it to
-crates.io.
+The package is named `zephyr-vlm` and imported as `zephyr_vlm`. The Rust API
+is a breaking replacement for the former C++ API. Tagged releases are
+published to crates.io by the release workflow.
 
 ## Status
 
@@ -40,6 +39,18 @@ distinction is deliberate:
 - Aerodynamic coefficients and normalized body rates are dimensionless.
 
 ## Add the crate
+
+```bash
+cargo add zephyr-vlm
+```
+
+For a minimal build without the default `vtk` feature:
+
+```bash
+cargo add zephyr-vlm --no-default-features
+```
+
+To follow unreleased work instead, depend on the repository:
 
 ```toml
 [dependencies]
