@@ -216,6 +216,34 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.RELEASE_TOKEN }}
 
+      - name: Publish to crates.io
+        env:
+          CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
+          CRATE_VERSION: ${{ steps.version.outputs.package_version }}
+        run: |
+          if [ -z "${CARGO_REGISTRY_TOKEN:-}" ]; then
+            echo "::error::CARGO_REGISTRY_TOKEN is not set. Add a crates.io API token as a repository secret."
+            exit 1
+          fi
+
+          # A published version can never be reused or overwritten, only yanked.
+          # Skip rather than fail when this exact version is already on the
+          # registry, so re-running the workflow is safe.
+          STATUS=$(curl -sS -o /dev/null -w '%{http_code}' --retry 3 --retry-delay 5 \
+            -A 'zephyr-vlm release workflow' \
+            "https://crates.io/api/v1/crates/zephyr-vlm/${CRATE_VERSION}" || true)
+          if [ "$STATUS" = "200" ]; then
+            echo "::notice::zephyr-vlm ${CRATE_VERSION} is already on crates.io; skipping publish."
+            exit 0
+          fi
+          if [ "$STATUS" != "404" ]; then
+            echo "::error::Unexpected crates.io response ${STATUS} when checking for version ${CRATE_VERSION}."
+            exit 1
+          fi
+
+          # The working tree is committed at this point, so no --allow-dirty.
+          cargo publish --locked
+
       - name: Merge release metadata back to develop
         env:
           GH_TOKEN: ${{ secrets.RELEASE_TOKEN }}

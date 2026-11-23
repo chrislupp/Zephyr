@@ -105,6 +105,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   solve used the half-size factorization. `MeshTrimSolver::solve_with_solver`
   converges trim with a caller-configured solver, keeping its settings;
   `MeshTrimSolver::solve` is unchanged.
+- The release workflow publishes the crate to crates.io after it pushes the tag
+  and creates the GitHub release, so released versions are installable from the
+  registry instead of only as a git dependency. Prereleases publish under their
+  qualifier, and a version already present on the registry is skipped rather
+  than re-published.
 
 ### Changed
 
@@ -112,7 +117,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   and the import name `zephyr_vlm` (previously `pegasus-vlm` / `pegasus_vlm`),
   the error type is `ZephyrError`, the Philote disciplines report themselves as
   `ZephyrVLM` and `ZephyrMesh`, and the repository and documentation site live
-  under `chrislupp/Zephyr`.
+  under `chrislupp/Zephyr`. The documentation site and its navbar are
+  titled "Zephyr" instead of "VLM".
 - The documentation site footer credits Christopher A. Lupp as copyright
   holder instead of "VLM Authors" and notes the public release case number.
 - Mesh-node sensitivities now accumulate in a shared reverse geometry sweep and
