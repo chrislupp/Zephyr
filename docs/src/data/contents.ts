@@ -61,6 +61,10 @@ export const docs: Section[] = [
                 to: "/docs/examples/selective-analysis",
             },
             {
+                label: "Chord Optimization",
+                to: "/docs/examples/chord-optimization",
+            },
+            {
                 label: "Philote Optimization",
                 to: "/docs/examples/philote-optimization",
             },

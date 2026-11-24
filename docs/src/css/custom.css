@@ -1342,6 +1342,38 @@ kbd {
     box-shadow: none;
 }
 
+/* ── Figures on a sheet ────────────────────────────────────────────────── */
+
+/* A figure opens with a 2px ink rule and closes with a hair, exactly as
+   Figure 1 on the contents page does. The drawing may run the full 46rem
+   column; the caption holds the 38rem measure. */
+.zm-figure {
+    max-width: none;
+    margin: 1.5rem 0 1.75rem;
+    min-width: 0;
+}
+
+.zm-figure__frame {
+    padding: 0.75rem 0 0.25rem;
+    border-top: 2px solid var(--zm-ink);
+    border-bottom: 1px solid var(--zm-hair);
+    overflow-x: auto;
+}
+
+.zm-figure figcaption,
+.zm-figure__caption {
+    max-width: var(--zm-measure);
+    padding-top: 0.625rem;
+    font-size: 0.875rem;
+    line-height: 1.5;
+    color: var(--zm-ink-2);
+}
+
+.zm-figure figcaption b,
+.zm-figure__caption b {
+    color: var(--zm-ink);
+}
+
 /* ── Colophon ──────────────────────────────────────────────────────────── */
 
 .footer {

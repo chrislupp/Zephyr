@@ -5,7 +5,7 @@
 
 .main {
     display: grid;
-    grid-template-areas: "intro" "routes" "plate" "conventions";
+    grid-template-areas: "intro" "routes" "figure" "conventions";
     row-gap: 2.5rem;
     align-content: start;
     min-width: 0;
@@ -37,14 +37,14 @@
     margin: 0;
 }
 
-.plate {
-    grid-area: plate;
+.figure {
+    grid-area: figure;
     max-width: 42rem;
     margin: 0;
     min-width: 0;
 }
 
-.plateScroll {
+.figureScroll {
     padding-bottom: 0.25rem;
     border-top: 2px solid var(--zm-ink);
     border-bottom: 1px solid var(--zm-hair);
@@ -60,7 +60,7 @@
     }
 }
 
-.plate figcaption {
+.figure figcaption {
     max-width: var(--zm-measure);
     padding-top: 0.625rem;
     font-size: 0.875rem;
@@ -68,7 +68,7 @@
     color: var(--zm-ink-2);
 }
 
-.plate figcaption b {
+.figure figcaption b {
     color: var(--zm-ink);
 }
 
@@ -186,13 +186,13 @@
 @media (min-width: 1440px) {
     .main {
         grid-template-columns: minmax(0, 23rem) minmax(0, 1fr);
-        grid-template-areas: "intro plate" "routes routes" "conventions conventions";
+        grid-template-areas: "intro figure" "routes routes" "conventions conventions";
         column-gap: 3rem;
         row-gap: 2.25rem;
         align-items: start;
     }
 
-    .plate {
+    .figure {
         padding-top: 1.75rem;
     }
 }

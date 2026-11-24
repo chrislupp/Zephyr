@@ -43,6 +43,7 @@ const sidebars: SidebarsConfig = {
                 "examples/control-surfaces",
                 "examples/mesh-trim",
                 "examples/selective-analysis",
+                "examples/chord-optimization",
                 "examples/philote-optimization",
             ],
         },

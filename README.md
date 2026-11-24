@@ -304,6 +304,42 @@ println!("dCL/dalpha = {}", lift.by_alpha);
 # }
 ```
 
+## Shape optimization in OpenMDAO
+
+`examples/chord_optimization.py` minimizes the far-field induced drag of a
+rectangular wing over the six B-spline control points of its chord distribution
+and its angle of attack, subject to a lift constraint and a planform-area
+constraint. The wing converges
+to the elliptical planform lifting-line theory predicts, which makes the run a
+check on the analytical gradients as much as an optimization.
+
+The optimizer is IPOPT, through OpenMDAO's pyOptSparse driver. The analysis is
+two Zephyr
+disciplines behind gRPC — `MeshDiscipline` mapping section parameters to a
+structured mesh and its reference quantities, `VlmDiscipline` mapping that mesh
+and a flight condition to `CL` and `CDi` — each reporting analytical partials,
+so OpenMDAO assembles the total derivatives across both by the chain rule.
+Nothing is finite-differenced.
+
+```bash
+cargo run --release --features philote --example philote_mesh_server
+cargo run --release --features philote --example philote_vlm_server
+pip install openmdao philote-mdo pyoptsparse numpy scipy
+python examples/chord_optimization.py
+```
+
+Pass `--check-partials` to compare the total derivatives across both
+disciplines against finite differences of the same chain before optimizing.
+
+A recorded run is committed at
+[`examples/chord_optimization_results.json`](examples/chord_optimization_results.json):
+induced drag falls 4.06 % at constant lift and area, in 29 IPOPT iterations and
+well under a second, with both constraints satisfied to machine precision. The converged drag lands 2.1 % below the lifting-line
+minimum, which is Trefftz-plane discretization error at that resolution rather
+than physics; the
+[documentation sheet](docs/docs/examples/chord-optimization.mdx) says where it
+comes from and plots both the planform and the driver's convergence.
+
 ## Selective outputs and half-wing analysis
 
 `analysis::Analysis` accepts explicit output and derivative requests. Unrequested

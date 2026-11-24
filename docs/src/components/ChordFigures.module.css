@@ -1,0 +1,74 @@
+.figure {
+    display: block;
+    width: 100%;
+    height: auto;
+    font-family: var(--zm-sans);
+    font-feature-settings: "tnum" 1;
+}
+
+.figure line,
+.figure path,
+.figure polyline,
+.figure rect,
+.figure circle {
+    vector-effect: non-scaling-stroke;
+}
+
+/* The datum of a plot: axes in ink, ticks in rule. */
+.axis {
+    stroke: var(--zm-ink);
+    stroke-width: 1;
+}
+
+.tick {
+    stroke: var(--zm-rule);
+    stroke-width: 1;
+}
+
+.hair {
+    stroke: var(--zm-hair);
+    stroke-width: 1;
+}
+
+/* The starting shape: a light rule, so it reads as the thing being left behind. */
+.start {
+    fill: none;
+    stroke: var(--zm-rule);
+    stroke-width: 1.5;
+}
+
+/* The solved result: ink, the heaviest line on the figure. */
+.result {
+    fill: none;
+    stroke: var(--zm-ink);
+    stroke-width: 1.75;
+}
+
+/* The analytical answer being aimed at: data ink, so it takes the red. */
+.reference {
+    fill: none;
+    stroke: var(--zm-red);
+    stroke-width: 1.5;
+    stroke-dasharray: 5 4;
+}
+
+.node {
+    fill: var(--zm-ink);
+    stroke: none;
+}
+
+.label {
+    font-size: 13.5px;
+    fill: var(--zm-mute);
+}
+
+.redLabel {
+    font-size: 13.5px;
+    fill: var(--zm-red-text);
+}
+
+.inkLabel {
+    font-size: 13.5px;
+    fill: var(--zm-ink);
+    font-weight: 600;
+}

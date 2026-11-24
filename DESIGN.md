@@ -231,17 +231,17 @@ This is a research library's reference. It does not read as a marketing site, as
 - Every sheet is numbered, and the rail, the head of the sheet, and the pager print the same number.
 - One datum edge runs down the sheet; text registers to it and numbers hang in the gutter to its left.
 - Structure comes from rules, not boxes. Corners are square and nothing casts a shadow.
-- One red, only on sheet numbers, place marks, the brand bar, and the data ink of Plate 1. Hover and focus are said in ink.
+- One red, only on sheet numbers, place marks, the brand bar, and the data ink of Figure 1. Hover and focus are said in ink.
 - One grotesque in two registers: light at display size, regular to bold for text, with tabular numerals throughout.
-- Motion answers state changes only; Plate 1's wake is the single authored movement.
+- Motion answers state changes only; Figure 1's wake is the single authored movement.
 
 ## Colors
 
 White sheet, grey rail, black ink, and one red; the only other hues are three quiet inks confined to code listings.
 
 ### Primary
-- **Standards Red** (`red`, #d8301f): the fill and display red. It sets the sheet number above each title, fills the current sheet's number cell in the rail, the square beside the section in view, the rule under the current book in the masthead, the brand bar, and the bound vortices of Plate 1. It reaches 4.81:1 on the sheet, so it is used as text only at display size; small red text takes Standards Red Text.
-- **Standards Red Text** (`red-text`, #c4281a): the same red darkened to stay legible as text, 5.73:1 on the sheet and 5.01:1 on the rail. It sets sheet numbers at text size (pager, route lists) and the numeric labels of the bound vortices on Plate 1.
+- **Standards Red** (`red`, #d8301f): the fill and display red. It sets the sheet number above each title, fills the current sheet's number cell in the rail, the square beside the section in view, the rule under the current book in the masthead, the brand bar, and the bound vortices of Figure 1. It reaches 4.81:1 on the sheet, so it is used as text only at display size; small red text takes Standards Red Text.
+- **Standards Red Text** (`red-text`, #c4281a): the same red darkened to stay legible as text, 5.73:1 on the sheet and 5.01:1 on the rail. It sets sheet numbers at text size (pager, route lists) and the numeric labels of the bound vortices on Figure 1.
 - **On Red** (`on-red`, #ffffff): the number inside a filled place mark.
 - **Selection Tint** (`select`, #f6cdc7): the red let down to a tint, for selected text only.
 
@@ -260,7 +260,7 @@ Listing inks. They appear inside code listings and nowhere else, and none of the
 - **Ink** (`ink`, #14171a): text, headings, links at rest and under the pointer, heavy rules, focus outlines, the text caret, and the page-load bar.
 - **Second Ink** (`ink-2`, #33383e): rail entries, contents entries, captions, and quoted text.
 - **Mute** (`mute`, #5f666f): hanging numbers, the running head, labels, equation numbers, and the tagline. 5.81:1 on the sheet, 5.08:1 on the rail.
-- **Rule** (`rule`, #c9cdd2): light rules under group labels, the borders of the copy button and of a key cap, panel edges on a plate, and the scrollbar.
+- **Rule** (`rule`, #c9cdd2): light rules under group labels, the borders of the copy button and of a key cap, panel edges on a figure, and the scrollbar.
 - **Hair** (`hair`, #e1e4e7): the datum line, table rows, and the closing rule of a block.
 - **Listing Ground** (`listing`, #f1f2f3): the ground of code listings, inline code, and key caps. A highlighted line takes Listing Highlight (`listing-highlight`, #e3e6e9).
 
@@ -268,7 +268,7 @@ Listing inks. They appear inside code listings and nowhere else, and none of the
 The dark variant redefines the same tokens under `[data-theme="dark"]`; the frontmatter carries each as its `-dark` sibling. The sheet becomes #121518, the rail and the listing ground #1a1e22, ink #e8eaec, and the red lifts to #ff5c47 (text #ff7361) so it holds 6.0:1 on the dark sheet. On Red inverts to the sheet colour, so the number in a place mark is dark on red. Listing keywords become pure white at weight 600; the three listing inks lift to #7fd1b0, #8fbfea, and #e9b872.
 
 ### Named Rules
-**The Standards Red Rule.** Red appears only on sheet numbers (above the title, in the pager, in the route lists), place marks (the rail's number cell, the square beside the section in view, the rule under the current book), the brand bar, and the keyed bound vortices of Plate 1. It is never a syntax colour, never a note or warning colour, never a hover or focus colour, and never decoration. The theme's own primary variable (`--ifm-color-primary`) is set to ink, so any stock state the build has not restyled falls back to ink rather than red.
+**The Standards Red Rule.** Red appears only on sheet numbers (above the title, in the pager, in the route lists), place marks (the rail's number cell, the square beside the section in view, the rule under the current book), the brand bar, and the keyed bound vortices of Figure 1. It is never a syntax colour, never a note or warning colour, never a hover or focus colour, and never decoration. The theme's own primary variable (`--ifm-color-primary`) is set to ink, so any stock state the build has not restyled falls back to ink rather than red.
 
 **The Never Colour Alone Rule.** A place mark always changes something besides hue: the current rail row also turns sheet white and bold, the current contents entry and the current book turn bold. Hover follows the same thought from the other side: it changes weight of line, not hue.
 
@@ -298,7 +298,7 @@ Both families are self-hosted variable fonts (Latin and Latin Extended; Public S
 - **Code** (Source Code Pro 400, 0.875rem, line-height 1.6): listings. Inline code is 0.875em on the listing ground with no border.
 
 ### Named Rules
-**The One Grotesque Rule.** Public Sans sets every word that is not code or mathematics, including labels on listings and plates. Source Code Pro never sets prose, navigation, or labels.
+**The One Grotesque Rule.** Public Sans sets every word that is not code or mathematics, including labels on listings and figures. Source Code Pro never sets prose, navigation, or labels.
 
 **The Light At Size Rule.** Weight 300 is reserved for the sheet number, the sheet title, and the contents-page name. Nothing else is lighter than 400. The only light type below 2.25rem is an API sheet's identifier title on a sheet 640px or narrower, which shrinks so that it never breaks.
 
@@ -313,16 +313,16 @@ The rail is 20rem wide on the rail ground and holds a number column (4.25rem, or
 On a sheet the column is at most 46rem wide. Prose, section headings, notes, and equations hold a 38rem measure inside it; the sheet title, listings, and tables may run the full 46rem but start on the same edge. Vertical rhythm is set by the headings (2.75rem above a section heading and 0.75rem below; 2rem and 0.5rem for a subsection), 1.125rem between paragraphs, and 1.5rem above and 1.75rem below a listing, table, or note.
 
 The grid gives ground in steps:
-- **1440px and up:** a 15.5rem on-page contents column sits right of the text. On the contents page the statement and Plate 1 share a row.
+- **1440px and up:** a 15.5rem on-page contents column sits right of the text. On the contents page the statement and Figure 1 share a row.
 - **Below 1440px:** the on-page contents fold above the text as a ruled, collapsible block, because the 38rem measure would not survive beside them.
 - **Below 1280px:** the gutter closes to 1.5rem and section numbers move in front of their headings, with the heading's second line returning under its own first letter. The tagline leaves the masthead below 1200px.
 - **Below 997px:** the rail leaves the sheet (a drawer on doc sheets; below the text on the contents page and the distribution statement), side padding is 1rem, and the sheet number and title step down.
-- **640px and below:** Plate 1 switches to the starboard half of the wing at nearly twice the scale, the pager's two neighbours stack so neither title is cut, and API sheet titles take their smallest size. At 480px and below display equations lose their indent.
+- **640px and below:** Figure 1 switches to the starboard half of the wing at nearly twice the scale, the pager's two neighbours stack so neither title is cut, and API sheet titles take their smallest size. At 480px and below display equations lose their indent.
 
 ### Named Rules
 **The Datum Rule.** Every block on a sheet starts on the one edge right of the datum line. Nothing is centred, and the only indents from it are list items, a display equation (2rem), and quoted text (1.75rem).
 
-**The 66-Character Rule.** Prose holds 38rem at every width. A wider element is a sheet title, a listing, a table, or a plate, never a paragraph.
+**The 66-Character Rule.** Prose holds 38rem at every width. A wider element is a sheet title, a listing, a table, or a figure, never a paragraph.
 
 **The No-Zero Rule.** Sections and sheets count from 1: sections are 1, 2, 3 and their sheets 1.1, 1.2. The API reference book is lettered, A1, A2.1. The contents page carries no sheet number.
 
@@ -337,12 +337,12 @@ The system is flat. Every shadow token is set to none, and the build adds no sha
 
 Every corner is square (radius 0, set globally and again on each component that had its own). The form language is the ruled line in four weights:
 
-- **Heavy rule** (2px, Ink): opens a block. It closes the masthead, tops every listing, table, note, plate, route, and pager link, and opens the colophon.
+- **Heavy rule** (2px, Ink): opens a block. It closes the masthead, tops every listing, table, note, figure, route, and pager link, and opens the colophon.
 - **Ink hairline** (1px, Ink): the rule under a table head, and the full border of a floating control (dropdown menu, back-to-top).
 - **Light rule** (1px, Rule): under group labels and listing titles, and around the copy button and a key cap.
-- **Hair** (1px, Hair): the datum, table rows, and the closing rule of a note or a plate.
+- **Hair** (1px, Hair): the datum, table rows, and the closing rule of a note or a figure.
 
-Marks are rectangles: the brand bar (0.75rem by 2.125rem), the filled number cell in the rail, the 0.5rem square beside the section in view, and the 4px rule under the current book. The favicon is the same vocabulary: a white square, a red bar, and an ink Z. The colour-mode toggle is square. Circles appear only inside a plate, as data. The focus outline is 2px Ink at a 2px offset.
+Marks are rectangles: the brand bar (0.75rem by 2.125rem), the filled number cell in the rail, the 0.5rem square beside the section in view, and the 4px rule under the current book. The favicon is the same vocabulary: a white square, a red bar, and an ink Z. The colour-mode toggle is square. Circles appear only inside a figure, as data. The focus outline is 2px Ink at a 2px offset.
 
 ### Named Rules
 **The Ruled Block Rule.** A block opens with a 2px ink rule and, if it closes, closes with a hair. Content is never enclosed on four sides; a full border belongs only to a small control floating over the sheet.
@@ -385,24 +385,24 @@ Section headings on a sheet are counted and the number is printed in Mute at 400
 ### Route List
 The contents page's two ways in. Each route opens with a 2px ink rule, a headline, and one line of Second Ink, then lists its sheets as hair-ruled rows: the sheet number in Standards Red Text in a 3rem column, the title at 600, underlined in ink under the pointer. Two columns from 997px. These are rules, not cards.
 
-### Plate
-A figure is a plate. It opens with a 2px ink rule and closes with a hair, and its caption (0.875rem, Second Ink) begins with "Plate n." in bold Ink. Plate 1 is drawn from the solver's own mesh for the Quick Start wing, not illustrated: geometry in Ink (1px, 1.5px for the outline), panel edges in Rule, bound vortices in Standards Red (1.5px, 3px in the key), control points as Ink dots, labels in the text face in Mute. Strokes do not scale with the drawing; the trailing legs are the exception, because their dashes are measured in drawing units so that each leg is drawn whole at any size. Its trailing legs draw aft once on load, root first (900ms each on the house ease, 28ms apart); with reduced motion they are simply drawn. Only this one plate exists; a second should follow it.
+### Figure
+A figure opens with a 2px ink rule and closes with a hair, and its caption (0.875rem, Second Ink) begins with "Figure n." in bold Ink. Figure 1 is drawn from the solver's own mesh for the Quick Start wing, not illustrated: geometry in Ink (1px, 1.5px for the outline), panel edges in Rule, bound vortices in Standards Red (1.5px, 3px in the key), control points as Ink dots, labels in the text face in Mute. Strokes do not scale with the drawing; the trailing legs are the exception, because their dashes are measured in drawing units so that each leg is drawn whole at any size. Its trailing legs draw aft once on load, root first (900ms each on the house ease, 28ms apart); with reduced motion they are simply drawn. Figures 2 and 3, on the Chord Optimization sheet, follow the same vocabulary: the starting shape in Rule, the solved result in Ink, and the analytical answer it is aimed at in Standards Red, dashed.
 
 ## Do's and Don'ts
 
 ### Do:
 - **Do** number every new sheet by its place in the rail, counting from 1, and print that same number in the rail, above the title, and in the pager.
-- **Do** start every block on the content edge right of the datum, hold prose to 38rem, and let only listings, tables, and plates run wider.
+- **Do** start every block on the content edge right of the datum, hold prose to 38rem, and let only listings, tables, and figures run wider.
 - **Do** open a block with a 2px ink rule and close it with a 1px hair; keep every corner square.
 - **Do** pair every red place mark with a second cue: a change of weight or of ground.
 - **Do** say hover in ink: thicken the underline or the rule, or darken the ground.
 - **Do** take every colour from a `--zm-*` token so the dark sheet follows without a second design.
 - **Do** set keywords in heavier ink and keep listings to green strings, blue names, and amber literals.
-- **Do** label things in the text face, in sentence case, in Mute: listing languages, group heads, plate annotations.
+- **Do** label things in the text face, in sentence case, in Mute: listing languages, group heads, figure annotations.
 - **Do** keep state changes to 160ms on `cubic-bezier(0.16, 1, 0.3, 1)` and honour reduced motion.
 
 ### Don't:
-- **Don't** put red on anything but sheet numbers, place marks, the brand bar, and a plate's data ink. It stays out of syntax colours, notes, warnings, and hover and focus states.
+- **Don't** put red on anything but sheet numbers, place marks, the brand bar, and a figure's data ink. It stays out of syntax colours, notes, warnings, and hover and focus states.
 - **Don't** start any numbering at 0, and don't give the contents page a sheet number.
 - **Don't** round a corner, cast a shadow, or add a glow.
 - **Don't** enclose content in a four-sided box or a card. A full border belongs only to a small control floating over the sheet.
@@ -412,5 +412,5 @@ A figure is a plate. It opens with a 2px ink rule and closes with a hair, and it
 - **Don't** break a title inside a word; set an identifier title smaller instead.
 - **Don't** italicise anything in a listing; the code face ships upright only.
 - **Don't** make dark the default or give it colours of its own outside the tokens.
-- **Don't** animate anything that is not a change of state. Plate 1's wake is the one authored movement.
+- **Don't** animate anything that is not a change of state. Figure 1's wake is the one authored movement.
 - **Don't** let a page read as marketing: no slogan hero, no feature cards, and nothing of the stock template or the earlier near-black, glowing-cyan theme.

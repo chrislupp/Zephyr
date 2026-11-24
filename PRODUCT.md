@@ -62,8 +62,9 @@ results are checked against independent OptVL fixtures.
 - Released documentation snapshots under `docs/versioned_docs/` are frozen
   history and are not rewritten.
 - Documentation pages contain prose, Rust and shell code, KaTeX mathematics,
-  and tables. The only figure is Plate 1 on the contents page, drawn from the
-  lattice the library builds for the Quick Start wing.
+  and tables. Figures are drawn from the library's own output, never illustrated:
+  Figure 1 on the contents page is the lattice built for the Quick Start wing,
+  and Figures 2 and 3 are one run of the chord-optimization example.
 
 ## Brand Commitments
 

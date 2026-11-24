@@ -1,7 +1,7 @@
 import type { CSSProperties, ReactNode } from "react";
-import styles from "./LatticePlate.module.css";
+import styles from "./LatticeFigure.module.css";
 
-// Plate 1 is drawn from the lattice Zephyr builds for the Quick Start wing:
+// Figure 1 is drawn from the lattice Zephyr builds for the Quick Start wing:
 // 4 chordwise by 16 spanwise panels, default cosine spacing, span 10, chord 1.
 // The stations below are that mesh's own values (AVL CSPACER chordwise, sine
 // of equal angle steps spanwise), so the drawing is the wing as solved, not an
@@ -59,7 +59,7 @@ const NARROW: Frame = {
     label: "Plan view of the starboard half of the Quick Start wing, 4 chordwise by 8 spanwise panels, with a bound vortex and a control point in each panel and trailing legs running aft; below it, the chordwise stations of one strip.",
 };
 
-function Plate({ frame, className }: { frame: Frame; className: string }): ReactNode {
+function Figure({ frame, className }: { frame: Frame; className: string }): ReactNode {
     const { width, from } = frame;
     const right = LEFT + width;
     const scale = width / (HALF_SPAN - from);
@@ -83,7 +83,7 @@ function Plate({ frame, className }: { frame: Frame; className: string }): React
 
     return (
         <svg
-            className={`${styles.plate} ${className}`}
+            className={`${styles.figure} ${className}`}
             viewBox={frame.viewBox}
             role="img"
             aria-label={frame.label}
@@ -292,11 +292,11 @@ function Plate({ frame, className }: { frame: Frame; className: string }): React
 }
 
 /** Both compositions ship; the stylesheet shows the one that fits the sheet. */
-export default function LatticePlate(): ReactNode {
+export default function LatticeFigure(): ReactNode {
     return (
         <>
-            <Plate frame={WIDE} className={styles.wide} />
-            <Plate frame={NARROW} className={styles.narrow} />
+            <Figure frame={WIDE} className={styles.wide} />
+            <Figure frame={NARROW} className={styles.narrow} />
         </>
     );
 }

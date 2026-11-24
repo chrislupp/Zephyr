@@ -51,7 +51,7 @@ println!("Cm  = {:.6}", results.coefficients.pitch);
 println!("e   = {:.4}", results.span_efficiency);
 ```
 
-Plate 1 on the contents page is this wing's lattice, drawn from the mesh the
+Figure 1 on the contents page is this wing's lattice, drawn from the mesh the
 solver builds for it.
 
 ## What each step did

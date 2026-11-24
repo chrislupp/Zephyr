@@ -31,6 +31,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   accompanying DoD disclaimers, in the README and in the header of every Rust
   and Python source file. Source headers now also carry the GPL notice, which
   only `src/lib.rs` had before.
+- A shape-optimization example, `examples/chord_optimization.py`. It minimizes
+  far-field induced drag over the section chords of a rectangular wing at fixed
+  lift and planform area, using IPOPT through OpenMDAO against the `philote`
+  feature's mesh and VLM disciplines over gRPC. The chord distribution is
+  driven by a B-spline rather than one variable per station, which keeps the
+  optimizer out of the sawtooth directions a per-station parameterization
+  leaves open. Both report analytical
+  partials, so OpenMDAO assembles the total derivatives across the two by the
+  chain rule and nothing is finite-differenced; `--check-partials` compares
+  them with finite differences of the same chain. The wing converges to the
+  elliptical planform, and the recorded run is committed at
+  `examples/chord_optimization_results.json` and plotted on the Chord
+  Optimization documentation sheet.
 - A Copyright and License sheet in the documentation site, outside the
   versioned docs so it applies to every version and listed in the rail of
   every page. It carries the copyright, the GPL-3.0-or-later terms, and the

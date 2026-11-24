@@ -1,4 +1,4 @@
-.plate {
+.figure {
     display: block;
     width: 100%;
     height: auto;
@@ -21,10 +21,10 @@
     }
 }
 
-.plate line,
-.plate path,
-.plate rect,
-.plate circle {
+.figure line,
+.figure path,
+.figure rect,
+.figure circle {
     vector-effect: non-scaling-stroke;
 }
 
@@ -91,8 +91,8 @@ circle.fill {
    root first. The resting state is fully drawn. */
 /* Dash lengths below are in drawing units, so the legs opt out of
    non-scaling strokes. */
-.plate .leg,
-.plate .legFade {
+.figure .leg,
+.figure .legFade {
     vector-effect: none;
 }
 

@@ -4,7 +4,7 @@ import Link from "@docusaurus/Link";
 import CodeBlock from "@theme/CodeBlock";
 import Layout from "@theme/Layout";
 import ContentsRail from "@site/src/components/ContentsRail";
-import LatticePlate from "@site/src/components/LatticePlate";
+import LatticeFigure from "@site/src/components/LatticeFigure";
 import { docs, sheetNumber } from "@site/src/data/contents";
 import styles from "./index.module.css";
 
@@ -96,12 +96,12 @@ export default function Home(): ReactNode {
                         ))}
                     </ol>
 
-                    <figure className={styles.plate}>
-                        <div className={styles.plateScroll}>
-                            <LatticePlate />
+                    <figure className={styles.figure}>
+                        <div className={styles.figureScroll}>
+                            <LatticeFigure />
                         </div>
                         <figcaption>
-                            <b>Plate 1.</b> The Quick Start wing as Zephyr panels it: 4
+                            <b>Figure 1.</b> The Quick Start wing as Zephyr panels it: 4
                             chordwise by 16 spanwise panels, cosine spaced. Bound
                             vortices in red, control points as dots.
                             <span className={styles.narrowNote}>
