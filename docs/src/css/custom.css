@@ -1,104 +1,1417 @@
-@import url("https://fonts.googleapis.com/css2?family=Instrument+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&family=Crimson+Pro:ital,wght@0,400;0,600;1,400&display=swap");
+/*
+ * Zephyr documentation: the standards manual.
+ *
+ * Every page is a numbered sheet on one grid. White sheet, grey rail, black
+ * ink, and one red that is spent only on sheet numbers and place marks. One
+ * grotesque carries everything but code. Corners are square, structure comes
+ * from rules rather than boxes, and numbers hang in a gutter beside a single
+ * datum edge that titles, headings, listings, equations, and tables share.
+ */
 
-/* ── CSS custom properties for use in modules ── */
+/* ── Faces ─────────────────────────────────────────────────────────────── */
+
+@font-face {
+    font-family: "Public Sans";
+    font-style: normal;
+    font-weight: 100 900;
+    font-display: swap;
+    src: url("../fonts/public-sans-latin.woff2") format("woff2");
+    unicode-range:
+        U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC,
+        U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193,
+        U+2212, U+2215, U+FEFF, U+FFFD;
+}
+@font-face {
+    font-family: "Public Sans";
+    font-style: normal;
+    font-weight: 100 900;
+    font-display: swap;
+    src: url("../fonts/public-sans-latin-ext.woff2") format("woff2");
+    unicode-range:
+        U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF,
+        U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB,
+        U+20AD-20C4, U+2113, U+2C60-2C7F, U+A720-A7FF;
+}
+@font-face {
+    font-family: "Public Sans";
+    font-style: italic;
+    font-weight: 100 900;
+    font-display: swap;
+    src: url("../fonts/public-sans-italic-latin.woff2") format("woff2");
+    unicode-range:
+        U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC,
+        U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193,
+        U+2212, U+2215, U+FEFF, U+FFFD;
+}
+@font-face {
+    font-family: "Public Sans";
+    font-style: italic;
+    font-weight: 100 900;
+    font-display: swap;
+    src: url("../fonts/public-sans-italic-latin-ext.woff2") format("woff2");
+    unicode-range:
+        U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF,
+        U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB,
+        U+20AD-20C4, U+2113, U+2C60-2C7F, U+A720-A7FF;
+}
+@font-face {
+    font-family: "Source Code Pro";
+    font-style: normal;
+    font-weight: 200 900;
+    font-display: swap;
+    src: url("../fonts/source-code-pro-latin.woff2") format("woff2");
+    unicode-range:
+        U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC,
+        U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193,
+        U+2212, U+2215, U+FEFF, U+FFFD;
+}
+@font-face {
+    font-family: "Source Code Pro";
+    font-style: normal;
+    font-weight: 200 900;
+    font-display: swap;
+    src: url("../fonts/source-code-pro-latin-ext.woff2") format("woff2");
+    unicode-range:
+        U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF,
+        U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB,
+        U+20AD-20C4, U+2113, U+2C60-2C7F, U+A720-A7FF;
+}
+
+/* ── Tokens ────────────────────────────────────────────────────────────── */
+
 :root {
-    --font-display: "Instrument Sans", sans-serif;
-    --font-mono: "JetBrains Mono", monospace;
-    --font-body: "Crimson Pro", serif;
+    /* The sheet in daylight: the default, for a desk beside an editor. */
+    --zm-sheet: #ffffff;
+    --zm-rail: #eef0f1;
+    --zm-rail-press: #e2e5e8;
+    --zm-ink: #14171a;
+    --zm-ink-2: #33383e;
+    --zm-mute: #5f666f;
+    --zm-rule: #c9cdd2;
+    --zm-hair: #e1e4e7;
+    /* Standards red. `--zm-red` fills; `--zm-red-text` is the same red
+       darkened to stay legible as text on the sheet and on the rail. */
+    --zm-red: #d8301f;
+    --zm-red-text: #c4281a;
+    --zm-on-red: #ffffff;
+    --zm-listing: #f1f2f3;
+    --zm-select: #f6cdc7;
 
-    --ifm-color-primary: #00829e;
-    --ifm-color-primary-dark: #00748e;
-    --ifm-color-primary-darker: #006d86;
-    --ifm-color-primary-darkest: #005a6e;
-    --ifm-color-primary-light: #0090ae;
-    --ifm-color-primary-lighter: #0097b6;
-    --ifm-color-primary-lightest: #00aed2;
-    --ifm-code-font-size: 95%;
-    --ifm-font-family-base: "Instrument Sans", sans-serif;
-    --ifm-font-family-monospace: "JetBrains Mono", monospace;
-    --ifm-heading-font-family: "Instrument Sans", sans-serif;
-    --docusaurus-highlighted-code-line-bg: rgba(0, 130, 158, 0.08);
+    --zm-sans: "Public Sans", "Helvetica Neue", Helvetica, Arial, sans-serif;
+    --zm-mono: "Source Code Pro", ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+
+    /* Prose holds 66 characters at every width. Listings and tables may run
+       wider, but they start on the same edge. */
+    --zm-measure: 38rem;
+    --zm-wide: 46rem;
+    --zm-gutter: 4rem;
+    --zm-inset: 1.75rem;
+    --zm-sheet-prefix: "";
+    --zm-number-col: 4.25rem;
+    --zm-ease: cubic-bezier(0.16, 1, 0.3, 1);
+
+    --ifm-font-size-base: 106.25%;
+    --ifm-font-family-base: var(--zm-sans);
+    --ifm-font-family-monospace: var(--zm-mono);
+    --ifm-heading-font-family: var(--zm-sans);
+    --ifm-line-height-base: 1.6;
+    --ifm-heading-font-weight: 600;
+    --ifm-font-weight-semibold: 600;
+    --ifm-font-weight-bold: 700;
+    --ifm-heading-line-height: 1.2;
+
+    --ifm-background-color: var(--zm-sheet);
+    --ifm-background-surface-color: var(--zm-sheet);
+    --ifm-font-color-base: var(--zm-ink);
+    --ifm-heading-color: var(--zm-ink);
+    --ifm-color-content: var(--zm-ink);
+    --ifm-color-content-secondary: var(--zm-ink-2);
+    --ifm-color-emphasis-300: var(--zm-rule);
+    --ifm-color-emphasis-200: var(--zm-hair);
+    --ifm-toc-border-color: var(--zm-hair);
+    --ifm-hr-background-color: var(--zm-rule);
+
+    /* The theme's primary is ink: any stock state left unstyled falls back to
+       ink, never to red. */
+    --ifm-color-primary: #14171a;
+    --ifm-color-primary-dark: #14171a;
+    --ifm-color-primary-darker: #14171a;
+    --ifm-color-primary-darkest: #000000;
+    --ifm-color-primary-light: #33383e;
+    --ifm-color-primary-lighter: #33383e;
+    --ifm-color-primary-lightest: #5f666f;
+
+    --ifm-link-color: var(--zm-ink);
+    --ifm-link-hover-color: var(--zm-ink);
+    --ifm-link-decoration: underline;
+    --ifm-link-hover-decoration: underline;
+
+    --ifm-global-radius: 0;
+    --ifm-global-shadow-lw: none;
+    --ifm-global-shadow-md: none;
+    --ifm-global-shadow-tl: none;
+    --ifm-code-border-radius: 0;
+    --ifm-code-background: var(--zm-listing);
+    --ifm-code-font-size: 0.875em;
+    --ifm-code-padding-horizontal: 0.3em;
+    --ifm-code-padding-vertical: 0.1em;
+    --ifm-pre-padding: 1rem;
+    --ifm-pre-border-radius: 0;
+
+    --ifm-navbar-height: 4.25rem;
+    --ifm-navbar-background-color: var(--zm-sheet);
+    --ifm-navbar-shadow: none;
+    --ifm-navbar-padding-horizontal: 0;
+    --ifm-navbar-padding-vertical: 0;
+    --ifm-navbar-link-color: var(--zm-ink);
+    --ifm-navbar-link-hover-color: var(--zm-ink);
+    --ifm-navbar-item-padding-horizontal: 0;
+
+    --ifm-menu-color: var(--zm-ink-2);
+    --ifm-menu-color-active: var(--zm-ink);
+    --ifm-menu-color-background-active: var(--zm-sheet);
+    --ifm-menu-color-background-hover: var(--zm-rail-press);
+    --ifm-menu-link-padding-horizontal: 0;
+    --ifm-menu-link-padding-vertical: 0;
+
+    --ifm-footer-background-color: var(--zm-sheet);
+    --ifm-footer-color: var(--zm-ink);
+    --ifm-footer-link-color: var(--zm-ink);
+    --ifm-footer-title-color: var(--zm-mute);
+
+    --ifm-table-border-color: var(--zm-hair);
+    --ifm-table-stripe-background: transparent;
+    --ifm-table-head-background: transparent;
+    --ifm-table-cell-padding: 0.5rem;
+    --ifm-alert-border-radius: 0;
+    --ifm-alert-border-left-width: 0;
+    --ifm-alert-shadow: none;
+    --ifm-breadcrumb-border-radius: 0;
+    --ifm-breadcrumb-item-background-active: transparent;
+    --ifm-breadcrumb-color-active: var(--zm-ink);
+    --ifm-pagination-nav-border-radius: 0;
+    --ifm-tabs-color-active: var(--zm-ink);
+    --ifm-tabs-color-active-border: var(--zm-ink);
+    --ifm-toc-link-color: var(--zm-ink-2);
+    --ifm-dropdown-background-color: var(--zm-sheet);
+
+    --docusaurus-highlighted-code-line-bg: #e3e6e9;
 }
 
-/* ── Dark mode ── */
+/* The theme sets its own rail width on :root after this file loads. */
+html:root {
+    --doc-sidebar-width: 20rem;
+}
+
+/* The same sheet after hours: an honest variant, not the default. */
 [data-theme="dark"] {
-    --ifm-color-primary: #00d4ff;
-    --ifm-color-primary-dark: #00bfe6;
-    --ifm-color-primary-darker: #00b4d9;
-    --ifm-color-primary-darkest: #0094b3;
-    --ifm-color-primary-light: #1ad9ff;
-    --ifm-color-primary-lighter: #26dbff;
-    --ifm-color-primary-lightest: #52e3ff;
-    --ifm-background-color: #08101d;
-    --ifm-background-surface-color: #0c1829;
-    --ifm-navbar-background-color: #04080fee;
-    --ifm-footer-background-color: #04080f;
-    --ifm-font-color-base: #c8d8e8;
-    --ifm-heading-color: #e8f0f8;
-    --docusaurus-highlighted-code-line-bg: rgba(0, 212, 255, 0.12);
+    --zm-sheet: #121518;
+    --zm-rail: #1a1e22;
+    --zm-rail-press: #242a2f;
+    --zm-ink: #e8eaec;
+    --zm-ink-2: #c3c8ce;
+    --zm-mute: #9aa1a9;
+    --zm-rule: #3a4047;
+    --zm-hair: #272c31;
+    --zm-red: #ff5c47;
+    --zm-red-text: #ff7361;
+    --zm-on-red: #121518;
+    --zm-listing: #1a1e22;
+    --zm-select: #7a2a21;
+
+    --ifm-color-primary: #e8eaec;
+    --ifm-color-primary-dark: #e8eaec;
+    --ifm-color-primary-darker: #e8eaec;
+    --ifm-color-primary-darkest: #ffffff;
+    --ifm-color-primary-light: #c3c8ce;
+    --ifm-color-primary-lighter: #c3c8ce;
+    --ifm-color-primary-lightest: #9aa1a9;
+    --docusaurus-highlighted-code-line-bg: #2a3036;
 }
 
-/* ── Dark navbar & footer ── */
-[data-theme="dark"] .navbar {
-    backdrop-filter: blur(16px) saturate(1.2);
-    border-bottom: 1px solid rgba(0, 212, 255, 0.08);
+/* ── Browser surfaces ──────────────────────────────────────────────────── */
+
+html {
+    font-feature-settings: "tnum" 1;
+    scrollbar-color: var(--zm-rule) transparent;
+    caret-color: var(--zm-ink);
 }
 
-[data-theme="dark"] .footer {
-    border-top: 1px solid rgba(0, 212, 255, 0.06);
+/* The family names are written out here, not only in the tokens: the CSS
+   minifier drops any @font-face whose family it cannot find in a literal
+   `font-family` declaration. */
+body {
+    background: var(--zm-sheet);
+    font-family: "Public Sans", "Helvetica Neue", Helvetica, Arial, sans-serif;
+    text-rendering: optimizeLegibility;
 }
 
-[data-theme="dark"] .footer .footer__title {
-    font-family: var(--font-mono);
-    text-transform: uppercase;
-    font-size: 0.7rem;
-    letter-spacing: 0.12em;
-    color: #5a7089;
+code,
+kbd,
+pre,
+samp {
+    font-family: "Source Code Pro", ui-monospace, "SF Mono", Menlo, Consolas, monospace;
 }
 
-/* ── Markdown content ── */
-[data-theme="dark"] .markdown h1,
-[data-theme="dark"] .markdown h2,
-[data-theme="dark"] .markdown h3 {
-    font-family: var(--font-display);
-    font-weight: 600;
-    letter-spacing: -0.01em;
+::selection {
+    background: var(--zm-select);
+    color: var(--zm-ink);
 }
 
-[data-theme="dark"] .markdown p,
-[data-theme="dark"] .markdown li {
-    font-family: var(--font-body);
-    font-size: 1.08rem;
-    line-height: 1.72;
-    color: #b0c4d8;
+:focus-visible {
+    outline: 2px solid var(--zm-ink);
+    outline-offset: 2px;
 }
 
-[data-theme="dark"] .markdown code {
-    font-family: var(--font-mono);
-    background: #0c182966;
-    border: 1px solid rgba(0, 212, 255, 0.08);
-    padding: 0.1em 0.35em;
-    border-radius: 3px;
+a {
+    text-decoration-thickness: 1px;
+    text-underline-offset: 0.2em;
+    transition: color 160ms var(--zm-ease);
 }
 
-[data-theme="dark"] pre.prism-code {
-    border: 1px solid rgba(0, 212, 255, 0.06);
-    border-radius: 6px;
+/* Hover is said in ink: the underline thickens. Red stays with the numbers. */
+a:hover {
+    text-decoration-thickness: 2px;
 }
 
-/* ── Sidebar ── */
-[data-theme="dark"] .menu__link {
-    font-family: var(--font-display);
-    font-size: 0.88rem;
+.zm-sr-only {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+}
+
+.thin-scrollbar {
+    scrollbar-width: thin;
+}
+
+/* ── Masthead ──────────────────────────────────────────────────────────── */
+
+.navbar {
+    border-bottom: 2px solid var(--zm-ink);
+    height: var(--ifm-navbar-height);
+}
+
+.navbar__inner {
+    align-items: stretch;
+}
+
+.navbar__items {
+    align-items: stretch;
+}
+
+.navbar__brand {
+    align-items: center;
+    gap: 0.875rem;
+    margin: 0;
+    padding: 0 1.25rem 0 1rem;
+    color: var(--zm-ink);
+    text-decoration: none;
+}
+
+/* The brand bar: the one red object on the masthead. */
+.navbar__brand::before {
+    content: "";
+    flex: none;
+    width: 0.75rem;
+    height: 2.125rem;
+    background: var(--zm-red);
+}
+
+.navbar__brand:hover {
+    color: var(--zm-ink);
+}
+
+.navbar__title {
+    font-size: 1.5rem;
+    font-weight: 700;
+    letter-spacing: -0.02em;
+}
+
+.navbar__toggle {
+    align-self: center;
+    margin: 0 0 0 1rem;
+    color: var(--zm-ink);
+}
+
+.zm-tagline {
+    display: none;
+    align-items: center;
+    height: 100%;
+    padding-left: var(--zm-gutter);
+    font-size: 0.875rem;
+    color: var(--zm-mute);
+    white-space: nowrap;
+}
+
+.navbar__items--right {
+    gap: 2rem;
+    padding-right: 1.5rem;
+}
+
+.navbar__item {
+    display: flex;
+    align-items: center;
+}
+
+.navbar__items--right > [class*="colorModeToggle"] {
+    align-self: center;
+}
+
+.navbar__link {
+    position: relative;
+    display: inline-flex;
+    align-items: center;
+    height: 100%;
+    font-size: 0.9375rem;
     font-weight: 500;
+    text-decoration: none;
 }
 
-[data-theme="dark"] .theme-doc-sidebar-container {
-    border-right: 1px solid rgba(0, 212, 255, 0.06) !important;
+.navbar__link:hover {
+    text-decoration: underline;
+    text-decoration-thickness: 2px;
+    text-underline-offset: 0.35em;
 }
 
-/* ── Table of contents ── */
-[data-theme="dark"] .table-of-contents__link {
-    font-family: var(--font-mono);
-    font-size: 0.75rem;
+/* The current book is marked by a red rule on the masthead's own rule, and
+   by weight; never by colour alone. */
+.navbar__link--active,
+.navbar__link--active:hover {
+    color: var(--zm-ink);
+    font-weight: 700;
+}
+
+.navbar__items--right > .navbar__link--active::after {
+    content: "";
+    position: absolute;
+    left: 0;
+    right: 0;
+    bottom: -2px;
+    height: 4px;
+    background: var(--zm-red);
+}
+
+.navbar__item.dropdown > .navbar__link {
+    font-weight: 400;
+    color: var(--zm-mute);
+}
+
+.dropdown__menu {
+    border: 1px solid var(--zm-ink);
+    border-radius: 0;
+    box-shadow: none;
+    padding: 0.25rem 0;
+    min-width: 9rem;
+}
+
+.dropdown__link {
+    border-radius: 0;
+    padding: 0.375rem 0.875rem;
+    font-size: 0.875rem;
+    color: var(--zm-ink-2);
+    text-decoration: none;
+}
+
+.dropdown__link:hover {
+    background: var(--zm-rail);
+    color: var(--zm-ink);
+    text-decoration: none;
+}
+
+.dropdown__link--active,
+.dropdown__link--active:hover {
+    background: var(--zm-rail);
+    color: var(--zm-ink);
+    font-weight: 700;
+}
+
+.navbar-sidebar {
+    background: var(--zm-rail);
+}
+
+.navbar-sidebar__brand {
+    background: var(--zm-sheet);
+    border-bottom: 2px solid var(--zm-ink);
+    box-shadow: none;
+    padding: 0 1rem 0 0;
+}
+
+.navbar-sidebar__back {
+    background: transparent;
+    border-bottom: 1px solid var(--zm-rule);
+    border-radius: 0;
+    margin: 0 0 0.75rem;
+    padding: 0.75rem 1.25rem;
+    font-size: 0.875rem;
+    font-weight: 600;
+    color: var(--zm-ink);
+    width: 100%;
+    top: 0;
+}
+
+.navbar-sidebar__item.menu {
+    padding: 0.75rem 0;
+}
+
+@media (min-width: 997px) {
+    /* The name sits over the rail, on the rail's own ground. */
+    .navbar__brand {
+        width: var(--doc-sidebar-width);
+        padding-left: var(--zm-inset);
+    }
+
+    html.docs-wrapper .navbar__brand,
+    html.zm-has-rail .navbar__brand {
+        background: var(--zm-rail);
+    }
+}
+
+@media (min-width: 1200px) {
+    .zm-tagline {
+        display: flex;
+    }
+}
+
+/* ── Rail ──────────────────────────────────────────────────────────────── */
+
+.theme-doc-sidebar-container {
+    background: var(--zm-rail);
+    border-right: 0 !important;
+}
+
+.theme-doc-sidebar-container .menu {
+    padding: 1.5rem 0 2rem;
+}
+
+.theme-doc-sidebar-menu {
+    counter-reset: zm-section;
+    font-size: 0.9375rem;
+}
+
+.theme-doc-sidebar-menu .menu__list {
+    margin: 0;
+    padding: 0;
+}
+
+.theme-doc-sidebar-menu .menu__list-item {
+    margin: 0;
+}
+
+.theme-doc-sidebar-menu > .menu__list-item {
+    counter-increment: zm-section;
+    counter-reset: zm-sheet;
+    margin-bottom: 0.875rem;
+}
+
+.theme-doc-sidebar-menu > .menu__list-item > .menu__list > .menu__list-item {
+    counter-increment: zm-sheet;
+}
+
+/* Each entry is a number cell and a label. The number cell runs from the
+   rail's edge, so filling it red makes a tab. */
+.theme-doc-sidebar-menu .menu__link {
+    display: grid;
+    grid-template-columns: var(--zm-number-col) 1fr;
+    align-items: stretch;
+    border-radius: 0;
+    padding: 0;
+    line-height: 1.35;
+    font-weight: 400;
+    color: var(--zm-ink-2);
+    text-decoration: none;
+    overflow-wrap: break-word;
+    word-break: normal;
+    transition: background-color 160ms var(--zm-ease);
+}
+
+.theme-doc-sidebar-menu .menu__link::before {
+    content: var(--zm-sheet-prefix) counter(zm-section) "." counter(zm-sheet);
+    padding: 0.3125rem 0 0.3125rem var(--zm-inset);
+    color: var(--zm-mute);
+    font-weight: 400;
+    white-space: nowrap;
+}
+
+.theme-doc-sidebar-menu .menu__link > span,
+.theme-doc-sidebar-menu .menu__link {
+    min-width: 0;
+}
+
+.theme-doc-sidebar-menu .menu__link > span {
+    padding: 0.3125rem 0.5rem 0.3125rem 0;
+}
+
+/* Section heads: bold, numbered with the section alone. */
+.theme-doc-sidebar-menu > .menu__list-item > .menu__link,
+.theme-doc-sidebar-menu > .menu__list-item > .menu__list-item-collapsible > .menu__link {
+    font-weight: 700;
+    color: var(--zm-ink);
+}
+
+.theme-doc-sidebar-menu > .menu__list-item > .menu__link::before,
+.theme-doc-sidebar-menu > .menu__list-item > .menu__list-item-collapsible > .menu__link::before {
+    content: var(--zm-sheet-prefix) counter(zm-section);
+}
+
+.theme-doc-sidebar-menu .menu__list-item-collapsible {
+    border-radius: 0;
+    background: transparent;
+}
+
+.theme-doc-sidebar-menu .menu__list-item-collapsible:hover {
+    background: transparent;
+}
+
+.theme-doc-sidebar-menu .menu__link:hover {
+    background: var(--zm-rail-press);
+    color: var(--zm-ink);
+}
+
+/* A section head folds its sheets away. The caret is the only third track. */
+.theme-doc-sidebar-menu .menu__link--sublist-caret {
+    grid-template-columns: var(--zm-number-col) 1fr 2rem;
+}
+
+.theme-doc-sidebar-menu .menu__link--sublist-caret::after {
+    align-self: center;
+    justify-self: start;
+    width: 0.625rem;
+    height: 0.625rem;
+    min-width: 0;
+    margin: 0;
+    background: none;
+    border-right: 1.5px solid var(--zm-mute);
+    border-bottom: 1.5px solid var(--zm-mute);
+    filter: none;
+    transform: translateY(-25%) rotate(45deg);
+    transition: transform 160ms var(--zm-ease);
+}
+
+.theme-doc-sidebar-menu .menu__list-item--collapsed .menu__link--sublist-caret::after {
+    transform: rotate(-45deg);
+}
+
+.theme-doc-sidebar-menu .menu__caret {
+    padding: 0 0.75rem;
+    border-radius: 0;
+}
+
+/* The place mark: your sheet's number cell fills red and the row turns to
+   sheet white. */
+.theme-doc-sidebar-item-link > .menu__link--active,
+.theme-doc-sidebar-item-link > .menu__link--active:hover {
+    background: var(--zm-sheet);
+    color: var(--zm-ink);
+    font-weight: 700;
+}
+
+.theme-doc-sidebar-item-link > .menu__link--active::before {
+    background: var(--zm-red);
+    color: var(--zm-on-red);
+    font-weight: 700;
+    margin-right: 0.75rem;
+}
+
+.theme-doc-sidebar-menu .menu__link:focus-visible {
+    outline-offset: -2px;
+}
+
+/* An external-link glyph would sit in a third grid track; keep it inline. */
+.theme-doc-sidebar-menu .menu__link svg {
+    display: none;
+}
+
+/* API reference sheets are lettered. Matches SheetNumber.tsx. */
+html[class*="docs-doc-id-api/"] {
+    --zm-sheet-prefix: "A";
+    --zm-number-col: 4.875rem;
+}
+
+/* ── Sheet ─────────────────────────────────────────────────────────────── */
+
+@media (min-width: 997px) {
+    [class*="docMainContainer"] > .container {
+        max-width: none;
+        margin: 0;
+        padding: 0 1.5rem 0 0 !important;
+    }
+
+    [class*="docMainContainer"] > .container > .row {
+        margin: 0;
+        flex-wrap: nowrap;
+    }
+
+    /* The datum: one hairline down the whole sheet. Everything registers to
+       the edge just right of it; numbers hang in the gutter to its left. */
+    .row > [class*="docItemCol"] {
+        flex: 1 1 auto;
+        min-width: 0;
+        max-width: none !important;
+        margin-left: var(--zm-gutter);
+        padding: 1.5rem 2rem 5rem var(--zm-inset);
+        border-left: 1px solid var(--zm-hair);
+    }
+
+    [class*="docMainContainer"] > .container > .row > .col--3 {
+        flex: 0 0 15.5rem;
+        max-width: 15.5rem;
+        padding: 0;
+    }
+}
+
+/* Between a tablet and a small laptop the gutter closes. */
+@media (min-width: 997px) and (max-width: 1279px) {
+    :root {
+        --zm-gutter: 1.5rem;
+    }
+}
+
+/* The contents column appears only where the 66-character measure survives
+   beside it; below that the contents fold above the text. */
+@media (min-width: 997px) and (max-width: 1439px) {
+    [class*="docMainContainer"] > .container > .row > .col--3 {
+        display: none;
+    }
+
+    .theme-doc-toc-mobile {
+        display: block !important;
+    }
+}
+
+@media (max-width: 996px) {
+    [class*="docMainContainer"] > .container {
+        padding-top: 1.25rem !important;
+    }
+}
+
+/* Running head: one line, the path at the datum and the version at the
+   column's far edge. */
+[class*="docItemContainer"] > article {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    column-gap: 1.5rem;
+    max-width: var(--zm-wide);
+}
+
+[class*="docItemContainer"] > article > * {
+    grid-column: 1 / -1;
+    min-width: 0;
+}
+
+[class*="docItemContainer"] > article > .theme-doc-breadcrumbs {
+    grid-column: 1;
+    margin-bottom: 0;
+}
+
+[class*="docItemContainer"] > article > .theme-doc-version-badge {
+    grid-column: 2;
+    align-self: start;
+    justify-self: end;
+}
+
+.breadcrumbs {
+    line-height: 1.4;
+}
+
+.breadcrumbs__item {
+    font-size: 0.8125rem;
+}
+
+/* The home step repeats the masthead's name. */
+.breadcrumbs__item:first-child {
+    display: none;
+}
+
+.breadcrumbs__link {
+    padding: 0;
+    color: var(--zm-mute);
+    text-decoration: none;
+}
+
+a.breadcrumbs__link:hover {
+    background: transparent;
+    color: var(--zm-ink);
+    text-decoration: underline;
+}
+
+.breadcrumbs__item--active .breadcrumbs__link {
+    background: transparent;
+    color: var(--zm-ink);
+}
+
+.breadcrumbs__item:not(:last-child)::after {
+    margin: 0 0.5rem;
+    opacity: 1;
+    background: none;
+    content: "/";
+    color: var(--zm-rule);
+    filter: none;
+    width: auto;
+    height: auto;
+}
+
+.theme-doc-version-badge {
+    margin: 0;
+    padding: 0;
+    border: 0;
+    background: transparent;
+    font-size: 0.8125rem;
+    font-weight: 400;
+    line-height: 1.4;
+    color: var(--zm-mute);
+}
+
+/* The sheet number: the signature. Same number as the rail prints. */
+.zm-sheetno {
+    margin: 1.25rem 0 0;
+    font-size: 4.75rem;
+    font-weight: 300;
+    line-height: 1;
+    letter-spacing: -0.03em;
+    color: var(--zm-red);
+}
+
+.theme-doc-markdown {
+    max-width: var(--zm-wide);
+    counter-reset: zm-heading zm-equation;
+}
+
+.theme-doc-markdown > :is(p, ul, ol, dl, blockquote, h2, h3, h4, h5) {
+    max-width: var(--zm-measure);
+}
+
+.markdown h1:first-child,
+.markdown > header h1 {
+    --ifm-h1-font-size: 3.75rem;
+    margin: 0.25rem 0 1.5rem -0.04em;
+    font-weight: 300;
+    line-height: 1.05;
+    letter-spacing: -0.025em;
+    text-wrap: balance;
+    overflow-wrap: normal;
+    word-break: normal;
+}
+
+/* API sheets are titled with identifiers, which must never break; they are
+   set a step smaller so the longest one fits its sheet. */
+html[class*="docs-doc-id-api/"] .markdown > header h1 {
+    --ifm-h1-font-size: 3rem;
+}
+
+.markdown > h2 {
+    --ifm-h2-font-size: 1.5rem;
+    position: relative;
+    margin: 2.75rem 0 0.75rem;
+    letter-spacing: -0.01em;
+    text-wrap: balance;
+    counter-increment: zm-heading;
+}
+
+.markdown > h3 {
+    --ifm-h3-font-size: 1.1875rem;
+    margin: 2rem 0 0.5rem;
+}
+
+.markdown > h4 {
+    --ifm-h4-font-size: 1rem;
+    margin: 1.5rem 0 0.375rem;
+}
+
+.markdown > p,
+.markdown > ul,
+.markdown > ol {
+    margin-bottom: 1.125rem;
+}
+
+.markdown li + li {
+    margin-top: 0.25rem;
+}
+
+/* Section numbers hang: in the gutter beside the datum on a wide sheet, and
+   in front of the heading on a narrow one, where a second line returns under
+   the heading's own first letter. */
+.theme-doc-markdown > h2 {
+    padding-left: 1.75rem;
+}
+
+.theme-doc-markdown > h2::before {
+    content: counter(zm-heading);
+    position: absolute;
+    left: 0;
+    font-weight: 400;
+    color: var(--zm-mute);
+}
+
+@media (min-width: 1280px) {
+    .theme-doc-markdown > h2 {
+        padding-left: 0;
+    }
+
+    .theme-doc-markdown > h2::before {
+        top: 0.3em;
+        left: calc(-1 * (var(--zm-inset) + var(--zm-gutter)));
+        width: calc(var(--zm-gutter) - 0.875rem);
+        margin: 0;
+        font-size: 1rem;
+        line-height: 1.2;
+        text-align: right;
+    }
+}
+
+.hash-link {
+    text-decoration: none;
+    color: var(--zm-mute);
+}
+
+.markdown strong {
+    font-weight: 700;
+}
+
+.markdown hr {
+    height: 1px;
+    margin: 2.5rem 0;
+}
+
+.markdown blockquote {
+    margin: 1.5rem 0;
+    padding: 0 0 0 var(--zm-inset);
+    border-left: 0;
+    color: var(--zm-ink-2);
+}
+
+/* ── Listings ──────────────────────────────────────────────────────────── */
+
+code {
+    border: 0;
+    font-variant-ligatures: none;
+}
+
+.theme-code-block {
+    margin: 1.5rem 0 1.75rem;
+    border-top: 2px solid var(--zm-ink);
+    border-radius: 0;
+    box-shadow: none;
+    background: var(--zm-listing);
+}
+
+.theme-code-block pre {
+    border-radius: 0;
+    background: transparent !important;
+}
+
+.theme-code-block pre code {
+    font-size: 0.875rem;
+    line-height: 1.6;
+}
+
+/* Each listing is labelled with its language, in the text face. */
+.theme-code-block[class*="language-"]::before {
+    display: block;
+    padding: 0.5rem 1rem 0;
+    font-family: var(--zm-sans);
+    font-size: 0.8125rem;
+    color: var(--zm-mute);
+}
+
+.theme-code-block.language-rust::before {
+    content: "Rust";
+}
+.theme-code-block.language-bash::before,
+.theme-code-block.language-sh::before,
+.theme-code-block.language-shell::before {
+    content: "Shell";
+}
+.theme-code-block.language-toml::before {
+    content: "TOML";
+}
+.theme-code-block.language-python::before {
+    content: "Python";
+}
+.theme-code-block.language-json::before {
+    content: "JSON";
+}
+.theme-code-block.language-text::before {
+    content: "Text";
+}
+
+.theme-code-block [class*="codeBlockTitle"] {
+    border-bottom: 1px solid var(--zm-rule);
+    border-radius: 0;
+    font-family: var(--zm-sans);
+    font-size: 0.8125rem;
+    font-weight: 600;
+}
+
+.theme-code-block [class*="buttonGroup"] button {
+    border: 1px solid var(--zm-rule);
+    border-radius: 0;
+    background: var(--zm-sheet);
+    color: var(--zm-ink);
+    opacity: 0;
+    transition: opacity 160ms var(--zm-ease);
+}
+
+.theme-code-block:hover [class*="buttonGroup"] button,
+.theme-code-block [class*="buttonGroup"] button:focus-visible {
+    opacity: 1;
+}
+
+.theme-code-block [class*="buttonGroup"] button:hover {
+    border-color: var(--zm-ink);
+}
+
+/* ── Equations ─────────────────────────────────────────────────────────── */
+
+.katex {
+    font-size: 1.1em;
+}
+
+/* Display equations start on an indent from the datum and carry their number
+   at the column edge. */
+.theme-doc-markdown .katex-display {
+    position: relative;
+    max-width: var(--zm-measure);
+    margin: 1.25rem 0 1.5rem;
+    padding: 0.25rem 3rem 0.25rem 2rem;
+    text-align: left;
+    counter-increment: zm-equation;
+}
+
+.theme-doc-markdown .katex-display > .katex {
+    display: block;
+    overflow-x: auto;
+    overflow-y: hidden;
+    padding: 0.125rem 0;
+    text-align: left;
+    scrollbar-width: thin;
+}
+
+.theme-doc-markdown .katex-display > .katex > .katex-html {
+    display: inline-block;
+}
+
+.theme-doc-markdown .katex-display::after {
+    content: "(" counter(zm-equation) ")";
+    position: absolute;
+    top: 50%;
+    right: 0;
+    transform: translateY(-50%);
+    font-size: 0.9375rem;
+    color: var(--zm-mute);
+}
+
+@media (max-width: 480px) {
+    .theme-doc-markdown .katex-display {
+        padding-left: 0;
+        padding-right: 2.25rem;
+    }
+}
+
+/* ── Tables ────────────────────────────────────────────────────────────── */
+
+.markdown table {
+    display: block;
+    width: 100%;
+    margin: 1.5rem 0 1.75rem;
+    border-collapse: collapse;
+    font-size: 0.9375rem;
+    overflow-x: auto;
+}
+
+.markdown table thead tr {
+    border: 0;
+    border-top: 2px solid var(--zm-ink);
+    border-bottom: 1px solid var(--zm-ink);
+}
+
+.markdown table tr {
+    border: 0;
+    border-bottom: 1px solid var(--zm-hair);
+    background: transparent;
+}
+
+.markdown table th,
+.markdown table td {
+    border: 0;
+    padding: 0.5rem 1.5rem 0.5rem 0;
+    text-align: left;
+    vertical-align: top;
+}
+
+.markdown table th {
+    font-weight: 600;
+    white-space: nowrap;
+}
+
+/* ── Notes ─────────────────────────────────────────────────────────────── */
+
+.alert {
+    --ifm-alert-background-color: transparent;
+    --ifm-alert-background-color-highlight: transparent;
+    --ifm-alert-foreground-color: var(--zm-ink);
+    --ifm-alert-border-color: var(--zm-ink);
+    --ifm-alert-padding-horizontal: 0;
+    --ifm-alert-padding-vertical: 0.75rem;
+    max-width: var(--zm-measure);
+    margin: 1.5rem 0;
+    border: 0;
+    border-top: 2px solid var(--zm-ink);
+    border-bottom: 1px solid var(--zm-hair);
+    box-shadow: none;
+    color: var(--zm-ink);
+}
+
+.theme-admonition [class*="admonitionHeading"] {
+    margin-bottom: 0.25rem;
+    font-size: 0.8125rem;
+    font-weight: 700;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+}
+
+.alert a {
+    color: var(--zm-ink);
+    text-decoration-color: currentColor;
+}
+
+details.alert {
+    --docusaurus-details-decoration-color: var(--zm-ink);
+}
+
+.tabs__item {
+    border-radius: 0;
+    padding: 0.5rem 1rem;
+    font-size: 0.9375rem;
+    color: var(--zm-ink-2);
+}
+
+.tabs__item:hover {
+    background: var(--zm-rail);
+}
+
+.tabs__item--active {
+    font-weight: 700;
+}
+
+/* ── Contents of the sheet ─────────────────────────────────────────────── */
+
+.theme-doc-toc-desktop {
+    top: calc(var(--ifm-navbar-height) + 3.25rem);
+    padding-bottom: 2rem;
+}
+
+.theme-doc-toc-desktop::before {
+    content: "On this page";
+    display: block;
+    margin: 0 0 0.75rem 1.5rem;
+    padding-bottom: 0.5rem;
+    border-bottom: 1px solid var(--zm-rule);
+    font-size: 0.8125rem;
+    font-weight: 600;
+    color: var(--zm-mute);
+}
+
+.table-of-contents {
+    padding: 0 0 0 1.5rem;
+    border-left: 0;
+    font-size: 0.875rem;
+    counter-reset: zm-toc;
+}
+
+.table-of-contents > li {
+    counter-increment: zm-toc;
+}
+
+.table-of-contents li {
+    margin: 0;
+}
+
+.table-of-contents ul {
+    padding-left: 1.75rem;
+}
+
+.table-of-contents__link {
+    position: relative;
+    display: block;
+    padding: 0.25rem 0;
+    line-height: 1.35;
+    color: var(--zm-ink-2);
+    text-decoration: none;
+}
+
+.table-of-contents > li > .table-of-contents__link {
+    padding-left: 1.75rem;
+}
+
+.table-of-contents > li > .table-of-contents__link::before {
+    content: counter(zm-toc);
+    position: absolute;
+    left: 0;
+    color: var(--zm-mute);
+    font-weight: 400;
+}
+
+.table-of-contents ul .table-of-contents__link {
+    color: var(--zm-mute);
+}
+
+.table-of-contents__link:hover {
+    color: var(--zm-ink);
+    text-decoration: underline;
+}
+
+.table-of-contents__link--active,
+.table-of-contents ul .table-of-contents__link--active {
+    color: var(--zm-ink);
+    font-weight: 700;
+}
+
+/* The place mark again: a red square beside the section in view. */
+.table-of-contents__link--active::after {
+    content: "";
+    position: absolute;
+    top: 0.6em;
+    left: -1.5rem;
+    width: 0.5rem;
+    height: 0.5rem;
+    background: var(--zm-red);
+}
+
+.table-of-contents ul .table-of-contents__link--active::after {
+    left: -3.25rem;
+}
+
+.theme-doc-toc-mobile {
+    margin: 1rem 0 0;
+    border-radius: 0;
+    border-top: 2px solid var(--zm-ink);
+    border-bottom: 1px solid var(--zm-hair);
+    background: transparent;
+}
+
+.theme-doc-toc-mobile button {
+    padding-left: 0;
+    padding-right: 0;
+    font-size: 0.875rem;
+    font-weight: 600;
+}
+
+.theme-doc-toc-mobile .table-of-contents {
+    padding-left: 1.5rem;
+    padding-bottom: 0.5rem;
+}
+
+/* ── Sheet footer and turning the page ─────────────────────────────────── */
+
+.theme-doc-footer {
+    max-width: var(--zm-wide);
+    font-size: 0.875rem;
+}
+
+.theme-edit-this-page {
+    color: var(--zm-ink-2);
+}
+
+.pagination-nav {
+    max-width: var(--zm-wide);
+    gap: 2rem;
+    margin-top: 3rem;
+}
+
+.pagination-nav__link {
+    padding: 0.75rem 0 0;
+    border: 0;
+    border-top: 2px solid var(--zm-ink);
+    border-radius: 0;
+    text-decoration: none;
+}
+
+.pagination-nav__link:hover {
+    border-top-width: 4px;
+    padding-top: calc(0.75rem - 2px);
+    text-decoration: none;
+}
+
+.pagination-nav__sublabel {
+    font-size: 0.8125rem;
+    font-weight: 400;
+    color: var(--zm-mute);
+}
+
+.pagination-nav__label {
+    font-size: 1.0625rem;
+    font-weight: 600;
+    color: var(--zm-ink);
+}
+
+.pagination-nav__link--prev .pagination-nav__label::before,
+.pagination-nav__link--next .pagination-nav__label::after {
+    content: none;
+}
+
+.pagination-nav__label {
+    word-break: normal;
+    overflow-wrap: break-word;
+}
+
+/* On a narrow sheet the two neighbours stack, so neither title is cut. */
+@media (max-width: 640px) {
+    .pagination-nav {
+        grid-template-columns: 1fr;
+        gap: 1.25rem;
+    }
+
+    .pagination-nav__link--next {
+        grid-column: 1;
+    }
+}
+
+.zm-pager-number {
+    margin-right: 0.625rem;
+    font-weight: 400;
+    color: var(--zm-red-text);
+}
+
+.theme-back-to-top-button {
+    border: 1px solid var(--zm-ink);
+    border-radius: 0;
+    background: var(--zm-sheet);
+    box-shadow: none;
+}
+
+.theme-back-to-top-button::after {
+    background-color: var(--zm-ink);
+}
+
+.theme-back-to-top-button:hover {
+    background: var(--zm-rail) !important;
+}
+
+/* ── Sheets outside the docs plugin (contents, distribution statement) ── */
+
+.zm-page {
+    display: flex;
+    flex-direction: column-reverse;
+}
+
+.zm-page__main {
+    min-width: 0;
+    padding: 1.25rem 1rem 3.5rem;
+}
+
+@media (min-width: 997px) {
+    .zm-page {
+        flex-direction: row;
+    }
+
+    .zm-page__main {
+        flex: 1 1 auto;
+        margin-left: var(--zm-gutter);
+        padding: 1.5rem 1.5rem 5rem var(--zm-inset);
+        border-left: 1px solid var(--zm-hair);
+    }
+}
+
+/* ── Stock parts brought onto the sheet ────────────────────────────────── */
+
+[class*="colorModeToggle"] button {
+    border-radius: 0;
+}
+
+[class*="colorModeToggle"] button:hover {
+    background: var(--zm-rail);
+}
+
+kbd {
+    border: 1px solid var(--zm-rule);
+    border-radius: 0;
+    box-shadow: none;
+    background: var(--zm-listing);
+    color: var(--zm-ink);
+}
+
+/* Page-load bar: ink, no glow. */
+#nprogress .bar {
+    background: var(--zm-ink);
+}
+
+#nprogress .peg {
+    box-shadow: none;
+}
+
+/* ── Colophon ──────────────────────────────────────────────────────────── */
+
+.footer {
+    padding: 0;
+    border-top: 2px solid var(--zm-ink);
+    font-size: 0.875rem;
+}
+
+.footer > .container {
+    max-width: none;
+    margin: 0;
+    padding: 0;
+    display: grid;
+    grid-template-columns: 1fr;
+}
+
+/* One line under one rule: no columns, no links, so no closing hair. */
+.footer__bottom {
+    margin: 0;
+    padding: 1.25rem 1.5rem 1.5rem;
+    text-align: left;
+}
+
+.footer__copyright {
+    max-width: 60rem;
+    font-size: 0.8125rem;
+    color: var(--zm-mute);
+}
+
+@media (min-width: 997px) {
+    .footer__bottom {
+        padding-left: calc(var(--doc-sidebar-width) + var(--zm-gutter) + var(--zm-inset));
+    }
+}
+
+/* ── Small sheets ──────────────────────────────────────────────────────── */
+
+@media (max-width: 996px) {
+    .zm-sheetno {
+        margin-top: 1rem;
+        font-size: 3rem;
+    }
+
+    .markdown h1:first-child,
+    .markdown > header h1 {
+        --ifm-h1-font-size: 2.5rem;
+    }
+
+    html[class*="docs-doc-id-api/"] .markdown > header h1 {
+        --ifm-h1-font-size: 2.25rem;
+    }
+
+    .navbar__items--right {
+        gap: 1rem;
+        padding-right: 0.75rem;
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+        transition-duration: 0.01ms !important;
+        animation-duration: 0.01ms !important;
+    }
+}
+
+@media (max-width: 640px) {
+    html[class*="docs-doc-id-api/"] .markdown > header h1 {
+        --ifm-h1-font-size: 1.5rem;
+        letter-spacing: -0.015em;
+    }
 }

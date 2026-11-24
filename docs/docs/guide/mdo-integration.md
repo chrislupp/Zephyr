@@ -1,5 +1,5 @@
 ---
-sidebar_position: 5
+sidebar_position: 15
 ---
 
 # MDO Integration
@@ -30,9 +30,9 @@ Without trim, the VLM inputs are surface nodes, `reference_area`,
 command. Its default outputs remain `CL,CD,CY,Cl,Cm,Cn`.
 
 The selective `analysis_outputs`, `analysis_gradients` and `analysis_mode`
-options described in the selective-analysis notes choose their own outputs and
-partials, so they cannot be combined with `trim`, `outputs`, `fixed_inputs` or
-`controls`.
+options described in [Selective Analysis](./selective-analysis.md) choose their
+own outputs and partials, so they cannot be combined with `trim`, `outputs`,
+`fixed_inputs` or `controls`.
 
 The `outputs` option selects coefficients or dimensional resultants
 `Fx,Fy,Fz,Mx,My,Mz`. Each is a scalar function with analytical gradients.
@@ -224,14 +224,19 @@ not an aircraft-attitude model for gravity.
 The explicit mapping requires a nonsingular local trim Jacobian. Ineffective
 controls, infeasible bounds, or branch changes can prevent a differentiable
 local solution. Bound-active optimal control allocation is not provided.
-Distributed loads are available through native strip-load APIs; transporting
-them through this Philote discipline is a separate extension.
+Distributed loads are available through the native strip-load APIs described in
+[Coupled Interfaces](./coupled-interfaces.md); transporting them through this
+Philote discipline is a separate extension.
 
 Run the native example without transport:
 
 ```bash
 cargo run --example mesh_trim
 ```
+
+See [Mesh Trim](../examples/mesh-trim.md) for a walk-through, and
+[Philote Optimization](../examples/philote-optimization.md) for the SciPy
+driver.
 
 For the explicit wire example, start a fresh VLM server and run this in another
 terminal:

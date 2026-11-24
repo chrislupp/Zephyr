@@ -1,0 +1,198 @@
+.sheet {
+    display: flex;
+    flex-direction: column-reverse;
+}
+
+.main {
+    display: grid;
+    grid-template-areas: "intro" "routes" "plate" "conventions";
+    row-gap: 2.5rem;
+    align-content: start;
+    min-width: 0;
+    padding: 1.25rem 1rem 3.5rem;
+}
+
+.intro {
+    grid-area: intro;
+    min-width: 0;
+}
+
+.name {
+    margin: 1.5rem 0 1.25rem -0.04em;
+    font-size: 2.75rem;
+    font-weight: 300;
+    line-height: 1.05;
+    letter-spacing: -0.025em;
+}
+
+.lede {
+    max-width: var(--zm-measure);
+    margin-bottom: 1.5rem;
+    font-size: 1.0625rem;
+    line-height: 1.6;
+}
+
+.intro :global(.theme-code-block) {
+    max-width: 24rem;
+    margin: 0;
+}
+
+.plate {
+    grid-area: plate;
+    max-width: 42rem;
+    margin: 0;
+    min-width: 0;
+}
+
+.plateScroll {
+    padding-bottom: 0.25rem;
+    border-top: 2px solid var(--zm-ink);
+    border-bottom: 1px solid var(--zm-hair);
+}
+
+.narrowNote {
+    display: none;
+}
+
+@media (max-width: 640px) {
+    .narrowNote {
+        display: inline;
+    }
+}
+
+.plate figcaption {
+    max-width: var(--zm-measure);
+    padding-top: 0.625rem;
+    font-size: 0.875rem;
+    line-height: 1.5;
+    color: var(--zm-ink-2);
+}
+
+.plate figcaption b {
+    color: var(--zm-ink);
+}
+
+/* The two ways in. Rules, not cards. */
+.routes {
+    display: grid;
+    grid-area: routes;
+    gap: 0 3rem;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+}
+
+.route {
+    padding: 1rem 0 0.5rem;
+    border-top: 2px solid var(--zm-ink);
+}
+
+.route h2 {
+    margin: 0 0 0.25rem;
+    font-size: 1.5rem;
+    letter-spacing: -0.01em;
+}
+
+.route p {
+    margin: 0 0 0.75rem;
+    color: var(--zm-ink-2);
+}
+
+.route ul {
+    margin: 0;
+    padding: 0;
+    list-style: none;
+}
+
+.route li {
+    border-top: 1px solid var(--zm-hair);
+}
+
+.route a {
+    display: grid;
+    grid-template-columns: 3rem 1fr;
+    padding: 0.5rem 0;
+    font-weight: 600;
+    text-decoration: none;
+}
+
+.route a:hover {
+    text-decoration: underline;
+}
+
+.routeNumber {
+    font-weight: 400;
+    color: var(--zm-red-text);
+}
+
+.conventions {
+    grid-area: conventions;
+}
+
+.conventions h2 {
+    margin: 0 0 0.75rem;
+    font-size: 1.5rem;
+    letter-spacing: -0.01em;
+}
+
+.conventions dl {
+    max-width: var(--zm-wide);
+    margin: 0;
+    border-top: 2px solid var(--zm-ink);
+}
+
+.conventions dl > div {
+    display: grid;
+    grid-template-columns: 6.5rem 1fr;
+    gap: 1rem;
+    padding: 0.5rem 0;
+    border-bottom: 1px solid var(--zm-hair);
+}
+
+.conventions dt {
+    font-weight: 600;
+}
+
+.conventions dd {
+    margin: 0;
+}
+
+@media (min-width: 997px) {
+    .sheet {
+        flex-direction: row;
+    }
+
+    .sheet :global(.theme-doc-sidebar-container) {
+        padding-top: 1.5rem;
+    }
+
+    .main {
+        flex: 1 1 auto;
+        margin-left: var(--zm-gutter);
+        padding: 1.5rem 1.5rem 5rem var(--zm-inset);
+        border-left: 1px solid var(--zm-hair);
+    }
+
+    .name {
+        font-size: 3.75rem;
+    }
+
+    .routes {
+        grid-template-columns: 1fr 1fr;
+        max-width: 62rem;
+    }
+}
+
+@media (min-width: 1440px) {
+    .main {
+        grid-template-columns: minmax(0, 23rem) minmax(0, 1fr);
+        grid-template-areas: "intro plate" "routes routes" "conventions conventions";
+        column-gap: 3rem;
+        row-gap: 2.25rem;
+        align-items: start;
+    }
+
+    .plate {
+        padding-top: 1.75rem;
+    }
+}

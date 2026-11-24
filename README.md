@@ -250,10 +250,8 @@ cargo run --features philote --example philote_vlm_server
 Then, in another terminal, run the Python driver:
 
 ```bash
-python3 -m venv /tmp/zephyr-optimization-env
-/tmp/zephyr-optimization-env/bin/python -m pip install --upgrade pip
-/tmp/zephyr-optimization-env/bin/python -m pip install numpy scipy
-/tmp/zephyr-optimization-env/bin/python examples/trim_optimization.py
+pip install numpy scipy
+python examples/trim_optimization.py
 ```
 
 The script verifies analytical objective and trim-state gradients against
@@ -314,7 +312,7 @@ are skipped. An optional `SolverMode::HalfWing` solves only the original half's
 unknowns while accounting for reflected influences. Full geometry is the default;
 existing APIs keep their current behavior.
 
-See [the selective analysis guide](docs/selective-analysis.md) for the request API,
+See [the selective analysis guide](docs/docs/guide/selective-analysis.md) for the request API,
 symmetry restrictions, reference conventions, caching, and Philote options. Run
 `cargo run --release --example selective_analysis` for a working example.
 
