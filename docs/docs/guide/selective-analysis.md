@@ -1,9 +1,22 @@
-# Selective analysis and half-wing symmetry
+---
+sidebar_position: 11
+---
 
-`zephyr_vlm::analysis::Analysis` evaluates an explicit request for scalar outputs,
-detailed arrays, and individual derivative pairs. It supports aircraft sections
-and direct structured meshes. The existing solver, force, gradient, stability,
-trim, dynamics, and visualization APIs keep their existing behavior.
+# Selective Analysis
+
+`analysis::Analysis` evaluates an explicit request: which scalar outputs you
+want, which detailed arrays, and which individual `(output, input)` derivative
+pairs. Stages a request does not reach are not executed, and an optional
+half-wing mode solves only one semispan of a symmetric model.
+
+This is the interface to reach for when [the solver
+workflow](./solver-workflow.md) computes more than you asked for — a complete
+solution, all six unit responses, both influence operators — and you only want
+two coefficients and one derivative.
+
+It accepts aircraft sections and direct structured meshes. The solver, force,
+gradient, stability, trim, dynamics, and visualization APIs described elsewhere
+on this site keep their own behavior; nothing here changes them.
 
 ## Request only the quantities you need
 
@@ -13,7 +26,8 @@ use zephyr_vlm::analysis::{
 };
 
 // `input` is a MeshInput whose surfaces describe one half and have
-// y_duplicated = true, y_duplicate_plane = 0.0.
+// y_duplicated = true, y_duplicate_plane = 0.0; `condition` is a
+// FlightCondition with zero sideslip and zero roll and yaw rate.
 let mut analysis = Analysis::from_mesh(&input);
 let request = AnalysisRequest {
     mode: SolverMode::HalfWing,
@@ -29,9 +43,11 @@ let result = analysis.evaluate(&condition, &request)?;
 
 A runnable version is in `examples/selective_analysis.rs`:
 
-```sh
+```bash
 cargo run --release --example selective_analysis
 ```
+
+See [Selective Analysis (example)](../examples/selective-analysis.md).
 
 `AnalysisRequest::default()` requests nothing. `all_outputs()` requests every
 scalar output, with no gradients or detailed arrays. `SolverMode::Full` is the
@@ -131,8 +147,8 @@ constraints. Symmetry-breaking shape perturbations require full mode.
 Geometry adjoints retain the existing restrictions on deflected control normals
 and section drag polars. Flight-condition and symmetric-control derivatives
 support viscous section polars. Unsupported requests return an error; half-wing
-mode never silently falls back to a full solve. Existing unrestricted full-solver
-workflows remain accessible through the legacy APIs.
+mode never silently falls back to a full solve. The unrestricted full solver
+remains available through `VortexLatticeSolver` and `GradientCalculator`.
 
 This mode is distinct from `VortexLatticeSolver::set_symmetry`, which adds image
 planes to an existing lattice, and from `set_mirror_reuse`, which preserves the
@@ -145,12 +161,14 @@ assembly. `Analysis::set_symmetric_factorization` factorizes two half-size
 systems when the system matrix is exactly mirror-symmetric, and otherwise falls
 back to the full factorization; `symmetric_factorization_applies` reports which
 was used, and results agree with the full factorization to rounding. Neither
-setting has an effect in half-wing mode. The Philote discipline exposes them as
-its `mirror_reuse` and `symmetric_factorization` options, described below.
+setting has an effect in half-wing mode. [Performance](./performance.md) covers
+both in context. The Philote discipline exposes them as its `mirror_reuse` and
+`symmetric_factorization` options, described below.
 
 ## Philote options
 
-With the `philote` feature, `VlmDiscipline` accepts:
+With the `philote` feature, `VlmDiscipline` accepts the options below. See
+[MDO Integration](./mdo-integration.md) for the rest of the discipline.
 
 ```json
 {

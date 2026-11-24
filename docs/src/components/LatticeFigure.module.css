@@ -1,0 +1,124 @@
+.figure {
+    display: block;
+    width: 100%;
+    height: auto;
+    font-family: var(--zm-sans);
+    font-feature-settings: "tnum" 1;
+}
+
+/* The whole wing where there is room; the starboard half on a narrow sheet. */
+.narrow {
+    display: none;
+}
+
+@media (max-width: 640px) {
+    .wide {
+        display: none;
+    }
+
+    .narrow {
+        display: block;
+    }
+}
+
+.figure line,
+.figure path,
+.figure rect,
+.figure circle {
+    vector-effect: non-scaling-stroke;
+}
+
+.ink line,
+.ink path,
+.ink circle {
+    stroke: var(--zm-ink);
+    stroke-width: 1;
+}
+
+.sheet {
+    fill: var(--zm-sheet);
+}
+
+.fill circle,
+circle.fill {
+    fill: var(--zm-ink);
+    stroke: none;
+}
+
+.hair line {
+    stroke: var(--zm-rule);
+    stroke-width: 1;
+}
+
+.outline {
+    fill: none;
+    stroke: var(--zm-ink);
+    stroke-width: 1.5;
+}
+
+.red line {
+    stroke: var(--zm-red);
+    stroke-width: 1.5;
+}
+
+.redBar line {
+    stroke: var(--zm-red);
+    stroke-width: 3;
+}
+
+.label,
+.redLabel,
+.title {
+    font-size: 13.5px;
+    fill: var(--zm-mute);
+}
+
+.redLabel {
+    fill: var(--zm-red-text);
+}
+
+.title {
+    font-weight: 600;
+    fill: var(--zm-ink);
+}
+
+.legs line {
+    stroke: var(--zm-ink-2);
+    stroke-width: 1;
+}
+
+/* The one authored motion on the site: the wake leaves the trailing edge,
+   root first. The resting state is fully drawn. */
+/* Dash lengths below are in drawing units, so the legs opt out of
+   non-scaling strokes. */
+.figure .leg,
+.figure .legFade {
+    vector-effect: none;
+}
+
+.leg {
+    stroke-dasharray: 86;
+    stroke-dashoffset: 0;
+    animation: zm-wake 900ms var(--zm-ease) both;
+    animation-delay: calc(var(--zm-order) * 28ms);
+}
+
+.legFade {
+    stroke-dasharray: 3 4;
+    opacity: 0.55;
+}
+
+@keyframes zm-wake {
+    from {
+        stroke-dashoffset: 86;
+    }
+    to {
+        stroke-dashoffset: 0;
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .leg {
+        animation: none;
+    }
+}

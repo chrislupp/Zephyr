@@ -31,9 +31,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   accompanying DoD disclaimers, in the README and in the header of every Rust
   and Python source file. Source headers now also carry the GPL notice, which
   only `src/lib.rs` had before.
-- A Distribution Statement page in the documentation site, outside the
-  versioned docs so it applies to every version, linked from the docs sidebar
-  and footer.
+- A shape-optimization example, `examples/chord_optimization.py`. It minimizes
+  far-field induced drag over the section chords of a rectangular wing at fixed
+  lift and planform area, using IPOPT through OpenMDAO against the `philote`
+  feature's mesh and VLM disciplines over gRPC. The chord distribution is
+  driven by a B-spline rather than one variable per station, which keeps the
+  optimizer out of the sawtooth directions a per-station parameterization
+  leaves open. Both report analytical
+  partials, so OpenMDAO assembles the total derivatives across the two by the
+  chain rule and nothing is finite-differenced; `--check-partials` compares
+  them with finite differences of the same chain. The wing converges to the
+  elliptical planform, and the recorded run is committed at
+  `examples/chord_optimization_results.json` and plotted on the Chord
+  Optimization documentation sheet.
+- A Copyright and License sheet in the documentation site, outside the
+  versioned docs so it applies to every version and listed in the rail of
+  every page. It carries the copyright, the GPL-3.0-or-later terms, and the
+  public release and distribution statement. The site footer is now the
+  copyright line alone, with no link columns and no clearance line.
 - `GradientCalculator::mesh_node_gradients_from` and
   `flight_condition_gradients_from` reuse a solver's existing solution. The
   Philote derivative path reuses its solved state the same way.
@@ -110,8 +125,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   registry instead of only as a git dependency. Prereleases publish under their
   qualifier, and a version already present on the registry is skipped rather
   than re-published.
+- The documentation site now covers the library rather than pointing at it.
+  New sheets: Conventions (axes, units, signs, coefficient definitions, panel
+  ordering), Geometry, Control Surfaces, Loads and Coefficients, Trim, Dynamic
+  Modes, AVL Input Files, Coupled Interfaces, Performance, and Validity and
+  Limits, plus examples for the control-surface, mesh-trim, selective-analysis
+  and Philote-optimization programs and API sheets for `MeshInput`, `Analysis`,
+  `MeshTrimSolver`, `StripLoadAdjoint`, `VtkExporter` and `ZephyrError`. The
+  existing sheets were expanded from stubs. The selective-analysis guide moved
+  from `docs/selective-analysis.md` into the site as a Guide sheet.
 
 ### Changed
+
+- The documentation site has a new design. Every page is a numbered sheet:
+  the sidebar lists each page with its sheet number, the same number heads the
+  page, sections and display equations are numbered, and prose keeps one
+  66-character column. The site root is now a contents page with the Quick
+  Start wing drawn as Zephyr panels it, in place of the redirect to
+  Installation. The site defaults to a light theme with a dark variant, and
+  its fonts and the KaTeX stylesheet are served by the site itself.
 
 - **Breaking:** the project is now named Zephyr. The package is `zephyr-vlm`
   and the import name `zephyr_vlm` (previously `pegasus-vlm` / `pegasus_vlm`),
@@ -191,6 +223,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   again. The values are unchanged.
 
 ### Fixed
+
+- Mathematics on the documentation site rendered twice, once as formatted
+  output and once as raw text, because the KaTeX stylesheet was loaded from a
+  CDN with an integrity hash that no longer matched and the browser refused
+  it. The stylesheet now ships with the site.
+- The documentation site's favicon pointed at a file that did not exist.
 
 - `TrimSolver` now takes exact Newton steps. Its Jacobian left out the coupling
   between state and control equations (for example dCL/d(elevator) and

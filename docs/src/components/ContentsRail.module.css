@@ -1,0 +1,27 @@
+.rail {
+    padding: 0 0 1rem;
+}
+
+.book {
+    margin: 0 0 0.75rem;
+    padding: 0 1rem 0.5rem var(--zm-inset);
+    border-bottom: 1px solid var(--zm-rule);
+    font-size: 0.8125rem;
+    font-weight: 600;
+    color: var(--zm-mute);
+}
+
+.book:not(:first-child) {
+    margin-top: 1.75rem;
+}
+
+.sectionHead {
+    cursor: default;
+}
+
+@media (min-width: 997px) {
+    .rail {
+        flex: 0 0 var(--doc-sidebar-width);
+        padding: 0 0 3rem;
+    }
+}

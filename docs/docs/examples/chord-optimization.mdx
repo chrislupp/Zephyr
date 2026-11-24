@@ -1,0 +1,353 @@
+---
+sidebar_position: 8
+title: Chord Optimization
+description: Minimum-induced-drag chord distribution of a rectangular wing, optimized in OpenMDAO through two Philote disciplines.
+---
+
+import { PlanformFigure, ConvergenceFigure } from "@site/src/components/ChordFigures";
+
+# Chord Optimization
+
+This example minimizes the induced drag of a rectangular wing by varying its
+chord distribution. The optimum is the elliptical planform predicted by
+lifting-line theory.
+
+The optimizer is IPOPT, driven by OpenMDAO. The analysis runs in two Zephyr
+disciplines served over gRPC with Philote. Both disciplines provide analytical
+partial derivatives, and OpenMDAO combines them into total derivatives; no
+finite differences are used.
+
+```bash
+cargo run --release --features philote --example philote_mesh_server
+cargo run --release --features philote --example philote_vlm_server
+pip install openmdao philote-mdo pyoptsparse numpy scipy
+python examples/chord_optimization.py
+```
+
+Start each server in its own terminal, then run the script.
+
+## Optimization problem
+
+```text
+minimize    CDi
+with
+respect to  chord_cp[6]         B-spline control points of the chord
+            alpha               angle of attack
+subject to  CL = 0.5
+            reference_area = 10
+            0.05 <= chord_cp <= 2.5
+```
+
+| | | |
+| --- | --- | --- |
+| **Objective** | `CDi` | far-field (Trefftz) induced drag coefficient |
+| **Design variables** | `chord_cp` (6) | B-spline control points defining the chord at all 21 stations |
+| | `alpha` | angle of attack |
+| **Constraints** | `CL = 0.5` | lift coefficient |
+| | `reference_area = 10` | planform area, computed by the mesh discipline |
+| **Bounds** | `0.05 <= chord_cp <= 2.5` | a B-spline lies within the range of its control points, so this also bounds the chord |
+
+The span is 10, the aspect ratio 10, the twist zero, the sections flat plates,
+and the quarter-chord line straight and unswept. The lattice has 4 chordwise and
+20 spanwise panels per semispan and is mirrored about `y = 0`.
+
+The area constraint fixes the size of the wing. At fixed lift, induced drag
+depends on the span and on the spanwise distribution but not on the area, so
+without this constraint the scale of the planform would be undetermined.
+
+## Model
+
+| Subsystem | Inputs | Outputs |
+| --- | --- | --- |
+| `design` | — | `chord_cp`, `twist`, `zle`, `eta`, `halfspan`, `alpha` |
+| `chord_spline` | `chord_cp` | `chord` at all 21 stations |
+| `quarter_chord` | `chord` | `xle` |
+| `geometry` — Zephyr's `MeshDiscipline` | `chord`, `twist`, `xle`, `zle`, `eta`, `halfspan` | `mesh`, `reference_area`, `reference_chord`, `reference_span` |
+| `aerodynamics` — Zephyr's `VlmDiscipline` | `Wing` (the mesh), `reference_*`, flight condition | `CL`, `CDi` |
+
+The reference quantities connect by promoted name. The mesh is connected
+explicitly, because the VLM discipline names its mesh input after the surface,
+`Wing`.
+
+```python
+model.add_subsystem(
+    "geometry",
+    pmom.RemoteExplicitComponent(
+        channel=grpc.insecure_channel(mesh_address),
+        nx=NX,
+        ny=NY,
+        y_duplicated=True,
+    ),
+    promotes=["*"],
+)
+
+model.add_subsystem(
+    "aerodynamics",
+    pmom.RemoteExplicitComponent(
+        channel=grpc.insecure_channel(vlm_address),
+        num_surfaces=1,
+        surface_names="Wing",
+        surface_nx=str(NX),
+        surface_ny=str(NY),
+        surface_y_duplicated="true",
+        analysis_outputs="CL,CDi",
+        analysis_gradients={
+            "CL": ["alpha", "reference_area", "Wing"],
+            "CDi": ["alpha", "reference_area", "Wing"],
+        },
+    ),
+    promotes=["*"],
+)
+
+model.connect("mesh", "Wing")
+```
+
+`RemoteExplicitComponent` queries each server for its variables, shapes, units,
+and partial-derivative structure, so none of these are declared in the script.
+
+`analysis_outputs` and `analysis_gradients` form a
+[selective analysis](../guide/selective-analysis.md) request. The VLM
+discipline computes only `CL`, `CDi`, and the six partial derivatives listed;
+all other outputs and derivatives are skipped. The mesh-node partials are named
+after the surface input, `Wing`.
+
+### Chord parameterization
+
+The chords are defined by a B-spline with six control points rather than by one
+design variable per station.
+
+With one variable per station, the optimized planform is jagged. Each lattice
+strip uses the average of the chords at its two bounding nodes, so an
+alternating perturbation (`+d, -d, +d, ...`) has almost no effect on the loading
+or the drag. The optimizer has no reason to remove such oscillations, and the
+converged planform retains them. A B-spline with few control points cannot
+represent them.
+
+```python
+spline = om.SplineComp(
+    method="bsplines",
+    x_interp_val=np.linspace(0.0, 1.0, STATIONS),
+    num_cp=CONTROL_POINTS,
+    interp_options={"order": SPLINE_ORDER},
+)
+spline.add_spline(
+    y_cp_name="chord_cp",
+    y_interp_name="chord_interp",
+    y_cp_val=np.full(CONTROL_POINTS, AREA / SPAN),
+    y_units="m",
+)
+model.add_subsystem("chord_spline", spline, promotes_inputs=["chord_cp"])
+model.connect("chord_spline.chord_interp", "chord", src_indices=om.slicer[0, :])
+```
+
+`SplineComp` produces an array of shape `(1, 21)`, while the mesh discipline
+expects `(21,)`. The `src_indices` argument makes the conversion explicit.
+
+Six control points is the smallest number that gives a monotonic chord
+distribution for this problem. More control points change the drag only in the
+eighth decimal place and reintroduce a small oscillation near the root:
+
+| Control points | Design variables | `CDi` | Slope reversals |
+| --- | --- | --- | --- |
+| 5 | 6 | 0.00779263 | 1 |
+| **6** | **7** | **0.00779251** | **0** |
+| 8 | 9 | 0.00779248 | 1 |
+| 12 | 13 | 0.00779248 | 1 |
+
+### Quarter-chord line
+
+The elliptical result assumes an unswept wing, so the leading edge moves with
+the chord to keep the quarter-chord line straight:
+
+```python
+model.add_subsystem(
+    "quarter_chord",
+    om.ExecComp(
+        "xle = -0.25 * chord",
+        xle={"shape": STATIONS, "units": "m"},
+        chord={"shape": STATIONS, "units": "m"},
+    ),
+    promotes=["*"],
+)
+```
+
+OpenMDAO includes this component in the derivative chain, so the dependence of
+the leading-edge position on the chord is accounted for automatically.
+
+### Driver
+
+```python
+problem.driver = om.pyOptSparseDriver(optimizer="IPOPT")
+problem.driver.opt_settings.update(
+    {
+        "tol": 1e-8,
+        "max_iter": 200,
+        # Only first derivatives are available, so IPOPT builds curvature itself
+        # rather than asking for a Hessian.
+        "hessian_approximation": "limited-memory",
+        "mu_strategy": "adaptive",
+    }
+)
+
+problem.model.add_design_var("chord_cp", lower=0.05, upper=2.5, units="m")
+problem.model.add_design_var("alpha", lower=-0.3, upper=0.3, ref=0.1, units="rad")
+problem.model.add_objective("CDi", ref=0.01)
+problem.model.add_constraint("CL", equals=0.5, ref=0.5)
+problem.model.add_constraint("reference_area", equals=10.0, ref=10.0, units="m**2")
+```
+
+### Flight condition
+
+The VLM discipline exposes the full flight condition as inputs. OpenMDAO
+initializes unconnected inputs to 1.0, and the solver rejects a Mach number of
+1, so every input must be set:
+
+```python
+problem.set_val("beta", 0.0, units="rad")
+problem.set_val("mach", 0.0)
+problem.set_val("dynamic_pressure", 1.0, units="Pa")
+problem.set_val("roll_rate", 0.0)
+problem.set_val("pitch_rate", 0.0)
+problem.set_val("yaw_rate", 0.0)
+problem.set_val("moment_ref_x", 0.0, units="m")
+problem.set_val("moment_ref_y", 0.0, units="m")
+problem.set_val("moment_ref_z", 0.0, units="m")
+```
+
+### Baseline
+
+Induced drag scales with the square of lift, so the rectangular wing is first
+trimmed to `CL = 0.5`. This makes the baseline and the optimum directly
+comparable:
+
+```python
+def trim_alpha(problem):
+    for _ in range(10):
+        problem.run_model()
+        residual = problem.get_val("CL")[0] - TARGET_LIFT
+        if abs(residual) < 1e-12:
+            break
+        slope = problem.compute_totals(of=["CL"], wrt=["alpha"])["CL", "alpha"][0, 0]
+        alpha = problem.get_val("alpha", units="rad")[0]
+        problem.set_val("alpha", alpha - residual / slope, units="rad")
+```
+
+The slope comes from the same analytical derivatives the driver uses. Because
+`CL` is linear in `alpha` for a flat, untwisted wing, one Newton step is enough.
+
+The full script is `examples/chord_optimization.py`.
+
+## Derivative check
+
+Run the script with `--check-partials` to compare the total derivatives with
+finite differences through the same model:
+
+```text
+| 'of' variable  | 'wrt' variable |      calc val |        fd val |
++================+================+===============+===============+
+| CDi            | alpha          |  1.583543e-01 |  1.583550e-01 |
+| CDi            | chord_cp       | -6.264241e-05 | -6.264260e-05 |
+| CL             | alpha          |  4.858082e+00 |  4.858082e+00 |
+| CL             | chord_cp       | -7.162424e-04 | -7.162584e-04 |
+| reference_area | alpha          | -0.000000e+00 |  0.000000e+00 |
+| reference_area | chord_cp       |  8.520625e-01 |  8.520625e-01 |
+```
+
+The values agree to about five significant figures, consistent with the
+truncation error of the finite-difference step.
+
+## Planform
+
+<figure className="zm-figure">
+  <div className="zm-figure__frame">
+    <PlanformFigure />
+  </div>
+  <figcaption>
+    <b>Figure 2.</b> Starboard half of the wing at one scale in both
+    directions: the rectangular start, the optimized planform, and the ellipse
+    of the same span and area, with dots at the twenty-one spline stations.
+  </figcaption>
+</figure>
+
+## Convergence
+
+Figure 3 shows the two quantities IPOPT uses to decide convergence, read from
+its output file. Optimality is the largest component of the gradient of the
+Lagrangian (IPOPT's `inf_du`), which is zero at a constrained optimum.
+Feasibility is the largest violation of any constraint (IPOPT's `inf_pr`). Both
+are in IPOPT's scaled units. IPOPT stops when both are below its
+tolerance, `1e-8`; the final values are 6.6e-9 and 1.7e-13.
+
+<figure className="zm-figure">
+  <div className="zm-figure__frame">
+    <ConvergenceFigure />
+  </div>
+  <figcaption>
+    <b>Figure 3.</b> Optimality and feasibility at each IPOPT iteration.
+  </figcaption>
+</figure>
+
+## Results
+
+| | Rectangular | Optimized |
+| --- | --- | --- |
+| `CDi` | 0.00812201 | 0.00779251 (−4.06 %) |
+| `alpha` | 5.857° | 5.649° |
+| `CL` | 0.5 | 0.5 |
+| `reference_area` | 10 | 10 |
+
+IPOPT converged in 29 iterations, in under a second. At the optimum, the lift
+residual is 8e-14 and the area residual is 4e-15.
+
+Except at the tip, the optimized chords differ from the elliptical chords by at
+most 0.083, against a root chord of 1.27, and the chord decreases monotonically
+from root to tip. At the tip the ellipse has zero chord; the optimizer stops at
+0.33, because a panel of vanishing chord carries no load.
+
+## Comparison with lifting-line theory
+
+Lifting-line theory gives the minimum induced drag for this lift coefficient and
+aspect ratio as
+
+$$
+C_{D_i} = \frac{C_L^2}{\pi\,\mathrm{AR}} = \frac{0.5^2}{\pi \cdot 10} = 0.00795775
+$$
+
+The computed optimum, 0.00779251, is 2.1 % lower. A planar wing cannot have less
+induced drag than the elliptical minimum, so the difference is discretization
+error in the Trefftz-plane integration. It comes mainly from the outermost
+strips, where the elliptical loading changes most steeply and 20 panels per
+semispan do not resolve it. The optimized shape is correct; its drag is slightly
+underestimated.
+
+Before refining the mesh, note the following:
+
+- On a mirrored lattice, the far-field drag does not converge monotonically with
+  spanwise refinement. The Trefftz core radius between surfaces is
+  `max(0.01 c, 0.1 w)`. Its chord term does not decrease with the mesh, so once
+  the strips next to the symmetry plane are narrower than about `0.1 c`, the
+  regularization dominates the interaction between the two innermost strips.
+  The mesh used here is coarse enough that this does not occur.
+- The near-field drag is not affected and converges with refinement. Request it
+  as `CDi_near` in `analysis_outputs`.
+
+See [Validity and Limits](../guide/limitations.md) and
+[Loads and Coefficients](../guide/loads.md).
+
+## Variations
+
+- **Twist instead of chord.** Add a second `SplineComp` for `twist`, which the
+  mesh discipline already accepts with analytical partials, make its control
+  points design variables, and keep the planform rectangular. This also
+  produces an elliptical loading.
+- **Chord and twist together.** Use two splines and two design variables. The
+  cost per design point does not change.
+- **More control points.** A larger `CONTROL_POINTS` follows the ellipse more
+  closely at the tip but adds a small oscillation near the root, as in the
+  table above.
+- **Structural penalty.** Adding a bending-moment term to the objective moves
+  the optimum inboard of the elliptical distribution.
+- **Trim in the discipline.** The VLM discipline can solve for `alpha`
+  internally instead of exposing it as a design variable; see
+  [MDO Integration](../guide/mdo-integration.md) and
+  [Philote Optimization](./philote-optimization.md).
