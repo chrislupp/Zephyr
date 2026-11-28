@@ -1,27 +1,33 @@
 .rail {
-    padding: 0 0 1rem;
+    padding: 1rem 0;
+    border-top: 1px solid var(--z-line);
 }
 
 .book {
-    margin: 0 0 0.75rem;
-    padding: 0 1rem 0.5rem var(--zm-inset);
-    border-bottom: 1px solid var(--zm-rule);
-    font-size: 0.8125rem;
+    margin: 0 0 0.5rem;
+    padding: 0 1rem 0 1.5rem;
+    font-size: 0.75rem;
     font-weight: 600;
-    color: var(--zm-mute);
+    color: var(--z-ink-3);
 }
 
 .book:not(:first-child) {
-    margin-top: 1.75rem;
+    margin-top: 1.5rem;
 }
 
 .sectionHead {
     cursor: default;
 }
 
+.sectionHead:hover {
+    background: transparent !important;
+}
+
 @media (min-width: 997px) {
     .rail {
         flex: 0 0 var(--doc-sidebar-width);
-        padding: 0 0 3rem;
+        padding: 0.75rem 0.5rem 3rem;
+        border-top: 0;
+        border-right: 1px solid var(--z-line);
     }
 }

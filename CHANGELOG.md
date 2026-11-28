@@ -137,13 +137,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
-- The documentation site has a new design. Every page is a numbered sheet:
-  the sidebar lists each page with its sheet number, the same number heads the
-  page, sections and display equations are numbered, and prose keeps one
-  66-character column. The site root is now a contents page with the Quick
-  Start wing drawn as Zephyr panels it, in place of the redirect to
-  Installation. The site defaults to a light theme with a dark variant, and
-  its fonts and the KaTeX stylesheet are served by the site itself.
+- The documentation site has a new design and a start page. The site root
+  now shows Zephyr's own solution on the uCRM transport wing, coloured by
+  panel loading, with Get started and the install command, followed by three
+  capabilities and a short listing, in place of the redirect to Installation.
+  The site defaults to a dark theme with a light variant, and its fonts and
+  the KaTeX stylesheet are served by the site itself.
 
 - **Breaking:** the project is now named Zephyr. The package is `zephyr-vlm`
   and the import name `zephyr_vlm` (previously `pegasus-vlm` / `pegasus_vlm`),

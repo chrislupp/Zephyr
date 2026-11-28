@@ -32,6 +32,12 @@ maintainer):
 2. Wire Zephyr into an MDO loop: use the analytical and adjoint gradients and
    the Philote servers inside an optimizer.
 
+The site root is a start page (requested by the maintainer). It succeeds when
+an engineer who has never seen Zephyr can tell within seconds what it is and
+takes Get started or the install line. It is short and is not built around any
+single example (confirmed by the maintainer after rejecting a long page built
+around the chord-optimization run).
+
 ## Positioning
 
 A safe, Rust-only VLM with analytical and adjoint gradients built in. No C,
@@ -63,22 +69,30 @@ results are checked against independent OptVL fixtures.
   history and are not rewritten.
 - Documentation pages contain prose, Rust and shell code, KaTeX mathematics,
   and tables. Figures are drawn from the library's own output, never illustrated:
-  Figure 1 on the contents page is the lattice built for the Quick Start wing,
-  and Figures 2 and 3 are one run of the chord-optimization example.
+  the start page's renders are Zephyr's solutions on the uCRM and wing-and-tail
+  OptVL fixture geometries, made by `docs/scripts/render_loading.py`, which
+  checks that the plotted panel loading integrates to the solver's C_L before
+  it writes anything. Figures 2 and 3 on the Chord Optimization page are one
+  run of that example.
 
 ## Brand Commitments
 
 - Name: Zephyr. Formerly Pegasus.
 - Distribution Statement A must remain reachable from every page. The rail
-  lists the Copyright and License sheet on every page, and that sheet holds the
-  copyright, the licence terms, and the clearance line: approved for public
-  release, distribution unlimited, case AFRL-2026-2198. The footer is the
-  copyright line alone — no link columns, no clearance line. (Confirmed by the
-  maintainer.)
+  lists the Copyright and License page on every doc page, the start page links
+  to it, and that page holds the copyright, the licence
+  terms, and the clearance line: approved for public release, distribution
+  unlimited, case AFRL-2026-2198. The footer is the copyright line alone — no
+  link columns, no clearance line. (Confirmed by the maintainer.)
 - License: GPL-3.0-or-later. Copyright Christopher A. Lupp.
-- The documentation is a research library's reference, not a marketing site
-  (confirmed by the maintainer). It should not read as the stock Docusaurus
-  template, and it should not keep the earlier near-black, glowing-cyan look.
+- The site should feel like a modern aero analysis code, at the craft level of
+  simulation vendor sites (Flow360, Simcenter) and open science code sites
+  (SU2, PyVista). It must not read as retro or nostalgic, as a stock docs
+  template, or in a SaaS marketing tone (confirmed by the maintainer). Doc
+  pages keep the standard structure: sidebar, page, on-page contents. Dark is
+  the default, as in a post-processor; light is the variant. Retired looks:
+  the near-black glowing-cyan theme, the Standards Manual of numbered sheets,
+  and the Approach Plate chart look.
 
 ## Evidence on Hand
 
@@ -86,7 +100,8 @@ results are checked against independent OptVL fixtures.
   wing-tail configuration, and 680-panel uCRM geometry (`tests/`).
 - Runnable examples in `examples/`, including the Philote servers.
 - No logo, photography, or screenshots exist; the favicon is a drawn mark
-  (red bar and the letter Z). No benchmark or adoption claims are on hand;
+  (the letter Z on navy with a course-coloured fix); the navbar mark is a
+  chip of the viridis colour map. No benchmark or adoption claims are on hand;
   none may be invented.
 
 ## Product Principles
