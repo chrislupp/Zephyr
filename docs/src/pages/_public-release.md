@@ -1,8 +1,3 @@
----
-title: Copyright and License
-description: Copyright, license, and the public release and distribution statement for Zephyr.
----
-
 # Copyright and License
 
 This sheet carries the three statements that govern Zephyr: who holds the
