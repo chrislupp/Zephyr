@@ -1,841 +1,1012 @@
 {
   "schemaVersion": 2,
-  "generatedAt": "2026-11-23T03:46:50Z",
+  "generatedAt": "2026-11-27T00:00:00Z",
   "title": "Design System: Zephyr",
   "extensions": {
     "colorMeta": {
-      "red": {
-        "role": "primary",
-        "displayName": "Standards Red",
-        "canonical": "#d8301f",
-        "tonalRamp": [
-          "#200000",
-          "#4f0300",
-          "#850600",
-          "#be1303",
-          "#eb4533",
-          "#fc8876",
-          "#ffbfb4",
-          "#fee9e5"
-        ]
-      },
-      "red-text": {
-        "role": "primary",
-        "displayName": "Standards Red Text",
-        "canonical": "#c4281a",
-        "tonalRamp": [
-          "#891c12",
-          "#a62216",
-          "#b02417",
-          "#c4281a",
-          "#d8301f",
-          "#dc3a2a",
-          "#e35c4e"
-        ]
-      },
-      "on-red": {
-        "role": "primary",
-        "displayName": "On Red",
-        "canonical": "#ffffff",
-        "tonalRamp": [
-          "#0b0b0b",
-          "#262626",
-          "#454545",
-          "#666666",
-          "#898989",
-          "#aeaeae",
-          "#d1d1d1",
-          "#eeeeee"
-        ]
-      },
-      "select": {
-        "role": "primary",
-        "displayName": "Selection Tint",
-        "canonical": "#f6cdc7",
-        "tonalRamp": [
-          "#130807",
-          "#35201d",
-          "#593d39",
-          "#7f5c57",
-          "#a47f79",
-          "#c9a49f",
-          "#e9c8c3",
-          "#fee9e6"
-        ]
-      },
-      "sheet": {
+      "ground": {
         "role": "neutral",
-        "displayName": "Sheet White",
-        "canonical": "#ffffff",
+        "displayName": "Graphite Ground",
+        "canonical": "#0a0e13",
         "tonalRamp": [
-          "#0b0b0b",
-          "#262626",
-          "#454545",
-          "#666666",
-          "#898989",
-          "#aeaeae",
-          "#d1d1d1",
-          "#eeeeee"
+          "#090b0e",
+          "#222529",
+          "#3e4247",
+          "#5d6268",
+          "#7e8389",
+          "#a1a5ab",
+          "#c6c9ce",
+          "#eceff3"
         ]
       },
-      "rail": {
+      "ground-glow": {
         "role": "neutral",
-        "displayName": "Rail Grey",
-        "canonical": "#eef0f1",
+        "displayName": "Graphite Glow",
+        "canonical": "#16202b",
         "tonalRamp": [
-          "#0b0b0b",
-          "#262727",
-          "#444546",
-          "#656667",
-          "#88898a",
-          "#acaeaf",
-          "#d0d1d2",
-          "#edefef"
+          "#070c10",
+          "#1f262d",
+          "#3a434d",
+          "#58626f",
+          "#788491",
+          "#9ca6b2",
+          "#c2cad4",
+          "#e8eff7"
         ]
       },
-      "rail-press": {
+      "surface": {
         "role": "neutral",
-        "displayName": "Rail Press",
-        "canonical": "#e2e5e8",
+        "displayName": "Panel Surface",
+        "canonical": "#10161d",
         "tonalRamp": [
-          "#0a0b0c",
-          "#252728",
-          "#434547",
-          "#646669",
-          "#87898c",
-          "#abaeb1",
-          "#cfd1d4",
-          "#edeff1"
+          "#090b0f",
+          "#21252a",
+          "#3d4349",
+          "#5b626a",
+          "#7c838c",
+          "#9fa6ad",
+          "#c4cad0",
+          "#ebeff4"
+        ]
+      },
+      "raised": {
+        "role": "neutral",
+        "displayName": "Raised Panel",
+        "canonical": "#161e27",
+        "tonalRamp": [
+          "#080b0f",
+          "#20262c",
+          "#3c434b",
+          "#59626c",
+          "#7a838e",
+          "#9ea6af",
+          "#c3cad2",
+          "#eaeff5"
         ]
       },
       "ink": {
         "role": "neutral",
-        "displayName": "Ink",
-        "canonical": "#14171a",
+        "displayName": "Near-white Ink",
+        "canonical": "#e6edf3",
         "tonalRamp": [
-          "#0a0b0c",
-          "#242729",
-          "#424548",
-          "#63666a",
-          "#868a8e",
-          "#aaaeb2",
-          "#ced1d5",
-          "#eceff2"
+          "#090b0d",
+          "#222528",
+          "#3e4346",
+          "#5c6267",
+          "#7d8388",
+          "#a1a6aa",
+          "#c5cacd",
+          "#ebeff2"
         ]
       },
       "ink-2": {
         "role": "neutral",
-        "displayName": "Second Ink",
-        "canonical": "#33383e",
+        "displayName": "Secondary Ink",
+        "canonical": "#a9b6c3",
         "tonalRamp": [
-          "#0a0b0d",
-          "#23272b",
-          "#41454b",
-          "#61676d",
-          "#848a91",
-          "#a9afb5",
-          "#ccd1d8",
-          "#ebeff4"
-        ]
-      },
-      "mute": {
-        "role": "neutral",
-        "displayName": "Mute",
-        "canonical": "#5f666f",
-        "tonalRamp": [
-          "#090b0e",
-          "#23272c",
-          "#40464d",
-          "#606770",
-          "#828a93",
-          "#a7afb8",
-          "#cbd2da",
-          "#eaeff6"
-        ]
-      },
-      "rule": {
-        "role": "neutral",
-        "displayName": "Rule",
-        "canonical": "#c9cdd2",
-        "tonalRamp": [
-          "#0a0b0d",
-          "#252729",
-          "#424549",
-          "#63666b",
-          "#86898e",
-          "#abaeb3",
-          "#ced1d5",
-          "#eceff2"
-        ]
-      },
-      "hair": {
-        "role": "neutral",
-        "displayName": "Hair",
-        "canonical": "#e1e4e7",
-        "tonalRamp": [
-          "#0a0b0c",
-          "#252728",
-          "#434547",
-          "#646669",
-          "#87898c",
-          "#abaeb1",
-          "#cfd1d4",
-          "#edeff1"
-        ]
-      },
-      "listing": {
-        "role": "neutral",
-        "displayName": "Listing Ground",
-        "canonical": "#f1f2f3",
-        "tonalRamp": [
-          "#0b0b0b",
-          "#262627",
-          "#444546",
-          "#656667",
-          "#88898a",
-          "#adaeaf",
-          "#d0d1d2",
-          "#eeeeef"
-        ]
-      },
-      "listing-highlight": {
-        "role": "neutral",
-        "displayName": "Listing Highlight",
-        "canonical": "#e3e6e9",
-        "tonalRamp": [
-          "#0a0b0c",
-          "#252728",
-          "#434547",
-          "#646669",
-          "#87898c",
-          "#abaeb1",
-          "#cfd1d4",
-          "#edeff1"
-        ]
-      },
-      "listing-string": {
-        "role": "secondary",
-        "displayName": "String Green",
-        "canonical": "#1e6650",
-        "tonalRamp": [
-          "#001009",
-          "#002f22",
-          "#12513e",
-          "#31745e",
-          "#559981",
-          "#7ebea6",
-          "#a8dfca",
-          "#cdfae8"
-        ]
-      },
-      "listing-name": {
-        "role": "secondary",
-        "displayName": "Name Blue",
-        "canonical": "#22507f",
-        "tonalRamp": [
-          "#010b1c",
-          "#0a2745",
-          "#20476f",
-          "#3c6999",
-          "#5e8dc0",
-          "#85b2e4",
-          "#b0d5fe",
-          "#e3f0ff"
-        ]
-      },
-      "listing-literal": {
-        "role": "secondary",
-        "displayName": "Literal Amber",
-        "canonical": "#7a4a00",
-        "tonalRamp": [
-          "#160700",
-          "#392000",
-          "#613b07",
-          "#8a5a1d",
-          "#b17d42",
-          "#d5a36c",
-          "#f5c898",
-          "#feebd7"
-        ]
-      },
-      "listing-punctuation": {
-        "role": "secondary",
-        "displayName": "Punctuation Grey",
-        "canonical": "#4a5159",
-        "tonalRamp": [
-          "#090b0e",
-          "#23272c",
-          "#40464d",
-          "#60676f",
-          "#828a93",
-          "#a7afb7",
-          "#cbd2d9",
+          "#080c10",
+          "#1f262c",
+          "#3a434c",
+          "#58636d",
+          "#78848f",
+          "#9ca6b0",
+          "#c2cad3",
           "#e9eff6"
         ]
       },
-      "red-dark": {
+      "ink-3": {
+        "role": "neutral",
+        "displayName": "Muted Ink",
+        "canonical": "#8796a5",
+        "tonalRamp": [
+          "#070c11",
+          "#1e262e",
+          "#39434d",
+          "#566370",
+          "#768492",
+          "#9ba7b3",
+          "#c0cad5",
+          "#e8f0f8"
+        ]
+      },
+      "line": {
+        "role": "neutral",
+        "displayName": "Cool Rule",
+        "canonical": "#1f2a35",
+        "tonalRamp": [
+          "#070c10",
+          "#1f262d",
+          "#3a434c",
+          "#57636e",
+          "#788490",
+          "#9ca6b1",
+          "#c1cad3",
+          "#e8eff7"
+        ]
+      },
+      "line-strong": {
+        "role": "neutral",
+        "displayName": "Strong Rule",
+        "canonical": "#2c3a48",
+        "tonalRamp": [
+          "#070c11",
+          "#1e262e",
+          "#38434f",
+          "#556371",
+          "#758493",
+          "#9aa7b4",
+          "#c0cbd6",
+          "#e7f0f8"
+        ]
+      },
+      "accent": {
         "role": "primary",
-        "displayName": "Standards Red (dark sheet)",
-        "canonical": "#ff5c47",
+        "displayName": "Viridis Teal",
+        "canonical": "#4fd1a5",
         "tonalRamp": [
-          "#200000",
-          "#4e0401",
-          "#840b01",
-          "#bd1908",
-          "#ea4835",
-          "#fa8977",
-          "#fec0b4",
-          "#ffe9e5"
+          "#001306",
+          "#00311c",
+          "#005236",
+          "#007652",
+          "#0d9973",
+          "#5dba98",
+          "#93dbbe",
+          "#c6fde6"
         ]
       },
-      "red-text-dark": {
+      "accent-ink": {
         "role": "primary",
-        "displayName": "Standards Red Text (dark sheet)",
-        "canonical": "#ff7361",
+        "displayName": "Viridis Teal Ink",
+        "canonical": "#6fdcb6",
         "tonalRamp": [
-          "#fc1e00",
-          "#ff472f",
-          "#ff563f",
-          "#ff7361",
-          "#ff9083",
-          "#ff9f93",
-          "#ffcbc5"
+          "#001207",
+          "#00301e",
+          "#005139",
+          "#007456",
+          "#2d9776",
+          "#68b79b",
+          "#9ad9c0",
+          "#cafbe7"
         ]
       },
-      "on-red-dark": {
+      "accent-soft": {
         "role": "primary",
-        "displayName": "On Red (dark sheet)",
-        "canonical": "#121518",
+        "displayName": "Teal Wash",
+        "canonical": "rgba(79, 209, 165, 0.1)",
         "tonalRamp": [
-          "#0a0b0d",
-          "#242729",
-          "#424549",
-          "#63666a",
-          "#868a8e",
-          "#aaaeb2",
-          "#ced1d5",
-          "#eceff2"
+          "#001306",
+          "#00311c",
+          "#005236",
+          "#007652",
+          "#0d9973",
+          "#5dba98",
+          "#93dbbe",
+          "#c6fde6"
         ]
       },
-      "select-dark": {
+      "select": {
         "role": "primary",
-        "displayName": "Selection Tint (dark sheet)",
-        "canonical": "#7a2a21",
+        "displayName": "Teal Selection",
+        "canonical": "rgba(79, 209, 165, 0.26)",
         "tonalRamp": [
-          "#1c0202",
-          "#46130d",
-          "#712c24",
-          "#9c4a3f",
-          "#c46d60",
-          "#ea9486",
-          "#febfb5",
-          "#fee9e5"
+          "#001306",
+          "#00311c",
+          "#005236",
+          "#007652",
+          "#0d9973",
+          "#5dba98",
+          "#93dbbe",
+          "#c6fde6"
         ]
       },
-      "sheet-dark": {
+      "install-fill": {
         "role": "neutral",
-        "displayName": "Sheet White (dark sheet)",
-        "canonical": "#121518",
+        "displayName": "Install Fill",
+        "canonical": "rgba(18, 26, 35, 0.8)",
         "tonalRamp": [
-          "#0a0b0d",
-          "#242729",
-          "#424549",
-          "#63666a",
-          "#868a8e",
-          "#aaaeb2",
-          "#ced1d5",
-          "#eceff2"
+          "#080b10",
+          "#20262c",
+          "#3c434b",
+          "#59626d",
+          "#7a838e",
+          "#9ea6b0",
+          "#c3cad2",
+          "#e9eff6"
         ]
       },
-      "rail-dark": {
+      "white": {
         "role": "neutral",
-        "displayName": "Rail Grey (dark sheet)",
-        "canonical": "#1a1e22",
-        "tonalRamp": [
-          "#0a0b0d",
-          "#24272a",
-          "#424549",
-          "#62676b",
-          "#858a8f",
-          "#aaafb4",
-          "#cdd1d6",
-          "#ebeff3"
-        ]
-      },
-      "rail-press-dark": {
-        "role": "neutral",
-        "displayName": "Rail Press (dark sheet)",
-        "canonical": "#242a2f",
-        "tonalRamp": [
-          "#090b0d",
-          "#23272a",
-          "#40464b",
-          "#60676d",
-          "#838a90",
-          "#a8afb5",
-          "#cbd2d7",
-          "#eaeff4"
-        ]
-      },
-      "ink-dark": {
-        "role": "neutral",
-        "displayName": "Ink (dark sheet)",
-        "canonical": "#e8eaec",
-        "tonalRamp": [
-          "#0b0b0c",
-          "#252628",
-          "#444547",
-          "#656668",
-          "#87898b",
-          "#acaeb0",
-          "#cfd1d3",
-          "#edeff0"
-        ]
-      },
-      "ink-2-dark": {
-        "role": "neutral",
-        "displayName": "Second Ink (dark sheet)",
-        "canonical": "#c3c8ce",
-        "tonalRamp": [
-          "#0a0b0d",
-          "#24272a",
-          "#42454a",
-          "#62666c",
-          "#858a8f",
-          "#aaaeb4",
-          "#cdd1d6",
-          "#ebeff3"
-        ]
-      },
-      "mute-dark": {
-        "role": "neutral",
-        "displayName": "Mute (dark sheet)",
-        "canonical": "#9aa1a9",
-        "tonalRamp": [
-          "#090b0e",
-          "#23272b",
-          "#40464c",
-          "#60676e",
-          "#838a92",
-          "#a8afb6",
-          "#ccd2d8",
-          "#eaeff5"
-        ]
-      },
-      "rule-dark": {
-        "role": "neutral",
-        "displayName": "Rule (dark sheet)",
-        "canonical": "#3a4047",
-        "tonalRamp": [
-          "#090b0e",
-          "#23272b",
-          "#40464c",
-          "#60676e",
-          "#838a92",
-          "#a8afb7",
-          "#ccd2d9",
-          "#eaeff5"
-        ]
-      },
-      "hair-dark": {
-        "role": "neutral",
-        "displayName": "Hair (dark sheet)",
-        "canonical": "#272c31",
-        "tonalRamp": [
-          "#0a0b0d",
-          "#23272a",
-          "#41464a",
-          "#61676c",
-          "#848a90",
-          "#a9afb5",
-          "#ccd2d7",
-          "#ebeff3"
-        ]
-      },
-      "listing-dark": {
-        "role": "neutral",
-        "displayName": "Listing Ground (dark sheet)",
-        "canonical": "#1a1e22",
-        "tonalRamp": [
-          "#0a0b0d",
-          "#24272a",
-          "#424549",
-          "#62676b",
-          "#858a8f",
-          "#aaafb4",
-          "#cdd1d6",
-          "#ebeff3"
-        ]
-      },
-      "listing-highlight-dark": {
-        "role": "neutral",
-        "displayName": "Listing Highlight (dark sheet)",
-        "canonical": "#2a3036",
-        "tonalRamp": [
-          "#090b0e",
-          "#23272b",
-          "#40464b",
-          "#60676e",
-          "#838a91",
-          "#a8afb6",
-          "#cbd2d8",
-          "#eaeff4"
-        ]
-      },
-      "listing-keyword-dark": {
-        "role": "secondary",
-        "displayName": "Keyword White (dark sheet)",
+        "displayName": "White",
         "canonical": "#ffffff",
         "tonalRamp": [
           "#0b0b0b",
-          "#262626",
-          "#454545",
-          "#666666",
-          "#898989",
-          "#aeaeae",
-          "#d1d1d1",
+          "#252525",
+          "#424242",
+          "#616161",
+          "#828282",
+          "#a5a5a5",
+          "#c9c9c9",
           "#eeeeee"
         ]
       },
-      "listing-string-dark": {
-        "role": "secondary",
-        "displayName": "String Green (dark sheet)",
-        "canonical": "#7fd1b0",
+      "ground-light": {
+        "role": "neutral",
+        "displayName": "Graphite Ground (light)",
+        "canonical": "#f6f8fa",
         "tonalRamp": [
-          "#001008",
-          "#002f20",
-          "#09523c",
-          "#22775a",
-          "#499b7d",
-          "#74c0a2",
-          "#a0e2c6",
-          "#c8fde5"
+          "#0b0b0c",
+          "#242526",
+          "#414243",
+          "#606163",
+          "#818284",
+          "#a4a5a7",
+          "#c8c9ca",
+          "#edeeef"
         ]
       },
-      "listing-name-dark": {
-        "role": "secondary",
-        "displayName": "Name Blue (dark sheet)",
-        "canonical": "#8fbfea",
+      "surface-light": {
+        "role": "neutral",
+        "displayName": "Panel Surface (light)",
+        "canonical": "#ffffff",
         "tonalRamp": [
-          "#010c19",
-          "#0b2840",
-          "#224868",
-          "#3e6a90",
-          "#608eb7",
-          "#87b3db",
-          "#afd6fa",
-          "#e2f1fe"
+          "#0b0b0b",
+          "#252525",
+          "#424242",
+          "#616161",
+          "#828282",
+          "#a5a5a5",
+          "#c9c9c9",
+          "#eeeeee"
         ]
       },
-      "listing-literal-dark": {
-        "role": "secondary",
-        "displayName": "Literal Amber (dark sheet)",
-        "canonical": "#e9b872",
+      "raised-light": {
+        "role": "neutral",
+        "displayName": "Raised Panel (light)",
+        "canonical": "#eef2f5",
         "tonalRamp": [
-          "#140800",
-          "#372100",
-          "#5d3e05",
-          "#885c0f",
-          "#ae7f39",
-          "#d2a565",
-          "#f2ca92",
-          "#feecd3"
+          "#0a0b0c",
+          "#232527",
+          "#404244",
+          "#5e6264",
+          "#7f8385",
+          "#a2a5a8",
+          "#c7c9cb",
+          "#edeff0"
         ]
       },
-      "listing-punctuation-dark": {
-        "role": "secondary",
-        "displayName": "Punctuation Grey (dark sheet)",
-        "canonical": "#b4bac1",
+      "ink-light": {
+        "role": "neutral",
+        "displayName": "Near-white Ink (light)",
+        "canonical": "#0d1520",
         "tonalRamp": [
-          "#0a0b0d",
-          "#24272a",
-          "#41454b",
-          "#61676d",
-          "#848a90",
-          "#a9afb5",
-          "#ccd1d7",
-          "#ebeff4"
+          "#080b10",
+          "#20252d",
+          "#3b434d",
+          "#59626f",
+          "#798391",
+          "#9da6b2",
+          "#c2cad4",
+          "#e9eff7"
+        ]
+      },
+      "ink-2-light": {
+        "role": "neutral",
+        "displayName": "Secondary Ink (light)",
+        "canonical": "#46525f",
+        "tonalRamp": [
+          "#070c10",
+          "#1f262d",
+          "#3a434d",
+          "#57636f",
+          "#788491",
+          "#9ca6b2",
+          "#c1cad4",
+          "#e8eff7"
+        ]
+      },
+      "ink-3-light": {
+        "role": "neutral",
+        "displayName": "Muted Ink (light)",
+        "canonical": "#5f6b78",
+        "tonalRamp": [
+          "#070c10",
+          "#1f262d",
+          "#3a434c",
+          "#58626e",
+          "#788490",
+          "#9ca6b1",
+          "#c2cad3",
+          "#e8eff7"
+        ]
+      },
+      "line-light": {
+        "role": "neutral",
+        "displayName": "Cool Rule (light)",
+        "canonical": "#dde3e9",
+        "tonalRamp": [
+          "#090b0d",
+          "#232528",
+          "#3f4246",
+          "#5d6267",
+          "#7e8388",
+          "#a1a6aa",
+          "#c6cacd",
+          "#eceff2"
+        ]
+      },
+      "line-strong-light": {
+        "role": "neutral",
+        "displayName": "Strong Rule (light)",
+        "canonical": "#c4ccd5",
+        "tonalRamp": [
+          "#090b0e",
+          "#22252a",
+          "#3d4348",
+          "#5b6269",
+          "#7c838b",
+          "#a0a6ac",
+          "#c5cacf",
+          "#ebeff3"
+        ]
+      },
+      "accent-light": {
+        "role": "primary",
+        "displayName": "Deep Viridis Teal (light)",
+        "canonical": "#0f7a69",
+        "tonalRamp": [
+          "#00110b",
+          "#002e25",
+          "#004e42",
+          "#137161",
+          "#3f9382",
+          "#71b4a5",
+          "#a0d6c9",
+          "#cff9ee"
+        ]
+      },
+      "accent-ink-light": {
+        "role": "primary",
+        "displayName": "Deep Viridis Teal Ink (light)",
+        "canonical": "#0b5e51",
+        "tonalRamp": [
+          "#00100b",
+          "#002d25",
+          "#154c42",
+          "#2c6e62",
+          "#509083",
+          "#7cb2a5",
+          "#a8d4c9",
+          "#d5f7ef"
+        ]
+      },
+      "accent-soft-light": {
+        "role": "primary",
+        "displayName": "Teal Wash (light)",
+        "canonical": "rgba(15, 122, 105, 0.1)",
+        "tonalRamp": [
+          "#00110b",
+          "#002e25",
+          "#004e42",
+          "#137161",
+          "#3f9382",
+          "#71b4a5",
+          "#a0d6c9",
+          "#cff9ee"
+        ]
+      },
+      "select-light": {
+        "role": "primary",
+        "displayName": "Teal Selection (light)",
+        "canonical": "rgba(33, 144, 141, 0.22)",
+        "tonalRamp": [
+          "#001110",
+          "#002e2d",
+          "#004e4c",
+          "#00706e",
+          "#349390",
+          "#6bb4b1",
+          "#9cd6d3",
+          "#ccf9f6"
+        ]
+      },
+      "viridis-00": {
+        "role": "tertiary",
+        "displayName": "Viridis 00%",
+        "canonical": "#440154",
+        "tonalRamp": [
+          "#16011d",
+          "#361340",
+          "#592c66",
+          "#7e478f",
+          "#a268b3",
+          "#c18fd0",
+          "#e1b8ee",
+          "#ffe1ff"
+        ]
+      },
+      "viridis-13": {
+        "role": "tertiary",
+        "displayName": "Viridis 13%",
+        "canonical": "#472c7a",
+        "tonalRamp": [
+          "#0e0422",
+          "#291a47",
+          "#473570",
+          "#67519c",
+          "#8873c1",
+          "#aa98dd",
+          "#cdbff9",
+          "#f1e7ff"
+        ]
+      },
+      "viridis-25": {
+        "role": "tertiary",
+        "displayName": "Viridis 25%",
+        "canonical": "#3b518b",
+        "tonalRamp": [
+          "#04091f",
+          "#172344",
+          "#2f406b",
+          "#495f96",
+          "#6981ba",
+          "#8fa4d7",
+          "#b6c9f3",
+          "#e0eeff"
+        ]
+      },
+      "viridis-38": {
+        "role": "tertiary",
+        "displayName": "Viridis 38%",
+        "canonical": "#2c718e",
+        "tonalRamp": [
+          "#000e18",
+          "#002939",
+          "#14485d",
+          "#2b6984",
+          "#4e8ba7",
+          "#7badc5",
+          "#a7d0e5",
+          "#d4f4ff"
+        ]
+      },
+      "viridis-50": {
+        "role": "tertiary",
+        "displayName": "Viridis 50%",
+        "canonical": "#21908d",
+        "tonalRamp": [
+          "#001110",
+          "#002e2d",
+          "#004e4c",
+          "#00706e",
+          "#349390",
+          "#6bb4b1",
+          "#9cd6d3",
+          "#ccf9f6"
+        ]
+      },
+      "viridis-63": {
+        "role": "tertiary",
+        "displayName": "Viridis 63%",
+        "canonical": "#27ad81",
+        "tonalRamp": [
+          "#001205",
+          "#00311b",
+          "#005235",
+          "#007650",
+          "#1c9971",
+          "#61b996",
+          "#95dbbc",
+          "#c7fde4"
+        ]
+      },
+      "viridis-75": {
+        "role": "tertiary",
+        "displayName": "Viridis 75%",
+        "canonical": "#5cc863",
+        "tonalRamp": [
+          "#001300",
+          "#003100",
+          "#005302",
+          "#007719",
+          "#359a3f",
+          "#6bbb6e",
+          "#9cdc9d",
+          "#ccfecc"
+        ]
+      },
+      "viridis-88": {
+        "role": "tertiary",
+        "displayName": "Viridis 88%",
+        "canonical": "#aadc32",
+        "tonalRamp": [
+          "#041000",
+          "#172d00",
+          "#2f4d00",
+          "#497000",
+          "#699300",
+          "#8fb53e",
+          "#b6d77c",
+          "#dffab4"
+        ]
+      },
+      "viridis-100": {
+        "role": "tertiary",
+        "displayName": "Viridis 100%",
+        "canonical": "#fde725",
+        "tonalRamp": [
+          "#140900",
+          "#322400",
+          "#534100",
+          "#766100",
+          "#988300",
+          "#b8a71a",
+          "#d8cc6c",
+          "#faf2aa"
+        ]
+      },
+      "caution": {
+        "role": "tertiary",
+        "displayName": "Caution Amber",
+        "canonical": "#b7791f",
+        "tonalRamp": [
+          "#1a0500",
+          "#3c1c00",
+          "#623600",
+          "#8a5300",
+          "#ae7526",
+          "#cc9a5e",
+          "#ebc190",
+          "#ffe8c3"
+        ]
+      },
+      "listing-comment": {
+        "role": "neutral",
+        "displayName": "Listing Comment",
+        "canonical": "#7d8c9b",
+        "tonalRamp": [
+          "#070c11",
+          "#1e262e",
+          "#39434e",
+          "#566370",
+          "#768492",
+          "#9ba7b3",
+          "#c0cad5",
+          "#e7f0f8"
+        ]
+      },
+      "listing-keyword": {
+        "role": "neutral",
+        "displayName": "Listing Keyword",
+        "canonical": "#c4a7f5",
+        "tonalRamp": [
+          "#0f041e",
+          "#2b1b42",
+          "#4a3569",
+          "#6c5293",
+          "#8d73b7",
+          "#ae98d4",
+          "#d1bff1",
+          "#f4e7ff"
+        ]
+      },
+      "listing-string": {
+        "role": "neutral",
+        "displayName": "Listing String",
+        "canonical": "#6fdcb6",
+        "tonalRamp": [
+          "#001207",
+          "#00301e",
+          "#005139",
+          "#007456",
+          "#2d9776",
+          "#68b79b",
+          "#9ad9c0",
+          "#cafbe7"
+        ]
+      },
+      "listing-name": {
+        "role": "neutral",
+        "displayName": "Listing Name",
+        "canonical": "#8fc3ff",
+        "tonalRamp": [
+          "#000b1f",
+          "#0a2643",
+          "#20436b",
+          "#376395",
+          "#5885b9",
+          "#81a8d6",
+          "#acccf3",
+          "#d7f1ff"
+        ]
+      },
+      "listing-literal": {
+        "role": "neutral",
+        "displayName": "Listing Literal",
+        "canonical": "#f2c46d",
+        "tonalRamp": [
+          "#170700",
+          "#372000",
+          "#5a3c00",
+          "#805900",
+          "#a37b28",
+          "#c2a05f",
+          "#e2c591",
+          "#ffecc3"
+        ]
+      },
+      "listing-punctuation": {
+        "role": "neutral",
+        "displayName": "Listing Punctuation",
+        "canonical": "#a9b6c3",
+        "tonalRamp": [
+          "#080c10",
+          "#1f262c",
+          "#3a434c",
+          "#58636d",
+          "#78848f",
+          "#9ca6b0",
+          "#c2cad3",
+          "#e9eff6"
+        ]
+      },
+      "listing-comment-light": {
+        "role": "neutral",
+        "displayName": "Listing Comment (Light)",
+        "canonical": "#5f6b78",
+        "tonalRamp": [
+          "#070c10",
+          "#1f262d",
+          "#3a434c",
+          "#58626e",
+          "#788490",
+          "#9ca6b1",
+          "#c2cad3",
+          "#e8eff7"
+        ]
+      },
+      "listing-keyword-light": {
+        "role": "neutral",
+        "displayName": "Listing Keyword (Light)",
+        "canonical": "#6b2fa3",
+        "tonalRamp": [
+          "#140028",
+          "#310e50",
+          "#52277d",
+          "#7642ac",
+          "#9864d2",
+          "#b88eec",
+          "#d9b7ff",
+          "#fbe1ff"
+        ]
+      },
+      "listing-string-light": {
+        "role": "neutral",
+        "displayName": "Listing String (Light)",
+        "canonical": "#0b6b4f",
+        "tonalRamp": [
+          "#001107",
+          "#002e1f",
+          "#0b4e39",
+          "#237156",
+          "#499377",
+          "#77b49b",
+          "#a5d6c1",
+          "#d2f9e8"
+        ]
+      },
+      "listing-name-light": {
+        "role": "neutral",
+        "displayName": "Listing Name (Light)",
+        "canonical": "#1f55b5",
+        "tonalRamp": [
+          "#00062c",
+          "#032056",
+          "#163d84",
+          "#2b5db5",
+          "#4b80dc",
+          "#77a5f5",
+          "#a3caff",
+          "#d0f0ff"
+        ]
+      },
+      "listing-literal-light": {
+        "role": "neutral",
+        "displayName": "Listing Literal (Light)",
+        "canonical": "#9a4a00",
+        "tonalRamp": [
+          "#1e0200",
+          "#421600",
+          "#692f00",
+          "#944a0f",
+          "#b96c38",
+          "#d79369",
+          "#f4bb98",
+          "#ffe4c8"
+        ]
+      },
+      "listing-punctuation-light": {
+        "role": "neutral",
+        "displayName": "Listing Punctuation (Light)",
+        "canonical": "#46525f",
+        "tonalRamp": [
+          "#070c10",
+          "#1f262d",
+          "#3a434d",
+          "#57636f",
+          "#788491",
+          "#9ca6b2",
+          "#c1cad4",
+          "#e8eff7"
         ]
       }
     },
     "typographyMeta": {
-      "sheet-number": {
-        "displayName": "Sheet number",
-        "purpose": "The red number above every sheet title. 3rem below 997px."
-      },
       "display": {
         "displayName": "Display",
-        "purpose": "The sheet title and the contents-page name. 2.5rem below 997px. Runs to the 46rem sheet width and never breaks inside a word."
-      },
-      "display-api": {
-        "displayName": "Display, API sheets",
-        "purpose": "Identifier titles on API sheets, a step smaller so they never break: 2.25rem below 997px, 1.5rem at 640px and below."
+        "purpose": "The start page headline only, held to 15ch over two lines."
       },
       "headline": {
         "displayName": "Headline",
-        "purpose": "Numbered section headings; route and Conventions headings on the contents page."
+        "purpose": "Doc page titles; 2.25rem on API pages."
+      },
+      "section-title": {
+        "displayName": "Section Title",
+        "purpose": "Start page section headings, held to 22ch."
       },
       "title": {
         "displayName": "Title",
-        "purpose": "Subsection headings."
+        "purpose": "Doc page h2, 3rem above."
       },
-      "subtitle": {
-        "displayName": "Subtitle",
-        "purpose": "Fourth-level headings."
-      },
-      "masthead": {
-        "displayName": "Masthead",
-        "purpose": "The name beside the brand bar."
+      "title-sm": {
+        "displayName": "Title Sm",
+        "purpose": "Doc h3 and capability names."
       },
       "lede": {
         "displayName": "Lede",
-        "purpose": "The one-paragraph statement on the contents page."
+        "purpose": "The one sentence under the start page headline."
       },
       "body": {
         "displayName": "Body",
-        "purpose": "Prose at a 38rem measure, about 66 characters. 1rem is 17px."
+        "purpose": "Doc prose, held to the 42rem measure."
       },
-      "rail": {
-        "displayName": "Rail",
-        "purpose": "Rail entries, masthead links, tables, tab labels."
-      },
-      "small": {
-        "displayName": "Small",
-        "purpose": "On-page contents, captions, colophon, tagline, dropdown items."
+      "button": {
+        "displayName": "Button",
+        "purpose": "Start page action labels."
       },
       "label": {
         "displayName": "Label",
-        "purpose": "Sentence-case group labels in Mute: book heads, On this page, colophon column titles."
+        "purpose": "Table heads, rail category heads, code block titles, admonition heads."
+      },
+      "caption": {
+        "displayName": "Caption",
+        "purpose": "Render captions, readout labels, breadcrumbs, footer, contents links."
+      },
+      "readout": {
+        "displayName": "Readout",
+        "purpose": "Numeric solver results on the start page."
       },
       "code": {
         "displayName": "Code",
-        "purpose": "Listings and inline code. Ligatures off."
+        "purpose": "Listings; inline code at 0.875em with ligatures off."
       }
     },
-    "shadows": [],
+    "shadows": [
+      {
+        "name": "floating-light",
+        "value": "0 8px 24px rgba(13, 21, 32, 0.12)",
+        "purpose": "Infima medium and top-level shadow in light: dropdowns and other overlays only."
+      },
+      {
+        "name": "floating-dark",
+        "value": "0 12px 32px rgba(0, 0, 0, 0.45)",
+        "purpose": "The same in dark."
+      },
+      {
+        "name": "none",
+        "value": "none",
+        "purpose": "Everything at rest: code blocks, notes, keys, back-to-top, Infima's low shadow."
+      }
+    ],
     "motion": [
       {
         "name": "ease",
-        "value": "cubic-bezier(0.16, 1, 0.3, 1)",
-        "purpose": "The one easing curve (--zm-ease), an ease-out, for every state change and for the plate's wake."
+        "value": "cubic-bezier(0.2, 0.8, 0.2, 1)",
+        "purpose": "--z-ease: every transition."
       },
       {
-        "name": "duration-state",
-        "value": "160ms",
-        "purpose": "State changes that ease: colour, background, opacity, and the rail caret's rotation. Hover on a link or a pager rule changes thickness at once, in ink."
+        "name": "state",
+        "value": "150ms",
+        "purpose": "Hover and focus colour and border changes on links, buttons, pager."
       },
       {
-        "name": "duration-wake",
-        "value": "900ms",
-        "purpose": "Plate 1's trailing legs drawing aft once on load, the single authored movement. Removed under reduced motion."
+        "name": "resolve",
+        "value": "opacity 0 to 1, 1100ms, 300ms delay, once",
+        "purpose": "The start page solution fading in over its panel mesh; none under reduced motion."
       },
       {
-        "name": "stagger-wake",
-        "value": "28ms",
-        "purpose": "Delay per strip edge counted outward from the root, so the wake leaves root first."
+        "name": "copied",
+        "value": "1600ms",
+        "purpose": "How long the install button reads Copied."
       }
     ],
     "breakpoints": [
       {
-        "name": "equation-indent",
-        "value": "480px"
+        "name": "phone",
+        "value": "760px"
       },
       {
-        "name": "narrow-sheet",
-        "value": "640px"
-      },
-      {
-        "name": "rail",
+        "name": "docs-desktop",
         "value": "997px"
       },
       {
-        "name": "tagline",
-        "value": "1200px"
-      },
-      {
-        "name": "hanging-numbers",
-        "value": "1280px"
-      },
-      {
-        "name": "contents-column",
-        "value": "1440px"
+        "name": "narrow",
+        "value": "1100px"
       }
-    ]
+    ],
+    "gradients": [
+      {
+        "name": "viridis",
+        "value": "linear-gradient(90deg, #440154, #472c7a, #3b518b, #2c718e, #21908d, #27ad81, #5cc863, #aadc32, #fde725)",
+        "purpose": "--z-viridis: colour bar, brand chip, progress bar."
+      },
+      {
+        "name": "result-window",
+        "value": "radial-gradient(120% 90% at 62% 58%, #16202b 0%, #0a0e13 70%)",
+        "purpose": "The start page hero ground, dark in both themes."
+      },
+      {
+        "name": "capability-visual",
+        "value": "radial-gradient(100% 90% at 50% 55%, #16202b 0%, #0a0e13 100%)",
+        "purpose": "Capability visual frames, dark in both themes."
+      }
+    ],
+    "focus": {
+      "value": "outline: 2px solid var(--z-accent); outline-offset: 2px; border-radius: 4px",
+      "purpose": "Every :focus-visible."
+    },
+    "navbar": {
+      "backdrop": "saturate(1.4) blur(12px)",
+      "background": "color-mix(in srgb, var(--z-ground) 88%, transparent)",
+      "height": "4rem",
+      "purpose": "Doc pages; on the start page the navbar is transparent with no backdrop."
+    }
   },
   "components": [
     {
-      "name": "Masthead",
+      "name": "Primary Button (result window)",
+      "kind": "button",
+      "refersTo": "button-primary",
+      "description": "The filled near-white action laid over the dark result window: Get started.",
+      "html": "<div class=\"ds-window\"><a class=\"ds-btn-primary\" href=\"#\">Get started</a></div>",
+      "css": ".ds-window{background:radial-gradient(120% 90% at 62% 58%,#16202b 0%,#0a0e13 70%);padding:24px;border-radius:8px}.ds-btn-primary{display:inline-flex;align-items:center;min-height:3rem;padding:0 1.25rem;border-radius:10px;background:#e6edf3;color:#0a0e13;font-family:\"Host Grotesk\",ui-sans-serif,system-ui,sans-serif;font-size:1rem;font-weight:600;text-decoration:none;transition:background-color 150ms cubic-bezier(0.2, 0.8, 0.2, 1),color 150ms cubic-bezier(0.2, 0.8, 0.2, 1)}.ds-btn-primary:hover{background:#ffffff}.ds-btn-primary:focus-visible{outline:2px solid #4fd1a5;outline-offset:2px}"
+    },
+    {
+      "name": "Install Button",
+      "kind": "button",
+      "refersTo": "button-install",
+      "description": "The install command as an outlined mono button that copies on click.",
+      "html": "<div class=\"ds-window\"><button class=\"ds-btn-install\" type=\"button\"><code>cargo add zephyr-vlm</code><span class=\"ds-copy\">Copy</span></button></div>",
+      "css": ".ds-window{background:#0a0e13;padding:24px;border-radius:8px}.ds-btn-install{display:inline-flex;align-items:center;gap:.75rem;min-height:3rem;padding:0 1.25rem;border:1px solid #2c3a48;border-radius:10px;background:rgba(18,26,35,.8);color:#e6edf3;font-family:\"Host Grotesk\",ui-sans-serif,system-ui,sans-serif;font-weight:500;cursor:pointer;transition:border-color 150ms cubic-bezier(0.2, 0.8, 0.2, 1)}.ds-btn-install code{font-family:\"Red Hat Mono\",ui-monospace,monospace;font-size:.9375rem;color:#e6edf3}.ds-copy{padding-left:.75rem;border-left:1px solid #2c3a48;font-size:.8125rem;color:#8796a5}.ds-btn-install:hover{border-color:#8796a5}.ds-btn-install:focus-visible{outline:2px solid #4fd1a5;outline-offset:2px}"
+    },
+    {
+      "name": "Secondary Button",
+      "kind": "button",
+      "refersTo": "button-secondary",
+      "description": "Outlined themed action below the result window: API reference.",
+      "html": "<a class=\"ds-btn-secondary\" href=\"#\">API reference</a>",
+      "css": ".ds-btn-secondary{display:inline-flex;align-items:center;min-height:3rem;padding:0 1.25rem;border:1px solid var(--z-line-strong,#2c3a48);border-radius:10px;color:var(--z-ink,#e6edf3);font-family:\"Host Grotesk\",ui-sans-serif,system-ui,sans-serif;font-size:1rem;font-weight:600;text-decoration:none;transition:border-color 150ms cubic-bezier(0.2, 0.8, 0.2, 1)}.ds-btn-secondary:hover{border-color:var(--z-ink-3,#8796a5)}.ds-btn-secondary:focus-visible{outline:2px solid var(--z-accent,#4fd1a5);outline-offset:2px}"
+    },
+    {
+      "name": "Rail",
       "kind": "nav",
-      "refersTo": "masthead",
-      "description": "The head of every page: the red brand bar and the name over the rail, the tagline at the gutter, books at the right. The current book is bold with a red rule laid over the masthead's own rule; hover is a 2px ink underline.",
-      "html": "<header class=\"ds-masthead\"><a class=\"ds-masthead-brand\" href=\"#\"><span class=\"ds-masthead-name\">Zephyr</span></a><span class=\"ds-masthead-tagline\">Vortex lattice method library</span><nav class=\"ds-masthead-nav\" aria-label=\"Main\"><a class=\"ds-masthead-link ds-masthead-link-active\" href=\"#\" aria-current=\"page\">Docs</a><a class=\"ds-masthead-link\" href=\"#\">API</a><a class=\"ds-masthead-link\" href=\"#\">GitHub</a></nav></header>",
-      "css": ".ds-masthead { display: flex; align-items: stretch; height: 4.25rem; background: var(--zm-sheet, #ffffff); border-bottom: 2px solid var(--zm-ink, #14171a); font-family: var(--zm-sans, \"Public Sans\", \"Helvetica Neue\", Helvetica, Arial, sans-serif); } .ds-masthead-brand { display: flex; align-items: center; gap: 0.875rem; width: 20rem; padding: 0 1.25rem 0 1.75rem; background: var(--zm-rail, #eef0f1); color: var(--zm-ink, #14171a); text-decoration: none; } .ds-masthead-brand::before { content: \"\"; flex: none; width: 0.75rem; height: 2.125rem; background: var(--zm-red, #d8301f); } .ds-masthead-brand:focus-visible { outline: 2px solid var(--zm-ink, #14171a); outline-offset: -2px; } .ds-masthead-name { font-size: 1.5rem; font-weight: 700; letter-spacing: -0.02em; } .ds-masthead-tagline { display: flex; align-items: center; padding-left: 4rem; font-size: 0.875rem; color: var(--zm-mute, #5f666f); white-space: nowrap; } .ds-masthead-nav { display: flex; align-items: stretch; gap: 2rem; margin-left: auto; padding-right: 1.5rem; } .ds-masthead-link { position: relative; display: inline-flex; align-items: center; font-size: 0.9375rem; font-weight: 500; color: var(--zm-ink, #14171a); text-decoration: none; transition: color 160ms cubic-bezier(0.16, 1, 0.3, 1); } .ds-masthead-link:hover { text-decoration: underline; text-decoration-thickness: 2px; text-underline-offset: 0.35em; } .ds-masthead-link:focus-visible { outline: 2px solid var(--zm-ink, #14171a); outline-offset: 2px; } .ds-masthead-link-active { font-weight: 700; } .ds-masthead-link-active::after { content: \"\"; position: absolute; left: 0; right: 0; bottom: -2px; height: 4px; background: var(--zm-red, #d8301f); }"
+      "refersTo": "menu-link-active",
+      "description": "The doc sidebar: category head, links, the active page on the teal wash.",
+      "html": "<nav class=\"ds-rail\"><div class=\"ds-rail-head\">Guide</div><a class=\"ds-rail-link\" href=\"#\">Loads</a><a class=\"ds-rail-link ds-active\" href=\"#\">Stability analysis</a><a class=\"ds-rail-link\" href=\"#\">Trim</a></nav>",
+      "css": ".ds-rail{width:16rem;padding:.75rem .5rem;background:var(--z-ground,#0a0e13);border-right:1px solid var(--z-line,#1f2a35);font-family:\"Host Grotesk\",ui-sans-serif,system-ui,sans-serif;font-size:.9375rem}.ds-rail-head{padding:.375rem .75rem;font-size:.8125rem;font-weight:600;color:var(--z-ink,#e6edf3)}.ds-rail-link{display:block;padding:.375rem .75rem;border-radius:6px;line-height:1.35;color:var(--z-ink-2,#a9b6c3);text-decoration:none;transition:color 150ms cubic-bezier(0.2, 0.8, 0.2, 1)}.ds-rail-link:hover{background:var(--z-raised,#161e27)}.ds-rail-link.ds-active{background:var(--z-accent-soft,rgba(79,209,165,.1));color:var(--z-accent-ink,#6fdcb6);font-weight:600}.ds-rail-link:focus-visible{outline:2px solid var(--z-accent,#4fd1a5);outline-offset:2px}"
     },
     {
-      "name": "Rail with place mark",
-      "kind": "nav",
-      "refersTo": "rail-entry",
-      "description": "The contents rail. Every entry is a number cell and a label, counted from 1; the current sheet's number cell fills red and its row turns sheet white and bold.",
-      "html": "<nav class=\"ds-rail\" aria-label=\"Contents\"><ul class=\"ds-rail-list\"><li class=\"ds-rail-section\"><span class=\"ds-rail-link ds-rail-head\"><span>Getting Started</span></span><ul><li><a class=\"ds-rail-link\" href=\"#\"><span>Installation</span></a></li><li><a class=\"ds-rail-link\" href=\"#\"><span>Quick Start</span></a></li></ul></li><li class=\"ds-rail-section\"><span class=\"ds-rail-link ds-rail-head\"><span>Guide</span></span><ul><li><a class=\"ds-rail-link ds-rail-current\" href=\"#\" aria-current=\"page\"><span>VLM Theory</span></a></li><li><a class=\"ds-rail-link\" href=\"#\"><span>Solver Workflow</span></a></li><li><a class=\"ds-rail-link\" href=\"#\"><span>Stability Analysis</span></a></li></ul></li></ul></nav>",
-      "css": ".ds-rail { width: 20rem; max-width: 100%; padding: 1.5rem 0 2rem; background: var(--zm-rail, #eef0f1); font-family: var(--zm-sans, \"Public Sans\", \"Helvetica Neue\", Helvetica, Arial, sans-serif); font-size: 0.9375rem; font-feature-settings: \"tnum\" 1; } .ds-rail ul { margin: 0; padding: 0; list-style: none; } .ds-rail-list { counter-reset: ds-section; } .ds-rail-section { counter-increment: ds-section; counter-reset: ds-sheet; margin-bottom: 0.875rem; } .ds-rail-section li { counter-increment: ds-sheet; } .ds-rail-link { display: grid; grid-template-columns: 4.25rem 1fr; align-items: stretch; line-height: 1.35; font-weight: 400; color: var(--zm-ink-2, #33383e); text-decoration: none; transition: background-color 160ms cubic-bezier(0.16, 1, 0.3, 1); } .ds-rail-link::before { content: counter(ds-section) \".\" counter(ds-sheet); padding: 0.3125rem 0 0.3125rem 1.75rem; color: var(--zm-mute, #5f666f); font-weight: 400; white-space: nowrap; } .ds-rail-link > span { padding: 0.3125rem 0.5rem 0.3125rem 0; } .ds-rail-head { font-weight: 700; color: var(--zm-ink, #14171a); } .ds-rail-head::before { content: counter(ds-section); } a.ds-rail-link:hover { background: var(--zm-rail-press, #e2e5e8); color: var(--zm-ink, #14171a); } a.ds-rail-link:focus-visible { outline: 2px solid var(--zm-ink, #14171a); outline-offset: -2px; } a.ds-rail-current, a.ds-rail-current:hover { background: var(--zm-sheet, #ffffff); color: var(--zm-ink, #14171a); font-weight: 700; } .ds-rail-current::before { background: var(--zm-red, #d8301f); color: var(--zm-on-red, #ffffff); font-weight: 700; margin-right: 0.75rem; }"
-    },
-    {
-      "name": "Sheet number and title",
-      "kind": "custom",
-      "refersTo": "sheet-number",
-      "description": "The signature. A light red number stands above the light title on the same edge; it is the number the rail and the pager print for this sheet. The title runs to the 46rem sheet width and never breaks inside a word.",
-      "html": "<div class=\"ds-sheet-head\"><div class=\"ds-sheet-number\"><span class=\"ds-sheet-sr\">Sheet </span>2.1</div><h1 class=\"ds-sheet-title\">VLM Theory</h1></div>",
-      "css": ".ds-sheet-head { font-family: var(--zm-sans, \"Public Sans\", \"Helvetica Neue\", Helvetica, Arial, sans-serif); font-feature-settings: \"tnum\" 1; } .ds-sheet-number { margin: 1.25rem 0 0; font-size: 4.75rem; font-weight: 300; line-height: 1; letter-spacing: -0.03em; color: var(--zm-red, #d8301f); } .ds-sheet-sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; } .ds-sheet-title { max-width: 46rem; margin: 0.25rem 0 1.5rem -0.04em; font-size: 3.75rem; font-weight: 300; line-height: 1.05; letter-spacing: -0.025em; color: var(--zm-ink, #14171a); text-wrap: balance; overflow-wrap: normal; word-break: normal; }"
-    },
-    {
-      "name": "Hanging section number",
-      "kind": "custom",
-      "refersTo": "section-number",
-      "description": "Section headings are counted and their number hangs in the gutter, left of the datum hairline that every block registers to.",
-      "html": "<div class=\"ds-section\"><h2 class=\"ds-section-heading\">Horseshoe Vortex Elements</h2><p class=\"ds-section-text\">VLM discretizes lifting surfaces into a grid of trapezoidal panels. Each panel carries a horseshoe vortex.</p><h2 class=\"ds-section-heading\">Biot-Savart Law</h2><p class=\"ds-section-text\">The velocity induced by a vortex filament at a point is computed using the Biot-Savart law.</p></div>",
-      "css": ".ds-section { margin-left: 4rem; padding: 0.5rem 0 0.5rem 1.75rem; border-left: 1px solid var(--zm-hair, #e1e4e7); font-family: var(--zm-sans, \"Public Sans\", \"Helvetica Neue\", Helvetica, Arial, sans-serif); color: var(--zm-ink, #14171a); counter-reset: ds-heading; } .ds-section-heading { position: relative; max-width: 38rem; margin: 2.75rem 0 0.75rem; font-size: 1.5rem; font-weight: 600; line-height: 1.2; letter-spacing: -0.01em; text-wrap: balance; counter-increment: ds-heading; } .ds-section-heading:first-child { margin-top: 0; } .ds-section-heading::before { content: counter(ds-heading); position: absolute; top: 0.3em; left: calc(-1 * (1.75rem + 4rem)); width: calc(4rem - 0.875rem); font-size: 1rem; font-weight: 400; line-height: 1.2; text-align: right; color: var(--zm-mute, #5f666f); } .ds-section-text { max-width: 38rem; margin: 0 0 1.125rem; line-height: 1.6; }"
-    },
-    {
-      "name": "Listing",
+      "name": "Code Block",
       "kind": "card",
-      "refersTo": "listing",
-      "description": "A code listing: listing ground under a 2px ink rule, the language named in the text face, keywords in heavier ink, and a square copy button that appears on hover or focus.",
-      "html": "<div class=\"ds-listing\"><div class=\"ds-listing-label\">Rust</div><button class=\"ds-listing-copy\" type=\"button\" aria-label=\"Copy code to clipboard\"><svg viewBox=\"0 0 24 24\" width=\"18\" height=\"18\" aria-hidden=\"true\"><path fill=\"currentColor\" d=\"M19,21H8V7H19M19,5H8A2,2 0 0,0 6,7V21A2,2 0 0,0 8,23H19A2,2 0 0,0 21,21V7A2,2 0 0,0 19,5M16,1H4A2,2 0 0,0 2,3V17H4V3H16V1Z\"/></svg></button><pre class=\"ds-listing-pre\"><code><span class=\"ds-tok-kw\">let</span> <span class=\"ds-tok-kw\">mut</span> wing <span class=\"ds-tok-punct\">=</span> <span class=\"ds-tok-name\">Surface</span><span class=\"ds-tok-punct\">::</span><span class=\"ds-tok-name\">new</span><span class=\"ds-tok-punct\">(</span><span class=\"ds-tok-str\">\"Wing\"</span><span class=\"ds-tok-punct\">);</span>\nwing<span class=\"ds-tok-punct\">.</span><span class=\"ds-tok-name\">set_chordwise_panel_count</span><span class=\"ds-tok-punct\">(</span><span class=\"ds-tok-lit\">4</span><span class=\"ds-tok-punct\">);</span>\nwing<span class=\"ds-tok-punct\">.</span><span class=\"ds-tok-name\">set_spanwise_panel_count</span><span class=\"ds-tok-punct\">(</span><span class=\"ds-tok-lit\">16</span><span class=\"ds-tok-punct\">);</span></code></pre></div>",
-      "css": ".ds-listing { position: relative; max-width: 46rem; margin: 1.5rem 0 1.75rem; border-top: 2px solid var(--zm-ink, #14171a); background: var(--zm-listing, #f1f2f3); color: var(--zm-ink, #14171a); } .ds-listing-label { padding: 0.5rem 1rem 0; font-family: var(--zm-sans, \"Public Sans\", \"Helvetica Neue\", Helvetica, Arial, sans-serif); font-size: 0.8125rem; color: var(--zm-mute, #5f666f); } .ds-listing-pre { margin: 0; padding: 1rem; overflow-x: auto; font-family: var(--zm-mono, \"Source Code Pro\", ui-monospace, \"SF Mono\", Menlo, Consolas, monospace); font-size: 0.875rem; line-height: 1.6; font-variant-ligatures: none; } .ds-listing-pre code { font-family: inherit; } .ds-tok-kw { font-weight: 600; } .ds-tok-str { color: #1e6650; } .ds-tok-name { color: #22507f; } .ds-tok-lit { color: #7a4a00; } .ds-tok-punct { color: #4a5159; } :host-context([data-theme=\"dark\"]) .ds-tok-kw { color: #ffffff; } :host-context([data-theme=\"dark\"]) .ds-tok-str { color: #7fd1b0; } :host-context([data-theme=\"dark\"]) .ds-tok-name { color: #8fbfea; } :host-context([data-theme=\"dark\"]) .ds-tok-lit { color: #e9b872; } :host-context([data-theme=\"dark\"]) .ds-tok-punct { color: #b4bac1; } .ds-listing-copy { position: absolute; top: 0.5rem; right: 0.5rem; display: flex; padding: 0.4rem; border: 1px solid var(--zm-rule, #c9cdd2); border-radius: 0; background: var(--zm-sheet, #ffffff); color: var(--zm-ink, #14171a); line-height: 0; cursor: pointer; opacity: 0; transition: opacity 160ms cubic-bezier(0.16, 1, 0.3, 1); } .ds-listing:hover .ds-listing-copy, .ds-listing-copy:focus-visible { opacity: 1; } .ds-listing-copy:hover { border-color: var(--zm-ink, #14171a); } .ds-listing-copy:focus-visible { outline: 2px solid var(--zm-ink, #14171a); outline-offset: 2px; }"
-    },
-    {
-      "name": "Note",
-      "kind": "custom",
-      "refersTo": "note",
-      "description": "A note of any kind, warnings included: no ground, a 2px ink rule above, a hair below, and ink throughout. Kinds are not colour-coded.",
-      "html": "<div class=\"ds-note\" role=\"note\"><div class=\"ds-note-heading\">Note</div><p class=\"ds-note-text\">Section twist and surface incidence are in degrees. Flight angles, rates, control deflections, trim variables, and derivatives are in radians.</p></div>",
-      "css": ".ds-note { max-width: 38rem; margin: 1.5rem 0; padding: 0.75rem 0; border-top: 2px solid var(--zm-ink, #14171a); border-bottom: 1px solid var(--zm-hair, #e1e4e7); font-family: var(--zm-sans, \"Public Sans\", \"Helvetica Neue\", Helvetica, Arial, sans-serif); color: var(--zm-ink, #14171a); } .ds-note-heading { margin-bottom: 0.25rem; font-size: 0.8125rem; font-weight: 700; letter-spacing: 0.04em; text-transform: uppercase; } .ds-note-text { margin: 0; line-height: 1.6; }"
+      "refersTo": "code-block",
+      "description": "A titled Rust listing on the surface colour with a 1px rule and no shadow.",
+      "html": "<div class=\"ds-code\"><div class=\"ds-code-title\">main.rs</div><pre><code><span class=\"k\">let</span> lift = TotalDerivative::<span class=\"f\">compute</span>(&amp;solver, &amp;condition, AeroOutput::Lift)?;\n<span class=\"f\">println!</span>(<span class=\"s\">\"dCL/dalpha = {}\"</span>, lift.by_alpha);</code></pre></div>",
+      "css": ".ds-code{border:1px solid var(--z-line,#1f2a35);border-radius:8px;background:#10161d;overflow:hidden}.ds-code-title{padding:.5rem 1.125rem;border-bottom:1px solid var(--z-line,#1f2a35);font-family:\"Host Grotesk\",ui-sans-serif,sans-serif;font-size:.8125rem;font-weight:600;color:#a9b6c3}.ds-code pre{margin:0;padding:1.125rem;overflow-x:auto}.ds-code code{font-family:\"Red Hat Mono\",ui-monospace,monospace;font-size:.875rem;line-height:1.65;color:#e6edf3;font-variant-ligatures:none}.ds-code .k{color:#c4a7f5}.ds-code .f{color:#8fc3ff}.ds-code .s{color:#6fdcb6}"
     },
     {
       "name": "Table",
-      "kind": "custom",
-      "refersTo": "table",
-      "description": "A ruled table: 2px ink above the head, 1px ink below it, hair between rows; no vertical rules, stripes, or head ground.",
-      "html": "<table class=\"ds-table\"><thead><tr><th>Quantity</th><th>Unit</th></tr></thead><tbody><tr><td>Section twist, surface incidence</td><td>degrees</td></tr><tr><td>Flight angles, angular rates</td><td>radians</td></tr><tr><td>Control deflections, trim variables</td><td>radians</td></tr></tbody></table>",
-      "css": ".ds-table { width: 100%; max-width: 46rem; margin: 1.5rem 0 1.75rem; border-collapse: collapse; font-family: var(--zm-sans, \"Public Sans\", \"Helvetica Neue\", Helvetica, Arial, sans-serif); font-size: 0.9375rem; font-feature-settings: \"tnum\" 1; color: var(--zm-ink, #14171a); } .ds-table thead tr { border-top: 2px solid var(--zm-ink, #14171a); border-bottom: 1px solid var(--zm-ink, #14171a); } .ds-table tbody tr { border-bottom: 1px solid var(--zm-hair, #e1e4e7); } .ds-table th, .ds-table td { padding: 0.5rem 1.5rem 0.5rem 0; text-align: left; vertical-align: top; } .ds-table th { font-weight: 600; white-space: nowrap; }"
+      "kind": "card",
+      "refersTo": "table-head",
+      "description": "A rounded, bordered table block with a raised head and row rules only.",
+      "html": "<table class=\"ds-table\"><thead><tr><th>Case</th><th>Panels</th></tr></thead><tbody><tr><td>wing_tail</td><td>44</td></tr><tr><td>ucrm_17_40</td><td>680</td></tr></tbody></table>",
+      "css": ".ds-table{border:1px solid var(--z-line,#1f2a35);border-radius:8px;border-collapse:separate;border-spacing:0;overflow:hidden;font-family:\"Host Grotesk\",ui-sans-serif,sans-serif;font-size:.9375rem;line-height:1.5;color:var(--z-ink,#e6edf3)}.ds-table th{background:var(--z-raised,#161e27);font-size:.8125rem;font-weight:600;color:var(--z-ink-2,#a9b6c3);text-align:left}.ds-table th,.ds-table td{padding:.625rem .875rem;border-bottom:1px solid var(--z-line,#1f2a35)}.ds-table tbody tr:last-child td{border-bottom:0}"
     },
     {
-      "name": "Pager",
-      "kind": "button",
+      "name": "Note",
+      "kind": "card",
+      "refersTo": "alert",
+      "description": "An admonition: surface fill, 1px strong rule, no shadow; caution amber for warnings.",
+      "html": "<div class=\"ds-note\"><div class=\"ds-note-head\">NOTE</div><p>Twist and incidence are degrees; flight angles are <a href=\"#\">radians</a>.</p></div><div class=\"ds-note ds-warn\"><div class=\"ds-note-head\">WARNING</div><p>Released snapshots are frozen.</p></div>",
+      "css": ".ds-note{max-width:42rem;margin-bottom:12px;padding:1rem;border:1px solid var(--z-line-strong,#2c3a48);border-radius:8px;background:var(--z-surface,#10161d);color:var(--z-ink,#e6edf3);font-family:\"Host Grotesk\",ui-sans-serif,sans-serif}.ds-warn{border-color:#b7791f}.ds-note-head{font-size:.8125rem;font-weight:600;letter-spacing:.02em}.ds-note p{margin:.5rem 0 0}.ds-note a{color:var(--z-accent-ink,#6fdcb6);text-decoration:underline}"
+    },
+    {
+      "name": "Pager Link",
+      "kind": "card",
       "refersTo": "pager-link",
-      "description": "Turning the page. Each link sits under a 2px ink rule and names the neighbouring sheet by number and title; on hover the rule thickens to 4px, in ink. The two stack at 640px and below.",
-      "html": "<nav class=\"ds-pager\" aria-label=\"Sheets\"><a class=\"ds-pager-link\" href=\"#\"><div class=\"ds-pager-sublabel\">Previous</div><div class=\"ds-pager-label\"><span class=\"ds-pager-number\">1.2</span>Quick Start</div></a><a class=\"ds-pager-link ds-pager-next\" href=\"#\"><div class=\"ds-pager-sublabel\">Next</div><div class=\"ds-pager-label\"><span class=\"ds-pager-number\">2.2</span>Solver Workflow</div></a></nav>",
-      "css": ".ds-pager { display: grid; grid-template-columns: 1fr 1fr; gap: 2rem; max-width: 46rem; margin-top: 3rem; font-family: var(--zm-sans, \"Public Sans\", \"Helvetica Neue\", Helvetica, Arial, sans-serif); font-feature-settings: \"tnum\" 1; } .ds-pager-link { display: block; padding: 0.75rem 0 0; border-top: 2px solid var(--zm-ink, #14171a); text-decoration: none; } .ds-pager-next { text-align: right; } .ds-pager-sublabel { font-size: 0.8125rem; color: var(--zm-mute, #5f666f); } .ds-pager-label { font-size: 1.0625rem; font-weight: 600; color: var(--zm-ink, #14171a); word-break: normal; overflow-wrap: break-word; } .ds-pager-number { margin-right: 0.625rem; font-weight: 400; color: var(--zm-red-text, #c4281a); } .ds-pager-link:hover { border-top-width: 4px; padding-top: calc(0.75rem - 2px); } @media (max-width: 640px) { .ds-pager { grid-template-columns: 1fr; gap: 1.25rem; } } .ds-pager-link:focus-visible { outline: 2px solid var(--zm-ink, #14171a); outline-offset: 2px; }"
+      "description": "Next/previous page box whose border turns accent on hover.",
+      "html": "<a class=\"ds-pager\" href=\"#\"><span class=\"ds-pager-sub\">Next</span><span class=\"ds-pager-label\">Stability analysis</span></a>",
+      "css": ".ds-pager{display:flex;flex-direction:column;gap:.25rem;padding:1rem;border:1px solid var(--z-line,#1f2a35);border-radius:8px;background:var(--z-surface,#10161d);text-decoration:none;font-family:\"Host Grotesk\",ui-sans-serif,sans-serif;transition:border-color 150ms cubic-bezier(0.2, 0.8, 0.2, 1)}.ds-pager:hover{border-color:var(--z-accent,#4fd1a5)}.ds-pager:focus-visible{outline:2px solid var(--z-accent,#4fd1a5);outline-offset:2px}.ds-pager-sub{font-size:.8125rem;color:var(--z-ink-3,#8796a5)}.ds-pager-label{font-weight:600;color:var(--z-accent-ink,#6fdcb6)}"
     },
     {
-      "name": "On-page contents",
-      "kind": "nav",
-      "refersTo": "contents-link",
-      "description": "The contents of one sheet, numbered to match its section headings. The section in view is bold with a red square in the margin: the place mark again.",
-      "html": "<nav class=\"ds-contents\" aria-label=\"On this page\"><div class=\"ds-contents-head\">On this page</div><ul class=\"ds-contents-list\"><li><a class=\"ds-contents-link\" href=\"#\">Horseshoe Vortex Elements</a></li><li><a class=\"ds-contents-link ds-contents-active\" href=\"#\">Biot-Savart Law</a></li><li><a class=\"ds-contents-link\" href=\"#\">Flow Tangency Condition</a></li><li><a class=\"ds-contents-link\" href=\"#\">Force Computation</a></li></ul></nav>",
-      "css": ".ds-contents { width: 15.5rem; max-width: 100%; font-family: var(--zm-sans, \"Public Sans\", \"Helvetica Neue\", Helvetica, Arial, sans-serif); font-size: 0.875rem; font-feature-settings: \"tnum\" 1; } .ds-contents-head { margin: 0 0 0.75rem 1.5rem; padding-bottom: 0.5rem; border-bottom: 1px solid var(--zm-rule, #c9cdd2); font-size: 0.8125rem; font-weight: 600; color: var(--zm-mute, #5f666f); } .ds-contents-list { margin: 0; padding: 0 0 0 1.5rem; list-style: none; counter-reset: ds-toc; } .ds-contents-list > li { counter-increment: ds-toc; } .ds-contents-link { position: relative; display: block; padding: 0.25rem 0 0.25rem 1.75rem; line-height: 1.35; color: var(--zm-ink-2, #33383e); text-decoration: none; transition: color 160ms cubic-bezier(0.16, 1, 0.3, 1); } .ds-contents-link::before { content: counter(ds-toc); position: absolute; left: 0; color: var(--zm-mute, #5f666f); font-weight: 400; } .ds-contents-link:hover { color: var(--zm-ink, #14171a); text-decoration: underline; text-decoration-thickness: 2px; text-underline-offset: 0.2em; } .ds-contents-link:focus-visible { outline: 2px solid var(--zm-ink, #14171a); outline-offset: 2px; } .ds-contents-active { color: var(--zm-ink, #14171a); font-weight: 700; } .ds-contents-active::after { content: \"\"; position: absolute; top: 0.6em; left: -1.5rem; width: 0.5rem; height: 0.5rem; background: var(--zm-red, #d8301f); }"
-    },
-    {
-      "name": "Route list",
+      "name": "Readouts and Colour Bar",
       "kind": "custom",
-      "refersTo": "route-number",
-      "description": "One of the two ways in on the contents page: a 2px ink rule, a headline, one line, then hair-ruled rows that name sheets by number, the number looked up from the contents list. Hover underlines in ink. Rules, not a card.",
-      "html": "<div class=\"ds-route\"><h2 class=\"ds-route-title\">Run a first analysis</h2><p class=\"ds-route-body\">Add the crate, describe a wing, and read its loads.</p><ul class=\"ds-route-list\"><li><a class=\"ds-route-link\" href=\"#\"><span class=\"ds-route-number\">1.1</span>Installation</a></li><li><a class=\"ds-route-link\" href=\"#\"><span class=\"ds-route-number\">1.2</span>Quick Start</a></li><li><a class=\"ds-route-link\" href=\"#\"><span class=\"ds-route-number\">3.1</span>Basic Analysis</a></li></ul></div>",
-      "css": ".ds-route { max-width: 31rem; padding: 1rem 0 0.5rem; border-top: 2px solid var(--zm-ink, #14171a); font-family: var(--zm-sans, \"Public Sans\", \"Helvetica Neue\", Helvetica, Arial, sans-serif); font-feature-settings: \"tnum\" 1; color: var(--zm-ink, #14171a); } .ds-route-title { margin: 0 0 0.25rem; font-size: 1.5rem; font-weight: 600; line-height: 1.2; letter-spacing: -0.01em; } .ds-route-body { margin: 0 0 0.75rem; line-height: 1.6; color: var(--zm-ink-2, #33383e); } .ds-route-list { margin: 0; padding: 0; list-style: none; } .ds-route-list li { border-top: 1px solid var(--zm-hair, #e1e4e7); } .ds-route-link { display: grid; grid-template-columns: 3rem 1fr; padding: 0.5rem 0; font-weight: 600; color: var(--zm-ink, #14171a); text-decoration: none; } .ds-route-link:hover { text-decoration: underline; text-decoration-thickness: 2px; text-underline-offset: 0.2em; } .ds-route-link:focus-visible { outline: 2px solid var(--zm-ink, #14171a); outline-offset: 2px; } .ds-route-number { font-weight: 400; color: var(--zm-red-text, #c4281a); }"
+      "refersTo": "colour-bar",
+      "description": "The result window's bottom strip: mono solver readouts and the viridis panel-loading colour bar.",
+      "html": "<dl class=\"ds-readouts\"><div><dt>C<sub>L</sub></dt><dd>0.1723</dd></div><div><dt>C<sub>Di</sub></dt><dd>0.00340</dd></div><div class=\"ds-scale\"><dt>Panel loading ΔC<sub>p</sub></dt><dd><i class=\"ds-ramp\"></i><span class=\"ds-ticks\"><span>0</span><span>0.5</span><span>≥ 1.0</span></span></dd></div></dl>",
+      "css": ".ds-readouts{display:flex;flex-wrap:wrap;align-items:flex-end;gap:1.5rem 3rem;margin:0;padding:24px;border-radius:8px;background:#0a0e13;font-family:\"Host Grotesk\",ui-sans-serif,sans-serif}.ds-readouts dt{font-size:.8125rem;color:#8796a5}.ds-readouts dd{margin:.375rem 0 0;font-family:\"Red Hat Mono\",ui-monospace,monospace;font-size:1.25rem;font-weight:500;color:#e6edf3}.ds-scale{margin-left:auto;width:19rem}.ds-ramp{display:block;height:8px;margin:.5rem 0 .375rem;border-radius:4px;background:linear-gradient(90deg,#440154,#472c7a,#3b518b,#2c718e,#21908d,#27ad81,#5cc863,#aadc32,#fde725)}.ds-ticks{display:flex;justify-content:space-between;font-family:\"Host Grotesk\",ui-sans-serif,sans-serif;font-size:.75rem;color:#8796a5}"
+    },
+    {
+      "name": "Brand Mark",
+      "kind": "custom",
+      "refersTo": "brand-mark",
+      "description": "The navbar brand: a viridis chip, then the name.",
+      "html": "<a class=\"ds-brand\" href=\"#\">Zephyr</a>",
+      "css": ".ds-brand{display:inline-flex;align-items:center;font-family:\"Host Grotesk\",ui-sans-serif,sans-serif;font-size:1.1875rem;font-weight:650;letter-spacing:-.02em;color:var(--z-ink,#e6edf3);text-decoration:none}.ds-brand::before{content:\"\";width:1.25rem;height:1.25rem;margin-right:.625rem;border-radius:5px;background:linear-gradient(90deg,#440154,#472c7a,#3b518b,#2c718e,#21908d,#27ad81,#5cc863,#aadc32,#fde725)}.ds-brand:focus-visible{outline:2px solid var(--z-accent,#4fd1a5);outline-offset:2px;border-radius:4px}"
     }
   ],
   "narrative": {
-    "northStar": "The Standards Manual",
-    "overview": "The documentation is built as a 1970s federal graphics standards manual. Every page is a numbered sheet on one grid, and the sheet number is how a reader finds, cites, and returns to it. A bright white sheet sits beside a cool grey rail, the ink is near black, and one standards red is spent on numbers and place marks. One grotesque, Public Sans, sets everything except code and mathematics.\n\nThe frame commits hard and the reading column stays calm. That split is a decision, not an accident: the maintainer called the first, quieter sketches bland and then chose this direction, so the masthead rule, the rail, the red place mark, and the large sheet number are loud on purpose, while prose, listings, equations, and tables are set plainly at a fixed measure for an engineer reading in the middle of work. Light is the default sheet. Dark is the same sheet after hours, token for token, and is never designed separately.\n\nThis is a research library's reference. It does not read as a marketing site, as the stock Docusaurus template, or as the near-black, glowing-cyan theme it replaced.",
+    "northStar": "The Post-processor",
+    "overview": "**Creative North Star: \"The Post-processor\"**\n\nThe site is a post-processor's result window. The ground is graphite, the ink is near-white, and the only saturated colour is the viridis colour map that Zephyr's own solutions are coloured with: the data's colour bar, from which the single accent, a viridis teal-green, is drawn for links and the reader's current place. Dark is the default (`colorMode.defaultMode: \"dark\"`, `respectPrefersColorScheme: false`); light is the variant, the same structure on a cool white ground, offered by the navbar switch.\n\nThe start page opens on one result: the uCRM transport wing, panelled and solved by Zephyr, filling a dark viewport with the offer laid over it, then three capabilities each shown by real output, then one listing. Doc pages keep the standard Docusaurus structure (rail, page, on-page contents) in the same palette. Density is a reference tool's: compact chrome, quiet 1px cool borders, prose held to a reading measure, and figures, tables and code allowed full width.\n\nDepth comes from tone, not shadow. Surfaces step from ground to surface to raised; nothing glows. Motion is a 150ms colour or border change, plus one resolve on the start page where the solution fades in over its own panel mesh.",
     "keyCharacteristics": [
-      "Every sheet is numbered, and the rail, the head of the sheet, and the pager print the same number.",
-      "One datum edge runs down the sheet; text registers to it and numbers hang in the gutter to its left.",
-      "Structure comes from rules, not boxes. Corners are square and nothing casts a shadow.",
-      "One red, only on sheet numbers, place marks, the brand bar, and the data ink of Plate 1. Hover and focus are said in ink.",
-      "One grotesque in two registers: light at display size, regular to bold for text, with tabular numerals throughout.",
-      "Motion answers state changes only; Plate 1's wake is the single authored movement."
+      "Graphite ground, near-white ink, viridis as the one saturated family.",
+      "One accent, a viridis teal-green, for links, active rail entries, focus rings and the caret.",
+      "Host Grotesk for text and headings; Red Hat Mono for code and numeric readouts.",
+      "Small radii (4 to 12px), 1px cool borders, flat surfaces.",
+      "Every image is the library's own output, rendered from a solved case.",
+      "The start page's result window is dark in both themes."
     ],
     "rules": [
       {
-        "name": "The Standards Red Rule",
-        "body": "Red appears only on sheet numbers (above the title, in the pager, in the route lists), place marks (the rail's number cell, the square beside the section in view, the rule under the current book), the brand bar, and the keyed bound vortices of Plate 1. It is never a syntax colour, never a note or warning colour, never a hover or focus colour, and never decoration. The theme's own primary variable (`--ifm-color-primary`) is set to ink, so any stock state the build has not restyled falls back to ink rather than red.",
+        "name": "The Colour Bar Rule",
+        "body": "Outside code listings and the caution border, the only saturated colour on any page is viridis: the map itself on data, and the one teal accent drawn from it. A new hue needs a data reason.",
         "section": "colors"
       },
       {
-        "name": "The Never Colour Alone Rule",
-        "body": "A place mark always changes something besides hue: the current rail row also turns sheet white and bold, the current contents entry and the current book turn bold. Hover follows the same thought from the other side: it changes weight of line, not hue.",
+        "name": "The Result Window Rule",
+        "body": "The start page's hero and the three capability visuals are dark in both themes. Their renders carry pale wake lines and viridis polygons on a transparent ground that only read on graphite, so the hero pins its own palette (`--h-ground`, `--h-ink`, and so on, equal to the dark tokens) and the navbar over it is forced to dark ink. Everything outside those frames follows the theme.",
         "section": "colors"
       },
       {
-        "name": "The Same Sheet Rule",
-        "body": "Light is the default and dark is its variant. Every colour is a `--zm-*` token redefined once for dark; no component carries a colour of its own for either theme, except the listing inks, which are set as a pair of themes in the site config.",
-        "section": "colors"
-      },
-      {
-        "name": "The One Grotesque Rule",
-        "body": "Public Sans sets every word that is not code or mathematics, including labels on listings and plates. Source Code Pro never sets prose, navigation, or labels.",
+        "name": "The Readout Rule",
+        "body": "Red Hat Mono is for code and for numbers a solver produced. It is never a label face or a decorative voice.",
         "section": "typography"
       },
       {
-        "name": "The Light At Size Rule",
-        "body": "Weight 300 is reserved for the sheet number, the sheet title, and the contents-page name. Nothing else is lighter than 400. The only light type below 2.25rem is an API sheet's identifier title on a sheet 640px or narrower, which shrinks so that it never breaks.",
+        "name": "The Tight Display Rule",
+        "body": "Tracking tightens as size grows: -0.035em at display, -0.03em at headline, -0.02em at h2, -0.01em at h3, none in body.",
         "section": "typography"
       },
       {
-        "name": "The Sentence Case Rule",
-        "body": "Labels are sentence case at normal tracking. The one exception in the build is a note's heading, which is 700, uppercase, tracked 0.04em.",
-        "section": "typography"
-      },
-      {
-        "name": "The Datum Rule",
-        "body": "Every block on a sheet starts on the one edge right of the datum line. Nothing is centred, and the only indents from it are list items, a display equation (2rem), and quoted text (1.75rem).",
-        "section": "layout"
-      },
-      {
-        "name": "The 66-Character Rule",
-        "body": "Prose holds 38rem at every width. A wider element is a sheet title, a listing, a table, or a plate, never a paragraph.",
-        "section": "layout"
-      },
-      {
-        "name": "The No-Zero Rule",
-        "body": "Sections and sheets count from 1: sections are 1, 2, 3 and their sheets 1.1, 1.2. The API reference book is lettered, A1, A2.1. The contents page carries no sheet number.",
-        "section": "layout"
-      },
-      {
-        "name": "The Flat Sheet Rule",
-        "body": "No shadows and no glows, at rest or in any state. Separation is a change of ground or a rule.",
+        "name": "The No-Glow Rule",
+        "body": "Nothing emits light. No coloured shadows, no halos, no neon edges; a surface separates from its ground by tone and a 1px rule.",
         "section": "elevation"
-      },
-      {
-        "name": "The Ruled Block Rule",
-        "body": "A block opens with a 2px ink rule and, if it closes, closes with a hair. Content is never enclosed on four sides; a full border belongs only to a small control floating over the sheet.",
-        "section": "shapes"
       }
     ],
     "dos": [
-      "Do number every new sheet by its place in the rail, counting from 1, and print that same number in the rail, above the title, and in the pager.",
-      "Do start every block on the content edge right of the datum, hold prose to 38rem, and let only listings, tables, and plates run wider.",
-      "Do open a block with a 2px ink rule and close it with a 1px hair; keep every corner square.",
-      "Do pair every red place mark with a second cue: a change of weight or of ground.",
-      "Do say hover in ink: thicken the underline or the rule, or darken the ground.",
-      "Do take every colour from a `--zm-*` token so the dark sheet follows without a second design.",
-      "Do set keywords in heavier ink and keep listings to green strings, blue names, and amber literals.",
-      "Do label things in the text face, in sentence case, in Mute: listing languages, group heads, plate annotations.",
-      "Do keep state changes to 160ms on `cubic-bezier(0.16, 1, 0.3, 1)` and honour reduced motion."
+      "Do take every colour from the `--z-*` tokens so both themes follow; hard-code hexes only inside the dark-in-both-themes result window and capability visuals.",
+      "Do keep viridis for data, the colour bar, the brand chip and the progress bar, and the teal accent for links, the current place and focus.",
+      "Do render every image from a solved Zephyr case with `docs/scripts/render_loading.py`, keeping its provenance comment, and name the case beside the image.",
+      "Do separate surfaces with a 1px cool rule and a tonal step.",
+      "Do hold prose, headings, notes and captions to the 42rem measure and let tables, code and figures run wider.",
+      "Do keep hover and focus to 150ms colour and border changes, with a 2px accent outline offset 2px for focus.",
+      "Do honour reduced motion: the resolve and every transition collapse to nothing."
     ],
     "donts": [
-      "Don't put red on anything but sheet numbers, place marks, the brand bar, and a plate's data ink. It stays out of syntax colours, notes, warnings, and hover and focus states.",
-      "Don't start any numbering at 0, and don't give the contents page a sheet number.",
-      "Don't round a corner, cast a shadow, or add a glow.",
-      "Don't enclose content in a four-sided box or a card. A full border belongs only to a small control floating over the sheet.",
-      "Don't colour-code notes by kind. A warning is ruled and set in Ink like any other note.",
-      "Don't add a second text face, and don't set prose, navigation, or labels in Source Code Pro.",
-      "Don't use weight 300 for anything but the sheet number and the title.",
-      "Don't break a title inside a word; set an identifier title smaller instead.",
-      "Don't italicise anything in a listing; the code face ships upright only.",
-      "Don't make dark the default or give it colours of its own outside the tokens.",
-      "Don't animate anything that is not a change of state. Plate 1's wake is the one authored movement.",
-      "Don't let a page read as marketing: no slogan hero, no feature cards, and nothing of the stock template or the earlier near-black, glowing-cyan theme."
+      "Don't add glow, coloured shadows, or shadows on code blocks, notes or keys.",
+      "Don't introduce a second accent hue or use viridis as decoration away from data.",
+      "Don't place an illustration, stock image or mock screenshot; images are the library's output.",
+      "Don't let the result window or capability visuals follow the light theme.",
+      "Don't set labels, headings or prose in Red Hat Mono.",
+      "Don't pin a crate version in prose, install lines or examples."
     ]
   }
 }

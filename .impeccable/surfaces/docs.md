@@ -7,62 +7,69 @@ related_targets: []
 
 # Surface brief: documentation site (`docs/`)
 
-Scope: the whole Docusaurus site, every doc page plus the docs index at the site root.
-Visitor mode: Read.
+Scope: the whole Docusaurus site. The site root is the start page; every doc
+page, the API book, and the Copyright and License page share its look.
+Visitor mode: Persuade on the start page (`docs/src/pages/index.tsx`); Read on
+every doc page.
 
 ## Reader and job
 
-Aerospace engineers and researchers, mid-work, with an aircraft model or an
-optimizer in mind. Two jobs: run a first analysis, and wire Zephyr into an MDO
-loop. Content: prose, Rust and shell listings, KaTeX mathematics, tables.
+Aerospace engineers and researchers. On the start page they decide in seconds
+whether Zephyr belongs in their work and take Get started or the install line.
+On a doc page they run a first analysis or wire Zephyr into an MDO loop.
 
-Constraints: page text and structure stay as written; released snapshots under
-`docs/versioned_docs/` are untouched; the public-release clearance line stays in
-the footer; no crate version in prose. Must not read as a marketing site, as
-stock Docusaurus, or as the earlier near-black glowing-cyan theme. The
-maintainer called the first sketches bland before choosing this direction, so
-the frame commits hard; the reading column stays calm.
+The maintainer rejected the Approach Plate build: too much on the start page,
+far too focused on the single optimization case, not modern. Wanted: the craft
+of simulation vendor sites (Flow360, Simcenter) and open science code sites
+(SU2, PyVista), a short start page, and doc pages with a new look but the
+standard structure (sidebar, page, on-page contents). Ruled out: retro or
+nostalgic, a stock docs template, a SaaS marketing tone. Chosen in a safer-
+register round: Post-processor, dark by default.
+
+Constraints: doc page text stays as written; released snapshots under
+`docs/versioned_docs/` are untouched; Copyright and License stays reachable
+from every page; no crate version in prose; no invented benchmarks or
+adoption claims; every image is the library's own output.
 
 ## Direction contract
 
-THESIS: The documentation is a standards manual. Every page is a numbered sheet
-on one grid, and the sheet number is how a reader finds, cites, and returns to
-it. It refuses the dark template with a slogan hero and feature cards.
+THESIS: The start page is a post-processor's result window. Zephyr's own
+solution on the uCRM transport wing fills a dark viewport and the offer sits
+over it. It refuses the long scroll and the feature-card grid.
 
-OWN-WORLD: Bright white sheet, cool grey rail, near-black ink, one standards red
-spent only on sheet numbers and place marks (and the keyed bound vortices of
-Plate 1); hover and focus are said in ink. One grotesque (Public Sans): light
-for titles, regular and semibold for text; Source Code Pro for code alone.
-Square corners, rules instead of boxes, tabular numerals, numbers hanging in a
-gutter beside a single datum edge that every title, heading, listing, equation,
-and table registers to. Display equations carry numbers at the column edge.
+OWN-WORLD: Graphite ground (#0a0e13 to #16202b) in a soft radial falloff,
+near-white ink, and the viridis colour map as the only saturated colour: the
+data's own colour bar, from which the one accent (a viridis teal-green) is
+taken for links and the current place. Host Grotesk for text and headings, Red Hat
+Mono for code and numeric readouts. Small radii (8 to 10px), 1px cool borders, no
+glow. Light is the variant: the same structure on a cool white ground,
+except the start page's result window and its figure tiles, which stay dark in
+both themes, as a post-processor's viewport does (decided by the build: the
+renders are drawn for a dark ground and the window is the thesis).
 
-STORY: The reader learns what Zephyr is and which conventions it uses, takes one
-of two routes (first analysis, MDO), and always knows which sheet they are on
-and which comes next.
+STORY: The visitor sees a transport wing solved by Zephyr with its loading,
+reads one line saying what the library is, and takes Get started or copies
+`cargo add zephyr-vlm`. Below, three capabilities (analysis, gradients for
+MDO, validation), each shown by real output, and one short code sample.
 
-FIRST VIEWPORT: Doc page: masthead with a red bar and the name over the rail,
-navigation at right, a 2px ink rule beneath. Rail lists every sheet with its
-number; the current sheet's number cell is filled red. Column: running head,
-the sheet number in red light grotesque, the title in light grotesque beneath
-it, prose at a fixed 66-character measure; numbered contents at right where
-the measure survives beside them. Contents page: no sheet number (the
-maintainer ruled that nothing starts at 0); the name, the one-paragraph
-statement, `cargo add zephyr-vlm`, Plate 1 (the Quick Start wing drawn as a
-dimensioned lattice), the two routes, and the conventions; both books are
-listed in its rail. Below 1440px the routes come before the plate. Primary
-action: the two route links.
+FIRST VIEWPORT: Transparent navbar over the viewport (name with a viridis
+mark, Docs, API, Examples, version, GitHub). Headline at about 64px over two
+lines, one-sentence lede, Get started (filled, light) and the install command
+(outlined, mono, copies on click). The uCRM wing render fills the right and
+centre, its trailing legs fading aft. A caption top right names the case.
+Along the bottom, readouts (C_L, C_Di, checked against OptVL 2.1.1) and the
+colour bar for panel loading.
 
-SIGNATURE: The place mark. The red number cell follows the reader through the
-rail and the on-page contents. Plate 1 draws its trailing vortices aft once on
-load. Motion grammar: state changes only, 150 to 200 ms ease-out; nothing else
-moves, and reduced motion removes the plate draw.
+SIGNATURE: The result window. On load the render resolves from the panel mesh
+into the coloured solution once (wireframe fades to loading, under a second);
+reduced motion shows the solution at once. Hover and focus states are quick
+(150ms) colour and border changes.
 
-FORM: standards manual (1970s federal graphics standards manuals), candidate 6
-of 7 on the ordered grounded list; seed:c0393be6147afb34.
+FORM: Post-processor (simulation vendor and post-processing render windows),
+safer-register round 1, grounded candidate 1 of 2; seed:dfc5d3e5ebca392a.
 
 FINISH: unreviewed and undocumented is unfinished; this build ends with the finish review, the verdict, DESIGN.md, and every shipping raster carrying its provenance
 
 ## Open decisions
 
-None blocking. Dark mode ships as a variant of the same sheet; light is the default.
+None blocking.

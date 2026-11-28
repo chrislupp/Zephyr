@@ -4,66 +4,28 @@ import type * as Preset from "@docusaurus/preset-classic";
 import remarkMath from "remark-math";
 import rehypeKatex from "rehype-katex";
 
-// Listing colours for the two sheets. Red is reserved for sheet numbers and
-// place marks, so keywords are set in heavier ink; green is for strings, blue
-// for names, amber for literals.
+// Listing colours. Dark is the default theme; light is its variant.
 const listingLight: PrismTheme = {
-    plain: { color: "#14171A", backgroundColor: "#F1F2F3" },
+    plain: { color: "#0D1520", backgroundColor: "#FFFFFF" },
     styles: [
-        {
-            types: ["comment", "prolog", "doctype", "cdata"],
-            style: { color: "#5F666F" },
-        },
-        {
-            types: ["keyword", "atrule", "important", "deleted"],
-            style: { color: "#14171A", fontWeight: "600" },
-        },
-        {
-            types: ["string", "char", "attr-value", "inserted"],
-            style: { color: "#1E6650" },
-        },
-        {
-            types: ["function", "class-name", "builtin", "macro", "tag"],
-            style: { color: "#22507F" },
-        },
-        {
-            types: ["number", "boolean", "constant", "symbol", "lifetime"],
-            style: { color: "#7A4A00" },
-        },
-        {
-            types: ["punctuation", "operator", "namespace"],
-            style: { color: "#4A5159", opacity: 1 },
-        },
+        { types: ["comment", "prolog", "doctype", "cdata"], style: { color: "#5F6B78" } },
+        { types: ["keyword", "atrule", "important", "deleted"], style: { color: "#6B2FA3" } },
+        { types: ["string", "char", "attr-value", "inserted"], style: { color: "#0B6B4F" } },
+        { types: ["function", "class-name", "builtin", "macro", "tag"], style: { color: "#1F55B5" } },
+        { types: ["number", "boolean", "constant", "symbol", "lifetime"], style: { color: "#9A4A00" } },
+        { types: ["punctuation", "operator", "namespace"], style: { color: "#46525F", opacity: 1 } },
     ],
 };
 
 const listingDark: PrismTheme = {
-    plain: { color: "#E8EAEC", backgroundColor: "#1A1E22" },
+    plain: { color: "#E6EDF3", backgroundColor: "#10161D" },
     styles: [
-        {
-            types: ["comment", "prolog", "doctype", "cdata"],
-            style: { color: "#9AA1A9" },
-        },
-        {
-            types: ["keyword", "atrule", "important", "deleted"],
-            style: { color: "#FFFFFF", fontWeight: "600" },
-        },
-        {
-            types: ["string", "char", "attr-value", "inserted"],
-            style: { color: "#7FD1B0" },
-        },
-        {
-            types: ["function", "class-name", "builtin", "macro", "tag"],
-            style: { color: "#8FBFEA" },
-        },
-        {
-            types: ["number", "boolean", "constant", "symbol", "lifetime"],
-            style: { color: "#E9B872" },
-        },
-        {
-            types: ["punctuation", "operator", "namespace"],
-            style: { color: "#B4BAC1", opacity: 1 },
-        },
+        { types: ["comment", "prolog", "doctype", "cdata"], style: { color: "#7D8C9B" } },
+        { types: ["keyword", "atrule", "important", "deleted"], style: { color: "#C4A7F5" } },
+        { types: ["string", "char", "attr-value", "inserted"], style: { color: "#6FDCB6" } },
+        { types: ["function", "class-name", "builtin", "macro", "tag"], style: { color: "#8FC3FF" } },
+        { types: ["number", "boolean", "constant", "symbol", "lifetime"], style: { color: "#F2C46D" } },
+        { types: ["punctuation", "operator", "namespace"], style: { color: "#A9B6C3", opacity: 1 } },
     ],
 };
 
@@ -91,14 +53,14 @@ const config: Config = {
             {
                 docs: {
                     sidebarPath: "./sidebars.ts",
-                    // The live docs are the default sheet set, served at
+                    // The live docs are the default version, served at
                     // /docs/. Released snapshots keep their own numbered
                     // paths (/docs/0.5.0/...) and stay reachable from the
                     // version dropdown. Without this, /docs/ would resolve to
-                    // the newest frozen snapshot, which cannot carry a sheet
+                    // the newest frozen snapshot, which cannot carry a page
                     // added since that release.
                     lastVersion: "current",
-                    // Every sheet starts listed: the rail is a contents page.
+                    // Every page starts listed: the rail is a contents page.
                     sidebarCollapsed: false,
                     remarkPlugins: [remarkMath],
                     rehypePlugins: [rehypeKatex],
@@ -106,7 +68,9 @@ const config: Config = {
                         "https://github.com/chrislupp/Zephyr/tree/develop/docs/",
                     versions: {
                         current: {
-                            label: "Next",
+                            // The live docs track the development branch; released
+                            // snapshots carry their own numbers in the dropdown.
+                            label: "Development",
                         },
                     },
                 },
@@ -126,17 +90,14 @@ const config: Config = {
 
     themeConfig: {
         colorMode: {
-            defaultMode: "light",
-            respectPrefersColorScheme: true,
+            // Dark is the default, as in a post-processor's render window;
+            // the switch in the navbar offers the light variant.
+            defaultMode: "dark",
+            respectPrefersColorScheme: false,
         },
         navbar: {
             title: "Zephyr",
             items: [
-                {
-                    type: "html",
-                    position: "left",
-                    value: '<span class="zm-tagline">Vortex lattice method library</span>',
-                },
                 {
                     type: "docSidebar",
                     sidebarId: "docsSidebar",
@@ -150,6 +111,12 @@ const config: Config = {
                     label: "API",
                 },
                 {
+                    to: "/docs/examples/basic-analysis",
+                    label: "Examples",
+                    position: "right",
+                    activeBaseRegex: "/docs/examples/",
+                },
+                {
                     type: "docsVersionDropdown",
                     position: "right",
                 },
@@ -161,9 +128,10 @@ const config: Config = {
             ],
         },
         footer: {
-            // The colophon is the copyright line and nothing else. Copyright,
+            // The footer is the copyright line and nothing else. Copyright,
             // licence terms, and the distribution statement live on the
-            // Copyright and License sheet, which the rail lists on every page.
+            // Copyright and License page, which the rail lists on every doc
+            // page and the start page links to.
             copyright: `Copyright © 2024-${new Date().getFullYear()} Christopher A. Lupp.`,
         },
         prism: {

@@ -1,416 +1,355 @@
 ---
 name: Zephyr
-description: The documentation as a standards manual. Every page is a numbered sheet on one grid.
+description: The documentation as a post-processor. A graphite result window, near-white ink, and the solution's viridis colour map as the only saturated colour.
 colors:
-  red: "#d8301f"
-  red-text: "#c4281a"
-  on-red: "#ffffff"
-  select: "#f6cdc7"
-  sheet: "#ffffff"
-  rail: "#eef0f1"
-  rail-press: "#e2e5e8"
-  ink: "#14171a"
-  ink-2: "#33383e"
-  mute: "#5f666f"
-  rule: "#c9cdd2"
-  hair: "#e1e4e7"
-  listing: "#f1f2f3"
-  listing-highlight: "#e3e6e9"
-  listing-string: "#1e6650"
-  listing-name: "#22507f"
-  listing-literal: "#7a4a00"
-  listing-punctuation: "#4a5159"
-  red-dark: "#ff5c47"
-  red-text-dark: "#ff7361"
-  on-red-dark: "#121518"
-  select-dark: "#7a2a21"
-  sheet-dark: "#121518"
-  rail-dark: "#1a1e22"
-  rail-press-dark: "#242a2f"
-  ink-dark: "#e8eaec"
-  ink-2-dark: "#c3c8ce"
-  mute-dark: "#9aa1a9"
-  rule-dark: "#3a4047"
-  hair-dark: "#272c31"
-  listing-dark: "#1a1e22"
-  listing-highlight-dark: "#2a3036"
-  listing-keyword-dark: "#ffffff"
-  listing-string-dark: "#7fd1b0"
-  listing-name-dark: "#8fbfea"
-  listing-literal-dark: "#e9b872"
-  listing-punctuation-dark: "#b4bac1"
+  ground: "#0a0e13"
+  ground-glow: "#16202b"
+  surface: "#10161d"
+  raised: "#161e27"
+  ink: "#e6edf3"
+  ink-2: "#a9b6c3"
+  ink-3: "#8796a5"
+  line: "#1f2a35"
+  line-strong: "#2c3a48"
+  accent: "#4fd1a5"
+  accent-ink: "#6fdcb6"
+  accent-soft: "rgba(79, 209, 165, 0.1)"
+  select: "rgba(79, 209, 165, 0.26)"
+  install-fill: "rgba(18, 26, 35, 0.8)"
+  white: "#ffffff"
+  ground-light: "#f6f8fa"
+  surface-light: "#ffffff"
+  raised-light: "#eef2f5"
+  ink-light: "#0d1520"
+  ink-2-light: "#46525f"
+  ink-3-light: "#5f6b78"
+  line-light: "#dde3e9"
+  line-strong-light: "#c4ccd5"
+  accent-light: "#0f7a69"
+  accent-ink-light: "#0b5e51"
+  accent-soft-light: "rgba(15, 122, 105, 0.1)"
+  select-light: "rgba(33, 144, 141, 0.22)"
+  viridis-00: "#440154"
+  viridis-13: "#472c7a"
+  viridis-25: "#3b518b"
+  viridis-38: "#2c718e"
+  viridis-50: "#21908d"
+  viridis-63: "#27ad81"
+  viridis-75: "#5cc863"
+  viridis-88: "#aadc32"
+  viridis-100: "#fde725"
+  caution: "#b7791f"
+  listing-comment: "#7d8c9b"
+  listing-keyword: "#c4a7f5"
+  listing-string: "#6fdcb6"
+  listing-name: "#8fc3ff"
+  listing-literal: "#f2c46d"
+  listing-punctuation: "#a9b6c3"
+  listing-comment-light: "#5f6b78"
+  listing-keyword-light: "#6b2fa3"
+  listing-string-light: "#0b6b4f"
+  listing-name-light: "#1f55b5"
+  listing-literal-light: "#9a4a00"
+  listing-punctuation-light: "#46525f"
 typography:
-  sheet-number:
-    fontFamily: "Public Sans, Helvetica Neue, Helvetica, Arial, sans-serif"
-    fontSize: "4.75rem"
-    fontWeight: 300
-    lineHeight: 1
-    letterSpacing: "-0.03em"
-    fontFeature: "tnum"
   display:
-    fontFamily: "Public Sans, Helvetica Neue, Helvetica, Arial, sans-serif"
-    fontSize: "3.75rem"
-    fontWeight: 300
-    lineHeight: 1.05
-    letterSpacing: "-0.025em"
-  display-api:
-    fontFamily: "Public Sans, Helvetica Neue, Helvetica, Arial, sans-serif"
-    fontSize: "3rem"
-    fontWeight: 300
-    lineHeight: 1.05
-    letterSpacing: "-0.025em"
+    fontFamily: "Host Grotesk, ui-sans-serif, system-ui, -apple-system, Segoe UI, sans-serif"
+    fontSize: "clamp(2.5rem, 4.6vw, 4.25rem)"
+    fontWeight: 620
+    lineHeight: 1.02
+    letterSpacing: "-0.035em"
   headline:
-    fontFamily: "Public Sans, Helvetica Neue, Helvetica, Arial, sans-serif"
-    fontSize: "1.5rem"
-    fontWeight: 600
+    fontFamily: "Host Grotesk, ui-sans-serif, system-ui, -apple-system, Segoe UI, sans-serif"
+    fontSize: "2.75rem"
+    fontWeight: 650
+    lineHeight: 1.08
+    letterSpacing: "-0.03em"
+  section-title:
+    fontFamily: "Host Grotesk, ui-sans-serif, system-ui, -apple-system, Segoe UI, sans-serif"
+    fontSize: "clamp(1.75rem, 3vw, 2.5rem)"
+    fontWeight: 620
+    lineHeight: 1.1
+    letterSpacing: "-0.03em"
+  title:
+    fontFamily: "Host Grotesk, ui-sans-serif, system-ui, -apple-system, Segoe UI, sans-serif"
+    fontSize: "1.625rem"
+    fontWeight: 650
+    lineHeight: 1.2
+    letterSpacing: "-0.02em"
+  title-sm:
+    fontFamily: "Host Grotesk, ui-sans-serif, system-ui, -apple-system, Segoe UI, sans-serif"
+    fontSize: "1.25rem"
+    fontWeight: 650
     lineHeight: 1.2
     letterSpacing: "-0.01em"
-  title:
-    fontFamily: "Public Sans, Helvetica Neue, Helvetica, Arial, sans-serif"
-    fontSize: "1.1875rem"
-    fontWeight: 600
-    lineHeight: 1.2
-  subtitle:
-    fontFamily: "Public Sans, Helvetica Neue, Helvetica, Arial, sans-serif"
-    fontSize: "1rem"
-    fontWeight: 600
-    lineHeight: 1.2
-  masthead:
-    fontFamily: "Public Sans, Helvetica Neue, Helvetica, Arial, sans-serif"
-    fontSize: "1.5rem"
-    fontWeight: 700
-    letterSpacing: "-0.02em"
   lede:
-    fontFamily: "Public Sans, Helvetica Neue, Helvetica, Arial, sans-serif"
-    fontSize: "1.0625rem"
-    fontWeight: 400
-    lineHeight: 1.6
-  body:
-    fontFamily: "Public Sans, Helvetica Neue, Helvetica, Arial, sans-serif"
-    fontSize: "1rem"
-    fontWeight: 400
-    lineHeight: 1.6
-    fontFeature: "tnum"
-  rail:
-    fontFamily: "Public Sans, Helvetica Neue, Helvetica, Arial, sans-serif"
-    fontSize: "0.9375rem"
-    fontWeight: 400
-    lineHeight: 1.35
-    fontFeature: "tnum"
-  small:
-    fontFamily: "Public Sans, Helvetica Neue, Helvetica, Arial, sans-serif"
-    fontSize: "0.875rem"
+    fontFamily: "Host Grotesk, ui-sans-serif, system-ui, -apple-system, Segoe UI, sans-serif"
+    fontSize: "1.1875rem"
     fontWeight: 400
     lineHeight: 1.5
+  body:
+    fontFamily: "Host Grotesk, ui-sans-serif, system-ui, -apple-system, Segoe UI, sans-serif"
+    fontSize: "1.0625rem"
+    fontWeight: 400
+    lineHeight: 1.65
+  button:
+    fontFamily: "Host Grotesk, ui-sans-serif, system-ui, -apple-system, Segoe UI, sans-serif"
+    fontSize: "1rem"
+    fontWeight: 600
   label:
-    fontFamily: "Public Sans, Helvetica Neue, Helvetica, Arial, sans-serif"
+    fontFamily: "Host Grotesk, ui-sans-serif, system-ui, -apple-system, Segoe UI, sans-serif"
     fontSize: "0.8125rem"
     fontWeight: 600
-    lineHeight: 1.4
+  caption:
+    fontFamily: "Host Grotesk, ui-sans-serif, system-ui, -apple-system, Segoe UI, sans-serif"
+    fontSize: "0.8125rem"
+    fontWeight: 400
+    lineHeight: 1.5
+  readout:
+    fontFamily: "Red Hat Mono, ui-monospace, SF Mono, Menlo, Consolas, monospace"
+    fontSize: "1.25rem"
+    fontWeight: 500
   code:
-    fontFamily: "Source Code Pro, ui-monospace, SF Mono, Menlo, Consolas, monospace"
+    fontFamily: "Red Hat Mono, ui-monospace, SF Mono, Menlo, Consolas, monospace"
     fontSize: "0.875rem"
     fontWeight: 400
-    lineHeight: 1.6
+    lineHeight: 1.65
 rounded:
-  none: "0"
+  xs: "4px"
+  sm: "5px"
+  md: "6px"
+  base: "8px"
+  control: "10px"
+  frame: "12px"
+  pill: "999px"
 spacing:
-  inset: "1.75rem"
-  gutter: "4rem"
-  gutter-closed: "1.5rem"
-  number-col: "4.25rem"
-  number-col-lettered: "4.875rem"
-  measure: "38rem"
-  wide: "46rem"
-  rail-width: "20rem"
-  contents-width: "15.5rem"
-  masthead-height: "4.25rem"
+  stack-xs: "0.375rem"
+  stack-sm: "0.75rem"
+  stack-md: "1.25rem"
+  stack-lg: "1.5rem"
+  stack-xl: "2.5rem"
+  gap-xl: "3rem"
+  gutter: "3.5rem"
+  gutter-mobile: "1.125rem"
+  section: "6rem"
+  section-mobile: "4rem"
+  measure: "42rem"
+  rail: "18rem"
 components:
-  masthead:
-    backgroundColor: "{colors.sheet}"
-    textColor: "{colors.ink}"
-    typography: "{typography.masthead}"
-    height: "{spacing.masthead-height}"
-  brand-bar:
-    backgroundColor: "{colors.red}"
-    width: "0.75rem"
-    height: "2.125rem"
-  rail:
-    backgroundColor: "{colors.rail}"
-    width: "{spacing.rail-width}"
-  rail-entry:
-    textColor: "{colors.ink-2}"
-    typography: "{typography.rail}"
-    rounded: "{rounded.none}"
-  rail-entry-hover:
-    backgroundColor: "{colors.rail-press}"
-    textColor: "{colors.ink}"
-  rail-entry-current:
-    backgroundColor: "{colors.sheet}"
-    textColor: "{colors.ink}"
-  place-mark:
-    backgroundColor: "{colors.red}"
-    textColor: "{colors.on-red}"
-    width: "3.5rem"
-  sheet-number:
-    textColor: "{colors.red}"
-    typography: "{typography.sheet-number}"
-  sheet-title:
-    textColor: "{colors.ink}"
-    typography: "{typography.display}"
-    width: "{spacing.wide}"
-  sheet-title-api:
-    textColor: "{colors.ink}"
-    typography: "{typography.display-api}"
-    width: "{spacing.wide}"
-  section-number:
-    textColor: "{colors.mute}"
-    typography: "{typography.body}"
-  listing:
-    backgroundColor: "{colors.listing}"
+  button-primary:
+    backgroundColor: "{colors.ink}"
+    textColor: "{colors.ground}"
+    typography: "{typography.button}"
+    rounded: "{rounded.control}"
+    padding: "0 1.25rem"
+    height: "3rem"
+  button-primary-hover:
+    backgroundColor: "{colors.white}"
+    textColor: "{colors.ground}"
+  button-install:
+    backgroundColor: "{colors.install-fill}"
     textColor: "{colors.ink}"
     typography: "{typography.code}"
-    rounded: "{rounded.none}"
-    padding: "1rem"
-  listing-button:
-    backgroundColor: "{colors.sheet}"
+    rounded: "{rounded.control}"
+    padding: "0 1.25rem"
+    height: "3rem"
+  button-secondary:
     textColor: "{colors.ink}"
-    rounded: "{rounded.none}"
-  mode-toggle:
+    typography: "{typography.button}"
+    rounded: "{rounded.control}"
+    padding: "0 1.25rem"
+    height: "3rem"
+  menu-link-active:
+    backgroundColor: "{colors.accent-soft}"
+    textColor: "{colors.accent-ink}"
+    rounded: "{rounded.md}"
+    padding: "0.375rem 0.75rem"
+  code-block:
+    backgroundColor: "{colors.surface}"
     textColor: "{colors.ink}"
-    rounded: "{rounded.none}"
-  mode-toggle-hover:
-    backgroundColor: "{colors.rail}"
-  key-cap:
-    backgroundColor: "{colors.listing}"
+    typography: "{typography.code}"
+    rounded: "{rounded.base}"
+    padding: "1.125rem"
+  inline-code:
+    backgroundColor: "{colors.raised}"
+    rounded: "{rounded.sm}"
+    padding: "0.1em 0.35em"
+  table-head:
+    backgroundColor: "{colors.raised}"
+    textColor: "{colors.ink-2}"
+    typography: "{typography.label}"
+    padding: "0.625rem 0.875rem"
+  alert:
+    backgroundColor: "{colors.surface}"
     textColor: "{colors.ink}"
-    rounded: "{rounded.none}"
-  note:
-    textColor: "{colors.ink}"
-    typography: "{typography.body}"
-    rounded: "{rounded.none}"
-    padding: "0.75rem 0"
-  table:
-    textColor: "{colors.ink}"
-    typography: "{typography.rail}"
-    padding: "0.5rem 1.5rem 0.5rem 0"
+    rounded: "{rounded.base}"
   pager-link:
-    textColor: "{colors.ink}"
-    rounded: "{rounded.none}"
-    padding: "0.75rem 0 0"
-  pager-number:
-    textColor: "{colors.red-text}"
-  contents-link:
-    textColor: "{colors.ink-2}"
-    typography: "{typography.small}"
-  contents-mark:
-    backgroundColor: "{colors.red}"
-    size: "0.5rem"
-  route-number:
-    textColor: "{colors.red-text}"
-  dropdown-menu:
-    backgroundColor: "{colors.sheet}"
-    textColor: "{colors.ink-2}"
-    rounded: "{rounded.none}"
-    padding: "0.25rem 0"
+    backgroundColor: "{colors.surface}"
+    rounded: "{rounded.base}"
+  figure-frame:
+    backgroundColor: "{colors.surface}"
+    rounded: "{rounded.base}"
+    padding: "1rem 1rem 0.5rem"
+  result-visual:
+    backgroundColor: "{colors.ground}"
+    rounded: "{rounded.frame}"
+    padding: "1.25rem"
+  version-badge:
+    textColor: "{colors.ink-3}"
+    rounded: "{rounded.pill}"
+  colour-bar:
+    rounded: "{rounded.xs}"
+    height: "8px"
+    width: "19rem"
+  brand-mark:
+    rounded: "{rounded.sm}"
+    size: "1.25rem"
 ---
 
 # Design System: Zephyr
 
 ## Overview
 
-**Creative North Star: "The Standards Manual"**
+**Creative North Star: "The Post-processor"**
 
-The documentation is built as a 1970s federal graphics standards manual. Every page is a numbered sheet on one grid, and the sheet number is how a reader finds, cites, and returns to it. A bright white sheet sits beside a cool grey rail, the ink is near black, and one standards red is spent on numbers and place marks. One grotesque, Public Sans, sets everything except code and mathematics.
+The site is a post-processor's result window. The ground is graphite, the ink is near-white, and the only saturated colour is the viridis colour map that Zephyr's own solutions are coloured with: the data's colour bar, from which the single accent, a viridis teal-green, is drawn for links and the reader's current place. Dark is the default (`colorMode.defaultMode: "dark"`, `respectPrefersColorScheme: false`); light is the variant, the same structure on a cool white ground, offered by the navbar switch.
 
-The frame commits hard and the reading column stays calm. That split is a decision, not an accident: the maintainer called the first, quieter sketches bland and then chose this direction, so the masthead rule, the rail, the red place mark, and the large sheet number are loud on purpose, while prose, listings, equations, and tables are set plainly at a fixed measure for an engineer reading in the middle of work. Light is the default sheet. Dark is the same sheet after hours, token for token, and is never designed separately.
+The start page opens on one result: the uCRM transport wing, panelled and solved by Zephyr, filling a dark viewport with the offer laid over it, then three capabilities each shown by real output, then one listing. Doc pages keep the standard Docusaurus structure (rail, page, on-page contents) in the same palette. Density is a reference tool's: compact chrome, quiet 1px cool borders, prose held to a reading measure, and figures, tables and code allowed full width.
 
-This is a research library's reference. It does not read as a marketing site, as the stock Docusaurus template, or as the near-black, glowing-cyan theme it replaced.
+Depth comes from tone, not shadow. Surfaces step from ground to surface to raised; nothing glows. Motion is a 150ms colour or border change, plus one resolve on the start page where the solution fades in over its own panel mesh.
 
 **Key Characteristics:**
-- Every sheet is numbered, and the rail, the head of the sheet, and the pager print the same number.
-- One datum edge runs down the sheet; text registers to it and numbers hang in the gutter to its left.
-- Structure comes from rules, not boxes. Corners are square and nothing casts a shadow.
-- One red, only on sheet numbers, place marks, the brand bar, and the data ink of Figure 1. Hover and focus are said in ink.
-- One grotesque in two registers: light at display size, regular to bold for text, with tabular numerals throughout.
-- Motion answers state changes only; Figure 1's wake is the single authored movement.
+- Graphite ground, near-white ink, viridis as the one saturated family.
+- One accent, a viridis teal-green, for links, active rail entries, focus rings and the caret.
+- Host Grotesk for text and headings; Red Hat Mono for code and numeric readouts.
+- Small radii (4 to 12px), 1px cool borders, flat surfaces.
+- Every image is the library's own output, rendered from a solved case.
+- The start page's result window is dark in both themes.
 
 ## Colors
 
-White sheet, grey rail, black ink, and one red; the only other hues are three quiet inks confined to code listings.
+A graphite instrument palette: cool neutrals in two themes, one viridis-derived accent, and the full viridis map reserved for data.
 
 ### Primary
-- **Standards Red** (`red`, #d8301f): the fill and display red. It sets the sheet number above each title, fills the current sheet's number cell in the rail, the square beside the section in view, the rule under the current book in the masthead, the brand bar, and the bound vortices of Figure 1. It reaches 4.81:1 on the sheet, so it is used as text only at display size; small red text takes Standards Red Text.
-- **Standards Red Text** (`red-text`, #c4281a): the same red darkened to stay legible as text, 5.73:1 on the sheet and 5.01:1 on the rail. It sets sheet numbers at text size (pager, route lists) and the numeric labels of the bound vortices on Figure 1.
-- **On Red** (`on-red`, #ffffff): the number inside a filled place mark.
-- **Selection Tint** (`select`, #f6cdc7): the red let down to a tint, for selected text only.
+- **Viridis Teal** (`accent`): links (through `accent-ink`), the active rail and on-page contents entry, focus outlines, the caret, the hover border of pager links, and the solved planform on the start page. In light it becomes **Deep Viridis Teal** (`accent-light`, with `accent-ink-light` for link text so it holds contrast on white).
+- **Teal Wash** (`accent-soft`): the fill behind the active rail entry and the active dropdown entry. **Teal Selection** (`select`) is the text-selection fill.
 
-### Secondary
-Listing inks. They appear inside code listings and nowhere else, and none of them is red.
-- **String Green** (`listing-string`, #1e6650): strings, characters, attribute values.
-- **Name Blue** (`listing-name`, #22507f): functions, types, macros, built-ins.
-- **Literal Amber** (`listing-literal`, #7a4a00): numbers, booleans, constants, lifetimes.
-- **Punctuation Grey** (`listing-punctuation`, #4a5159): punctuation, operators, namespaces.
-- Keywords are set in Ink at weight 600, not in a colour. Comments are Mute and upright.
+### Tertiary
+- **The Viridis Map** (`viridis-00` to `viridis-100`): the solution's colour map, nine stops from deep purple to yellow. It appears as data in the renders, as the colour bar under the readouts, as the brand chip before the site name, and as the page-load progress bar. `viridis-100` also strokes the elliptic target planform on the start page.
+- **Caution Amber** (`caution`): the border of warning and danger notes, and nothing else.
 
 ### Neutral
-- **Sheet White** (`sheet`, #ffffff): the page, the masthead, the colophon, and the row of the current sheet in the rail.
-- **Rail Grey** (`rail`, #eef0f1): the rail, the brand cell above it, and the hover ground of dropdown items, tab items, and the colour-mode toggle.
-- **Rail Press** (`rail-press`, #e2e5e8): a rail row under the pointer.
-- **Ink** (`ink`, #14171a): text, headings, links at rest and under the pointer, heavy rules, focus outlines, the text caret, and the page-load bar.
-- **Second Ink** (`ink-2`, #33383e): rail entries, contents entries, captions, and quoted text.
-- **Mute** (`mute`, #5f666f): hanging numbers, the running head, labels, equation numbers, and the tagline. 5.81:1 on the sheet, 5.08:1 on the rail.
-- **Rule** (`rule`, #c9cdd2): light rules under group labels, the borders of the copy button and of a key cap, panel edges on a figure, and the scrollbar.
-- **Hair** (`hair`, #e1e4e7): the datum line, table rows, and the closing rule of a block.
-- **Listing Ground** (`listing`, #f1f2f3): the ground of code listings, inline code, and key caps. A highlighted line takes Listing Highlight (`listing-highlight`, #e3e6e9).
-
-### Dark sheet
-The dark variant redefines the same tokens under `[data-theme="dark"]`; the frontmatter carries each as its `-dark` sibling. The sheet becomes #121518, the rail and the listing ground #1a1e22, ink #e8eaec, and the red lifts to #ff5c47 (text #ff7361) so it holds 6.0:1 on the dark sheet. On Red inverts to the sheet colour, so the number in a place mark is dark on red. Listing keywords become pure white at weight 600; the three listing inks lift to #7fd1b0, #8fbfea, and #e9b872.
+- **Graphite Ground** (`ground`) and **Graphite Glow** (`ground-glow`): the page ground, and the centre of the radial falloff in the result window and the capability visuals.
+- **Panel Surface** (`surface`): code blocks, notes, pager links, figure frames, the mobile contents box.
+- **Raised Panel** (`raised`): inline code, table heads, keyboard keys, menu hover.
+- **Near-white Ink** (`ink`), **Secondary Ink** (`ink-2`), **Muted Ink** (`ink-3`): headings and body; rail and nav links, captions, blockquotes; breadcrumbs, footnotes, contents links, readout labels.
+- **Cool Rule** (`line`) and **Strong Rule** (`line-strong`): every 1px border; the strong rule outlines buttons, keyboard keys and the GitHub link, and colours the scrollbar.
+- Each neutral has a `-light` counterpart for the light theme: a cool white ground, white surfaces, blue-black ink.
+- **Listing colours** (`listing-*`, `listing-*-light`): the Prism themes in `docusaurus.config.ts`, muted violet keywords, teal strings, blue names, gold literals, on the surface colour.
 
 ### Named Rules
-**The Standards Red Rule.** Red appears only on sheet numbers (above the title, in the pager, in the route lists), place marks (the rail's number cell, the square beside the section in view, the rule under the current book), the brand bar, and the keyed bound vortices of Figure 1. It is never a syntax colour, never a note or warning colour, never a hover or focus colour, and never decoration. The theme's own primary variable (`--ifm-color-primary`) is set to ink, so any stock state the build has not restyled falls back to ink rather than red.
+**The Colour Bar Rule.** Outside code listings and the caution border, the only saturated colour on any page is viridis: the map itself on data, and the one teal accent drawn from it. A new hue needs a data reason.
 
-**The Never Colour Alone Rule.** A place mark always changes something besides hue: the current rail row also turns sheet white and bold, the current contents entry and the current book turn bold. Hover follows the same thought from the other side: it changes weight of line, not hue.
-
-**The Same Sheet Rule.** Light is the default and dark is its variant. Every colour is a `--zm-*` token redefined once for dark; no component carries a colour of its own for either theme, except the listing inks, which are set as a pair of themes in the site config.
+**The Result Window Rule.** The start page's hero and the three capability visuals are dark in both themes. Their renders carry pale wake lines and viridis polygons on a transparent ground that only read on graphite, so the hero pins its own palette (`--h-ground`, `--h-ink`, and so on, equal to the dark tokens) and the navbar over it is forced to dark ink. Everything outside those frames follows the theme.
 
 ## Typography
 
-**Display Font:** Public Sans (with Helvetica Neue, Helvetica, Arial, sans-serif)
-**Body Font:** Public Sans (same stack)
-**Label/Mono Font:** Source Code Pro (with ui-monospace, SF Mono, Menlo, Consolas, monospace)
+**Display Font:** Host Grotesk (with ui-sans-serif, system-ui, -apple-system, Segoe UI, sans-serif)
+**Body Font:** Host Grotesk
+**Label/Mono Font:** Red Hat Mono (with ui-monospace, SF Mono, Menlo, Consolas, monospace)
 
-**Character:** One government grotesque does the whole job, light and large for numbers and titles, plain and sturdy for text, so the page reads as an issued standard and not as a brand. Source Code Pro is its drafting-room companion and is used for code alone.
-
-Both families are self-hosted variable fonts (Latin and Latin Extended; Public Sans upright and italic, Source Code Pro upright). No italic of the code face ships, so nothing in a listing is italic, comments included. The root size is 106.25%, so 1rem is 17px and every size below is in those rems. Tabular numerals (`"tnum"`) are on for the whole document. Code ligatures are off. Mathematics is set by KaTeX in its own faces at 1.1em.
+**Character:** A contemporary engineering grotesk, set tight at display sizes and open in body, paired with a mono that reads as an instrument readout. Both are self-hosted variable faces (weights 300 to 800) in `docs/src/fonts/`.
 
 ### Hierarchy
-- **Sheet number** (300, 4.75rem, line-height 1, -0.03em, Standards Red): the number above every sheet title. 3rem below 997px.
-- **Display** (300, 3.75rem, line-height 1.05, -0.025em, balanced wrap): the sheet title and the name on the contents page. 2.5rem below 997px (2.75rem for the contents-page name). A title runs to the 46rem sheet width, not the prose measure, and never breaks inside a word.
-- **Display, API sheets** (300, 3rem): API sheets are titled with identifiers, which must not break, so they are set a step smaller: 2.25rem below 997px, and 1.5rem (-0.015em) at 640px and below.
-- **Headline** (600, 1.5rem, line-height 1.2, -0.01em): numbered section headings, and the route and Conventions headings on the contents page.
-- **Title** (600, 1.1875rem, line-height 1.2): subsections. A fourth level sits at 600, 1rem.
-- **Masthead** (700, 1.5rem, -0.02em): the name beside the brand bar.
-- **Body** (400, 1rem, line-height 1.6): prose, held to a 38rem measure, about 66 characters. The contents-page statement is set one step up (1.0625rem). Strong text is 700.
-- **Rail** (400, 0.9375rem, line-height 1.35): rail entries, masthead links (500), tables, and tab labels. Section heads and the current entry are 700.
-- **Small** (400, 0.875rem): on-page contents, captions, the colophon, the tagline, dropdown items.
-- **Label** (600, 0.8125rem, Mute, sentence case): group labels such as the book heads and "On this page". The running head and listing language labels use the same size at 400.
-- **Code** (Source Code Pro 400, 0.875rem, line-height 1.6): listings. Inline code is 0.875em on the listing ground with no border.
+- **Display** (`display`): the start page's headline only, held to 15ch and balanced over two lines.
+- **Headline** (`headline`): doc page titles. API pages drop to 2.25rem and break anywhere so long item paths fit.
+- **Section title** (`section-title`): the start page's section headings, held to 22ch.
+- **Title** (`title`): doc page h2, with 3rem above. **Title small** (`title-sm`): doc h3 and capability names, with 2.25rem above.
+- **Lede** (`lede`): the start page's one sentence under the headline, 33rem wide; 1.0625rem on phones.
+- **Body** (`body`): doc prose at 1.0625rem, line height 1.65, held to the 42rem measure.
+- **Label** (`label`): table heads, rail category heads, code block titles, admonition heads (with 0.02em tracking).
+- **Caption** (`caption`): render captions, readout labels, breadcrumbs, footer, contents links. Figure captions are 0.875rem.
+- **Readout** (`readout`): the start page's numeric results (C_L, C_Di, the validation reference).
+- **Code** (`code`): listings at 0.875rem; inline code at 0.875em, ligatures off.
 
 ### Named Rules
-**The One Grotesque Rule.** Public Sans sets every word that is not code or mathematics, including labels on listings and figures. Source Code Pro never sets prose, navigation, or labels.
+**The Readout Rule.** Red Hat Mono is for code and for numbers a solver produced. It is never a label face or a decorative voice.
 
-**The Light At Size Rule.** Weight 300 is reserved for the sheet number, the sheet title, and the contents-page name. Nothing else is lighter than 400. The only light type below 2.25rem is an API sheet's identifier title on a sheet 640px or narrower, which shrinks so that it never breaks.
-
-**The Sentence Case Rule.** Labels are sentence case at normal tracking. The one exception in the build is a note's heading, which is 700, uppercase, tracked 0.04em.
+**The Tight Display Rule.** Tracking tightens as size grows: -0.035em at display, -0.03em at headline, -0.02em at h2, -0.01em at h3, none in body.
 
 ## Layout
 
-One grid, read from the left: rail, gutter, datum, column, contents.
+Doc pages use the Docusaurus three-column frame: an 18rem rail (`rail`) with a 1px right rule, the page, and the on-page contents on the right. Prose, headings, blockquotes, display equations, notes and figure captions are capped at the 42rem measure (`measure`); tables, code blocks and figure frames may run wider and scroll horizontally inside themselves. The navbar is 4rem high and translucent (88% ground with a blurred, saturated backdrop) over a 1px bottom rule. The Copyright and License page reuses the same rail through a custom contents component, stacked under the page below 997px.
 
-The rail is 20rem wide on the rail ground and holds a number column (4.25rem, or 4.875rem in the lettered API book) that starts at a 1.75rem inset. Right of the rail a 4rem gutter leads to the datum, a single 1px hair line down the whole sheet. Content begins 1.75rem right of the datum, and that edge is shared by the running head, the sheet number, the title, headings, prose, listings, equations, tables, and the pager. Section numbers hang in the gutter left of the datum, right-aligned. The masthead (4.25rem, closed by a 2px ink rule) puts the name over the rail on the rail's ground and the tagline at the gutter; the colophon sets its one line on the same content edge.
+The start page is a full-height result window (`min-height: max(40rem, min(100svh, 58rem))`) laid out on a two-row grid: copy at the top left, readouts and colour bar along the bottom, the render absolutely placed across the right and centre behind them. Below it, sections sit in an 82rem column with 3.5rem gutters (`gutter`) and 6rem between sections (`section`): a three-column capability row with 1.5rem gaps, then a 5:7 split of text and listing.
 
-On a sheet the column is at most 46rem wide. Prose, section headings, notes, and equations hold a 38rem measure inside it; the sheet title, listings, and tables may run the full 46rem but start on the same edge. Vertical rhythm is set by the headings (2.75rem above a section heading and 0.75rem below; 2rem and 0.5rem for a subsection), 1.125rem between paragraphs, and 1.5rem above and 1.75rem below a listing, table, or note.
-
-The grid gives ground in steps:
-- **1440px and up:** a 15.5rem on-page contents column sits right of the text. On the contents page the statement and Figure 1 share a row.
-- **Below 1440px:** the on-page contents fold above the text as a ruled, collapsible block, because the 38rem measure would not survive beside them.
-- **Below 1280px:** the gutter closes to 1.5rem and section numbers move in front of their headings, with the heading's second line returning under its own first letter. The tagline leaves the masthead below 1200px.
-- **Below 997px:** the rail leaves the sheet (a drawer on doc sheets; below the text on the contents page and the distribution statement), side padding is 1rem, and the sheet number and title step down.
-- **640px and below:** Figure 1 switches to the starboard half of the wing at nearly twice the scale, the pager's two neighbours stack so neither title is cut, and API sheet titles take their smallest size. At 480px and below display equations lose their indent.
-
-### Named Rules
-**The Datum Rule.** Every block on a sheet starts on the one edge right of the datum line. Nothing is centred, and the only indents from it are list items, a display equation (2rem), and quoted text (1.75rem).
-
-**The 66-Character Rule.** Prose holds 38rem at every width. A wider element is a sheet title, a listing, a table, or a figure, never a paragraph.
-
-**The No-Zero Rule.** Sections and sheets count from 1: sections are 1, 2, 3 and their sheets 1.1, 1.2. The API reference book is lettered, A1, A2.1. The contents page carries no sheet number.
+Spacing steps that recur: 0.375rem, 0.75rem, 1.25rem, 1.5rem, 2.5rem and 3rem. At 1100px the render drops lower, capabilities go to two columns and the listing stacks; at 760px the hero becomes a single column with the render in flow (130% wide, bleeding both edges), gutters shrink to 1.125rem and capabilities stack.
 
 ## Elevation & Depth
 
-The system is flat. Every shadow token is set to none, and the build adds no shadow anywhere. Depth is carried by ground alone: the grey rail beside the white sheet, the listing ground under code, and the current rail row turning sheet white, as if the sheet showed through the rail at the reader's place. The few things that float over the sheet (the version dropdown, a listing's copy button, the back-to-top control) separate with a 1px border, not a shadow. Stock parts are brought onto the sheet the same way: a key cap is flat, and the page-load bar is a plain ink line with no glow.
+The system is flat. Depth is tonal: ground, then surface, then raised, each separated by a 1px cool rule. Code blocks, notes, keyboard keys, the back-to-top button and the progress peg all have their shadows removed, and Infima's low shadow is `none`. The only shadows left are Infima's medium and top-level ones on floating menus. The result window gets its depth from a soft radial falloff (`ground-glow` at 62% 58% to `ground` at 70%), not from light effects.
+
+### Shadow Vocabulary
+- **Floating menu, light** (`box-shadow: 0 8px 24px rgba(13, 21, 32, 0.12)`): dropdowns and other Infima overlays.
+- **Floating menu, dark** (`box-shadow: 0 12px 32px rgba(0, 0, 0, 0.45)`): the same in dark.
 
 ### Named Rules
-**The Flat Sheet Rule.** No shadows and no glows, at rest or in any state. Separation is a change of ground or a rule.
+**The No-Glow Rule.** Nothing emits light. No coloured shadows, no halos, no neon edges; a surface separates from its ground by tone and a 1px rule.
 
 ## Shapes
 
-Every corner is square (radius 0, set globally and again on each component that had its own). The form language is the ruled line in four weights:
-
-- **Heavy rule** (2px, Ink): opens a block. It closes the masthead, tops every listing, table, note, figure, route, and pager link, and opens the colophon.
-- **Ink hairline** (1px, Ink): the rule under a table head, and the full border of a floating control (dropdown menu, back-to-top).
-- **Light rule** (1px, Rule): under group labels and listing titles, and around the copy button and a key cap.
-- **Hair** (1px, Hair): the datum, table rows, and the closing rule of a note or a figure.
-
-Marks are rectangles: the brand bar (0.75rem by 2.125rem), the filled number cell in the rail, the 0.5rem square beside the section in view, and the 4px rule under the current book. The favicon is the same vocabulary: a white square, a red bar, and an ink Z. The colour-mode toggle is square. Circles appear only inside a figure, as data. The focus outline is 2px Ink at a 2px offset.
-
-### Named Rules
-**The Ruled Block Rule.** A block opens with a 2px ink rule and, if it closes, closes with a hair. Content is never enclosed on four sides; a full border belongs only to a small control floating over the sheet.
+Small, consistent corners. The base radius is 8px (`base`), used by code blocks, tables, notes, pager links, figure frames, dropdowns, the GitHub link and the colour-mode toggle. Tighter steps go on smaller things: 6px on rail and dropdown links and breadcrumbs, 5px on inline code, keyboard keys and the brand chip, 4px on the focus ring and the colour bar. Start-page buttons take 10px (`control`) and the capability visuals 12px (`frame`). The version badge is the one pill. Borders are always 1px; blockquotes take a 2px strong-rule left edge. Tables are wrapped in a rounded, bordered block with row rules only, no column rules and no stripes.
 
 ## Components
 
-Hover is said in ink. A link's underline thickens from 1px to 2px, a rail row takes a darker ground, a pager link's rule thickens; nothing turns red. State changes that ease do so at 160ms on `cubic-bezier(0.16, 1, 0.3, 1)` and touch only colour, background, opacity, and the rail caret's rotation. Reduced motion collapses every transition and animation. There is no call-to-action button and no form field in the system; the entries below are everything the build has.
-
 ### Buttons
-The only buttons are small controls that float over the sheet.
-- **Shape:** square (radius 0), with a 1px border.
-- **Listing copy button:** Sheet White ground, Ink glyph, 1px Rule border. Hidden until the listing is hovered or the button takes focus.
-- **Back to top:** Sheet White ground, 1px Ink border, Ink glyph.
-- **Colour-mode toggle:** the stock control made square, Ink glyph, no border.
-- **Hover / Focus:** the copy button's border turns Ink; back-to-top and the colour-mode toggle take the Rail Grey ground. Focus is the 2px Ink outline.
-
-### Cards / Containers
-There are no cards. Three ruled blocks do the containing.
-- **Listing:** Listing Ground, a 2px ink rule on top, no border and no radius, 1rem padding. A label in the text face (0.8125rem, Mute, "Rust", "Shell", "TOML") names the language above the code; a listing title, when given, is 600 with a light rule beneath.
-- **Note:** no ground at all. A 2px ink rule above, a hair below, 0.75rem vertical padding, held to the 38rem measure. The heading is 0.8125rem, 700, uppercase. Every kind of note, including warnings and the unreleased-version banner, is set in Ink; kinds are not colour-coded.
-- **Table:** a 2px ink rule above the head and a 1px ink rule below it, hair between rows, no vertical rules, no stripes, no head ground. Cells are left-aligned and top-aligned at 0.9375rem with 0.5rem by 1.5rem padding; head cells are 600 and do not wrap. A wide table scrolls sideways inside itself.
-- **Definition rows** (contents page): the same ruling applied to a term and its definition, a 6.5rem term column in 600.
-- **Key cap:** Listing Ground, a 1px light rule, square, no shadow, set in the code face in Ink.
+Start-page actions, quiet and solid.
+- **Shape:** gently rounded (10px), 3rem tall, 1.25rem side padding, 600 weight.
+- **Primary:** near-white fill with graphite text inside the result window ("Get started"); hover goes to pure white. Below the window, the themed primary (`primaryAlt`) fills with the theme's ink and text in the theme's ground, hovering to 88% opacity.
+- **Install:** the `cargo add zephyr-vlm` command as an outlined button in mono over a translucent graphite fill, with a ruled-off "Copy" state that reads "Copied" for 1.6s; hover lifts the border to muted ink.
+- **Secondary:** transparent with a 1px strong-rule border; hover lifts the border to muted ink.
+- **Motion:** background, border and colour transition over 150ms on `cubic-bezier(0.2, 0.8, 0.2, 1)`.
 
 ### Navigation
-- **Masthead:** Sheet White, 4.25rem, closed by a 2px ink rule. The brand is the red bar and the name; from 997px its cell is rail-wide and takes the rail ground on any page with a rail. Links sit at the right (0.9375rem, 500, Ink) and take a 2px ink underline at a 0.35em offset under the pointer. The current book is 700 with a 4px red rule laid over the masthead's own rule. The version dropdown is Mute at 400 and opens a square menu with a 1px ink border.
-- **Rail:** every entry is a number cell and a label. Section heads are 700 Ink and carry the section number alone; sheets are 400 Second Ink and carry section and sheet. Hover fills the row with Rail Press. Section heads fold their sheets with a drawn chevron; every section starts open, so the rail reads as a contents page.
-- **Place mark (rail):** the current sheet's number cell fills Standards Red with the number in On Red, and the row turns Sheet White and 700.
-- **Running head:** one line above the sheet number, the path at the datum in Mute with "/" separators and the current step in Ink, the version label at the column's far edge. A step under the pointer turns Ink and underlines. The home step is omitted because the masthead already says it.
-- **On-page contents:** a labelled list at 0.875rem, numbered to match the section numbers on the sheet; sub-entries are Mute. An entry under the pointer turns Ink and underlines. The entry in view is 700 Ink with a 0.5rem red square in the margin beside it.
-- **Pager:** two links, each under a 2px ink rule, with a Mute sublabel and a 600 title preceded by the neighbouring sheet's number in Standards Red Text. On hover the rule thickens to 4px and the text holds its place; the title stays Ink. Titles wrap between words only. On a sheet 640px or narrower the two links stack.
-- **Links in text:** Ink, underlined 1px at a 0.2em offset; the underline thickens to 2px under the pointer. The colophon carries no links: it is the copyright line under the masthead's twin, a 2px ink rule, and nothing else.
+- **Navbar:** brand at left (a 1.25rem viridis chip, then "Zephyr" at 1.1875rem/650), links right at 0.9375rem/500 in secondary ink, hovering and active to ink. GitHub sits in an outlined 8px button with its external-link icon hidden. On the start page the navbar is transparent, unblurred and borderless over the result window, its colours pinned dark.
+- **Rail:** 0.9375rem links in secondary ink with 6px corners; the active page is accent-ink on the teal wash at 600 weight; level-one categories are 0.8125rem/600 ink headings. All categories start expanded.
+- **On-page contents:** 0.8125rem muted links that turn accent-ink when active or hovered.
+- **Pager:** surface boxes with a 1px rule whose border turns accent on hover.
 
-### Sheet Number
-The signature. A light, red number (4.75rem, 300) stands above the sheet title on the same edge. It is computed from the sheet's position in its sidebar, the same list the rail counts with CSS counters, so on a doc sheet the two agree by construction, and the pager prints it again for the neighbouring sheets. A screen reader hears "Sheet" before it. The distribution statement sits outside the versioned docs but is still a sheet: it takes the rail, its number, and the place mark, and its rail starts at the same height as on a doc sheet. Its number, and the numbers in the contents page's route lists, are looked up from the site's own contents list and never typed in.
+### Code
+- **Blocks:** surface background, 1px rule, no shadow, 8px corners, 1.125rem padding, Red Hat Mono 0.875rem/1.65. Titles are sans 0.8125rem/600 in secondary ink over a rule. Highlighted lines take a faint teal (`rgba(79, 209, 165, 0.12)` dark, `rgba(33, 144, 141, 0.14)` light).
+- **Inline:** raised fill, 5px corners, no border, ligatures off.
 
-### Hanging Numbers
-Section headings on a sheet are counted and the number is printed in Mute at 400: in the gutter left of the datum from 1280px, in front of the heading below that. Display equations are counted the same way and carry "(n)" in Mute at the right edge of the measure, vertically centred on the equation, which is left-aligned at a 2rem indent and scrolls sideways if it is too long.
+### Tables
+A bordered, rounded block that fits its content and scrolls when it must. Heads are raised, 0.8125rem/600 secondary ink, no wrap; cells are 0.9375rem/1.5 with bottom rules only. A table whose head row is empty is treated as a list and its head is hidden.
 
-### Route List
-The contents page's two ways in. Each route opens with a 2px ink rule, a headline, and one line of Second Ink, then lists its sheets as hair-ruled rows: the sheet number in Standards Red Text in a 3rem column, the title at 600, underlined in ink under the pointer. Two columns from 997px. These are rules, not cards.
+### Notes
+Surface background, 1px strong-rule border, no shadow, held to the measure. Warning and danger notes swap the border for caution amber. Links inside are accent-ink and underlined.
 
-### Figure
-A figure opens with a 2px ink rule and closes with a hair, and its caption (0.875rem, Second Ink) begins with "Figure n." in bold Ink. Figure 1 is drawn from the solver's own mesh for the Quick Start wing, not illustrated: geometry in Ink (1px, 1.5px for the outline), panel edges in Rule, bound vortices in Standards Red (1.5px, 3px in the key), control points as Ink dots, labels in the text face in Mute. Strokes do not scale with the drawing; the trailing legs are the exception, because their dashes are measured in drawing units so that each leg is drawn whole at any size. Its trailing legs draw aft once on load, root first (900ms each on the house ease, 28ms apart); with reduced motion they are simply drawn. Figures 2 and 3, on the Chord Optimization sheet, follow the same vocabulary: the starting shape in Rule, the solved result in Ink, and the analytical answer it is aimed at in Standards Red, dashed.
+### Result Window (signature)
+The start page's hero. Two stacked renders of the uCRM wing (680 panels, α = 2.5°): the panel mesh and, over it, the solution coloured by panel loading, which fades in once over 1100ms after 300ms (shown at once under reduced motion). The render is masked so its trailing legs dissolve aft (up the screen) and it fades in from the left, so nothing crosses the copy. A muted caption at top right names the case; it sits outside the masked figure. The version dropdown is hidden on the start page and shown on doc pages, where the live docs are labelled "Development". Along the bottom, readouts in mono with muted labels, and the colour bar: an 8px viridis ramp, 19rem wide, with 0 / 0.5 / ≥ 1.0 ticks.
+
+### Capability Visual (signature)
+A 4:3 frame, 12px corners, 1px rule, graphite radial fill in both themes, holding real output: the wing-and-tail render, the chord-optimization planforms (start dashed in muted ink, elliptic target dotted in `viridis-100`, IPOPT result solid teal over a teal wash), or the OptVL fixture list with teal dots. A caption naming the source sits under it, then the name, one sentence, and plain links.
+
+### Figures on doc pages
+A surface frame with a 1px rule and 8px corners holding an SVG plot drawn from the library's output. Axes in ink, ticks in strong rule, the starting shape in strong rule, the solved result in ink at the heaviest weight, the analytical reference dashed in accent. Labels are 13.5px with tabular figures. Captions are 0.875rem secondary ink under the frame, with bold runs in ink.
 
 ## Do's and Don'ts
 
 ### Do:
-- **Do** number every new sheet by its place in the rail, counting from 1, and print that same number in the rail, above the title, and in the pager.
-- **Do** start every block on the content edge right of the datum, hold prose to 38rem, and let only listings, tables, and figures run wider.
-- **Do** open a block with a 2px ink rule and close it with a 1px hair; keep every corner square.
-- **Do** pair every red place mark with a second cue: a change of weight or of ground.
-- **Do** say hover in ink: thicken the underline or the rule, or darken the ground.
-- **Do** take every colour from a `--zm-*` token so the dark sheet follows without a second design.
-- **Do** set keywords in heavier ink and keep listings to green strings, blue names, and amber literals.
-- **Do** label things in the text face, in sentence case, in Mute: listing languages, group heads, figure annotations.
-- **Do** keep state changes to 160ms on `cubic-bezier(0.16, 1, 0.3, 1)` and honour reduced motion.
+- **Do** take every colour from the `--z-*` tokens so both themes follow; hard-code hexes only inside the dark-in-both-themes result window and capability visuals.
+- **Do** keep viridis for data, the colour bar, the brand chip and the progress bar, and the teal accent for links, the current place and focus.
+- **Do** render every image from a solved Zephyr case with `docs/scripts/render_loading.py`, keeping its provenance comment, and name the case beside the image.
+- **Do** separate surfaces with a 1px cool rule and a tonal step.
+- **Do** hold prose, headings, notes and captions to the 42rem measure and let tables, code and figures run wider.
+- **Do** keep hover and focus to 150ms colour and border changes, with a 2px accent outline offset 2px for focus.
+- **Do** honour reduced motion: the resolve and every transition collapse to nothing.
 
 ### Don't:
-- **Don't** put red on anything but sheet numbers, place marks, the brand bar, and a figure's data ink. It stays out of syntax colours, notes, warnings, and hover and focus states.
-- **Don't** start any numbering at 0, and don't give the contents page a sheet number.
-- **Don't** round a corner, cast a shadow, or add a glow.
-- **Don't** enclose content in a four-sided box or a card. A full border belongs only to a small control floating over the sheet.
-- **Don't** colour-code notes by kind. A warning is ruled and set in Ink like any other note.
-- **Don't** add a second text face, and don't set prose, navigation, or labels in Source Code Pro.
-- **Don't** use weight 300 for anything but the sheet number and the title.
-- **Don't** break a title inside a word; set an identifier title smaller instead.
-- **Don't** italicise anything in a listing; the code face ships upright only.
-- **Don't** make dark the default or give it colours of its own outside the tokens.
-- **Don't** animate anything that is not a change of state. Figure 1's wake is the one authored movement.
-- **Don't** let a page read as marketing: no slogan hero, no feature cards, and nothing of the stock template or the earlier near-black, glowing-cyan theme.
+- **Don't** add glow, coloured shadows, or shadows on code blocks, notes or keys.
+- **Don't** introduce a second accent hue or use viridis as decoration away from data.
+- **Don't** place an illustration, stock image or mock screenshot; images are the library's output.
+- **Don't** let the result window or capability visuals follow the light theme.
+- **Don't** set labels, headings or prose in Red Hat Mono.
+- **Don't** pin a crate version in prose, install lines or examples.

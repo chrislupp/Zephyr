@@ -2,7 +2,7 @@
     display: block;
     width: 100%;
     height: auto;
-    font-family: var(--zm-sans);
+    font-family: var(--z-sans);
     font-feature-settings: "tnum" 1;
 }
 
@@ -16,59 +16,59 @@
 
 /* The datum of a plot: axes in ink, ticks in rule. */
 .axis {
-    stroke: var(--zm-ink);
+    stroke: var(--z-ink);
     stroke-width: 1;
 }
 
 .tick {
-    stroke: var(--zm-rule);
+    stroke: var(--z-line-strong);
     stroke-width: 1;
 }
 
 .hair {
-    stroke: var(--zm-hair);
+    stroke: var(--z-line-strong);
     stroke-width: 1;
 }
 
 /* The starting shape: a light rule, so it reads as the thing being left behind. */
 .start {
     fill: none;
-    stroke: var(--zm-rule);
+    stroke: var(--z-line-strong);
     stroke-width: 1.5;
 }
 
 /* The solved result: ink, the heaviest line on the figure. */
 .result {
     fill: none;
-    stroke: var(--zm-ink);
+    stroke: var(--z-ink);
     stroke-width: 1.75;
 }
 
-/* The analytical answer being aimed at: data ink, so it takes the red. */
+/* The analytical answer being aimed at takes the accent. */
 .reference {
     fill: none;
-    stroke: var(--zm-red);
+    stroke: var(--z-accent);
     stroke-width: 1.5;
     stroke-dasharray: 5 4;
 }
 
 .node {
-    fill: var(--zm-ink);
+    fill: var(--z-ink);
     stroke: none;
 }
 
 .label {
     font-size: 13.5px;
-    fill: var(--zm-mute);
+    fill: var(--z-ink-2);
 }
 
 .redLabel {
     font-size: 13.5px;
-    fill: var(--zm-red-text);
+    fill: var(--z-accent-ink);
 }
 
 .inkLabel {
     font-size: 13.5px;
-    fill: var(--zm-ink);
+    fill: var(--z-ink);
     font-weight: 600;
 }

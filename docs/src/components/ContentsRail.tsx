@@ -1,33 +1,17 @@
-import type { CSSProperties, ReactNode } from "react";
+import type { ReactNode } from "react";
 import Link from "@docusaurus/Link";
 import { api, docs, type Section } from "@site/src/data/contents";
 import styles from "./ContentsRail.module.css";
 
-// The rail for pages that live outside the docs plugin (the contents page and
-// the distribution statement). It uses the docs sidebar's own class names, so
-// the theme's rail rules and its counters number it exactly as a book's rail.
+// The rail for pages that live outside the docs plugin (Copyright and
+// License). It uses the docs sidebar's own class names, so the theme's
+// sidebar rules apply to it unchanged.
 
 const sameSheet = (a: string, b?: string): boolean => b !== undefined && a === b;
 
-function Book({
-    sections,
-    prefix,
-    current,
-}: {
-    sections: Section[];
-    prefix: string;
-    current?: string;
-}): ReactNode {
+function Book({ sections, current }: { sections: Section[]; current?: string }): ReactNode {
     return (
-        <ul
-            className="theme-doc-sidebar-menu menu__list"
-            style={
-                {
-                    "--zm-sheet-prefix": `"${prefix}"`,
-                    "--zm-number-col": prefix ? "4.875rem" : "4.25rem",
-                } as CSSProperties
-            }
-        >
+        <ul className="theme-doc-sidebar-menu menu__list">
             {sections.map((section) => (
                 <li
                     key={section.label}
@@ -74,18 +58,18 @@ export default function ContentsRail({
 }: {
     /** Also list the API reference book, under a heading for each book. */
     withApi?: boolean;
-    /** The `to` of the sheet being shown, so its number cell is filled. */
+    /** The `to` of the page being shown, so it is marked as current. */
     current?: string;
 }): ReactNode {
     return (
         <aside className={`theme-doc-sidebar-container ${styles.rail}`}>
             <nav className="menu" aria-label="Contents">
                 {withApi && <h2 className={styles.book}>Documentation</h2>}
-                <Book sections={docs} prefix="" current={current} />
+                <Book sections={docs} current={current} />
                 {withApi && (
                     <>
                         <h2 className={styles.book}>API reference</h2>
-                        <Book sections={api} prefix="A" current={current} />
+                        <Book sections={api} current={current} />
                     </>
                 )}
             </nav>

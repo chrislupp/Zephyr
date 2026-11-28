@@ -1,198 +1,523 @@
-.sheet {
-    display: flex;
-    flex-direction: column-reverse;
-}
+/* The start page. The result window is dark in both themes, like the
+   viewport of a post-processor; the sections below follow the theme. */
 
-.main {
+.hero {
+    --h-ground: #0a0e13;
+    --h-ink: #e6edf3;
+    --h-ink-2: #a9b6c3;
+    --h-ink-3: #8796a5;
+    --h-line: #2c3a48;
+    position: relative;
     display: grid;
-    grid-template-areas: "intro" "routes" "figure" "conventions";
-    row-gap: 2.5rem;
-    align-content: start;
-    min-width: 0;
-    padding: 1.25rem 1rem 3.5rem;
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: 1fr auto;
+    min-height: max(40rem, min(100svh, 58rem));
+    /* Content shares the sections' left edge: an 82rem column, 3.5rem inset. */
+    padding: calc(var(--ifm-navbar-height) + 3.5rem) max(3.5rem, calc((100% - 82rem) / 2 + 3.5rem)) 2.5rem;
+    overflow: hidden;
+    background: radial-gradient(120% 90% at 62% 58%, #16202b 0%, var(--h-ground) 70%);
+    color: var(--h-ink);
+    isolation: isolate;
 }
 
-.intro {
-    grid-area: intro;
-    min-width: 0;
+/* ── The render ── */
+
+.render {
+    position: absolute;
+    z-index: -1;
+    left: 27%;
+    right: -9%;
+    top: 19%;
+    margin: 0;
+    aspect-ratio: 1400 / 720;
+    /* The wake legs dissolve aft (up the screen), and the render fades in
+       from the left so nothing crosses the copy. */
+    mask-image:
+        linear-gradient(to bottom, transparent 4%, #000 46%),
+        linear-gradient(to right, transparent 4%, #000 26%);
+    mask-composite: intersect;
+    -webkit-mask-composite: source-in;
 }
 
-.name {
-    margin: 1.5rem 0 1.25rem -0.04em;
-    font-size: 2.75rem;
-    font-weight: 300;
-    line-height: 1.05;
-    letter-spacing: -0.025em;
+.render img {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: auto;
+}
+
+/* The solution resolves over its own mesh once, on load. */
+.solution {
+    animation: z-resolve 1100ms cubic-bezier(0.2, 0.8, 0.2, 1) 300ms both;
+}
+
+@keyframes z-resolve {
+    from {
+        opacity: 0;
+    }
+    to {
+        opacity: 1;
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .solution {
+        animation: none;
+    }
+}
+
+.caption {
+    position: absolute;
+    z-index: 1;
+    right: max(3.5rem, calc((100% - 82rem) / 2 + 3.5rem));
+    top: calc(var(--ifm-navbar-height) + 3.75rem);
+    font-size: 0.8125rem;
+    line-height: 1.5;
+    text-align: right;
+    color: var(--h-ink-3);
+}
+
+/* ── Copy and actions ── */
+
+.copy {
+    align-self: start;
+    max-width: 58rem;
+}
+
+.title {
+    margin: 0 0 1.25rem;
+    max-width: 20ch;
+    font-size: clamp(2.5rem, 4.6vw, 4.25rem);
+    font-weight: 620;
+    line-height: 1.02;
+    letter-spacing: -0.035em;
+    color: var(--h-ink);
+    text-wrap: balance;
 }
 
 .lede {
-    max-width: var(--zm-measure);
-    margin-bottom: 1.5rem;
-    font-size: 1.0625rem;
-    line-height: 1.6;
-}
-
-.intro :global(.theme-code-block) {
-    max-width: 24rem;
-    margin: 0;
-}
-
-.figure {
-    grid-area: figure;
-    max-width: 42rem;
-    margin: 0;
-    min-width: 0;
-}
-
-.figureScroll {
-    padding-bottom: 0.25rem;
-    border-top: 2px solid var(--zm-ink);
-    border-bottom: 1px solid var(--zm-hair);
-}
-
-.narrowNote {
-    display: none;
-}
-
-@media (max-width: 640px) {
-    .narrowNote {
-        display: inline;
-    }
-}
-
-.figure figcaption {
-    max-width: var(--zm-measure);
-    padding-top: 0.625rem;
-    font-size: 0.875rem;
+    max-width: 33rem;
+    margin: 0 0 2rem;
+    font-size: 1.1875rem;
     line-height: 1.5;
-    color: var(--zm-ink-2);
+    color: var(--h-ink-2);
 }
 
-.figure figcaption b {
-    color: var(--zm-ink);
+.actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.75rem;
 }
 
-/* The two ways in. Rules, not cards. */
-.routes {
-    display: grid;
-    grid-area: routes;
-    gap: 0 3rem;
-    margin: 0;
-    padding: 0;
-    list-style: none;
-}
-
-.route {
-    padding: 1rem 0 0.5rem;
-    border-top: 2px solid var(--zm-ink);
-}
-
-.route h2 {
-    margin: 0 0 0.25rem;
-    font-size: 1.5rem;
-    letter-spacing: -0.01em;
-}
-
-.route p {
-    margin: 0 0 0.75rem;
-    color: var(--zm-ink-2);
-}
-
-.route ul {
-    margin: 0;
-    padding: 0;
-    list-style: none;
-}
-
-.route li {
-    border-top: 1px solid var(--zm-hair);
-}
-
-.route a {
-    display: grid;
-    grid-template-columns: 3rem 1fr;
-    padding: 0.5rem 0;
+.primary,
+.primaryAlt,
+.secondary,
+.install {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.75rem;
+    min-height: 3rem;
+    padding: 0 1.25rem;
+    border-radius: 10px;
+    font-size: 1rem;
     font-weight: 600;
+    text-decoration: none;
+    transition:
+        background-color 150ms var(--z-ease),
+        border-color 150ms var(--z-ease),
+        color 150ms var(--z-ease);
+}
+
+.primary {
+    background: var(--h-ink);
+    color: var(--h-ground);
+}
+
+.primary:hover {
+    background: #ffffff;
+    color: var(--h-ground);
     text-decoration: none;
 }
 
-.route a:hover {
-    text-decoration: underline;
+.install {
+    border: 1px solid var(--h-line);
+    background: rgba(18, 26, 35, 0.8);
+    color: var(--h-ink);
+    font: inherit;
+    font-weight: 500;
+    cursor: pointer;
 }
 
-.routeNumber {
+.install code {
+    padding: 0;
+    background: none;
+    font-size: 0.9375rem;
+    color: var(--h-ink);
+}
+
+.install:hover {
+    border-color: var(--h-ink-3);
+}
+
+.copyState {
+    padding-left: 0.75rem;
+    border-left: 1px solid var(--h-line);
+    font-size: 0.8125rem;
+    color: var(--h-ink-3);
+}
+
+/* ── Readouts and colour bar ── */
+
+.readouts {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: flex-end;
+    gap: 1.5rem 3rem;
+    margin: 0;
+}
+
+.readouts dt {
+    font-size: 0.8125rem;
     font-weight: 400;
-    color: var(--zm-red-text);
+    color: var(--h-ink-3);
 }
 
-.conventions {
-    grid-area: conventions;
+.readouts dd {
+    margin: 0.375rem 0 0;
+    font-family: var(--z-mono);
+    font-size: 1.25rem;
+    font-weight: 500;
+    color: var(--h-ink);
 }
 
-.conventions h2 {
-    margin: 0 0 0.75rem;
-    font-size: 1.5rem;
-    letter-spacing: -0.01em;
+.readouts dd a {
+    color: var(--h-ink);
+    text-decoration: underline;
+    text-decoration-color: var(--h-line);
+    text-underline-offset: 0.25em;
 }
 
-.conventions dl {
-    max-width: var(--zm-wide);
-    margin: 0;
-    border-top: 2px solid var(--zm-ink);
+.readouts dd a:hover {
+    text-decoration-color: currentColor;
 }
 
-.conventions dl > div {
+.scale {
+    margin-left: auto;
+    width: 19rem;
+}
+
+.ramp {
+    display: block;
+    height: 8px;
+    margin: 0.5rem 0 0.375rem;
+    border-radius: 4px;
+    background: var(--z-viridis);
+}
+
+.ticks {
+    display: flex;
+    justify-content: space-between;
+    font-size: 0.75rem;
+    color: var(--h-ink-3);
+}
+
+/* ── Sections below the window ── */
+
+.section {
+    max-width: 82rem;
+    margin: 0 auto;
+    padding: 6rem 3.5rem 0;
+}
+
+.sectionTitle {
+    max-width: 22ch;
+    margin: 0 0 2.5rem;
+    font-size: clamp(1.75rem, 3vw, 2.5rem);
+    font-weight: 620;
+    line-height: 1.1;
+    letter-spacing: -0.03em;
+    text-wrap: balance;
+}
+
+.capabilities {
     display: grid;
-    grid-template-columns: 6.5rem 1fr;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 1.5rem;
+}
+
+.capability {
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+}
+
+.visual {
+    display: grid;
+    place-items: center;
+    aspect-ratio: 4 / 3;
+    padding: 1.25rem;
+    border: 1px solid var(--z-line);
+    border-radius: 12px;
+    background: radial-gradient(100% 90% at 50% 55%, #16202b 0%, #0a0e13 100%);
+    overflow: hidden;
+}
+
+.note {
+    margin: 0.625rem 0 1.25rem;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    font-size: 0.8125rem;
+    color: var(--z-ink-3);
+}
+
+.capability h3 {
+    margin: 0 0 0.5rem;
+    font-size: 1.25rem;
+    font-weight: 620;
+    letter-spacing: -0.015em;
+}
+
+.capability p {
+    color: var(--z-ink-2);
+}
+
+.capability > p:not(.note):not(.links) {
+    margin-bottom: 0.875rem;
+}
+
+.links {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.375rem 1.25rem;
+    margin: auto 0 0;
+    font-size: 0.9375rem;
+    font-weight: 500;
+}
+
+.wingTail {
+    width: 135%;
+    max-width: none;
+    height: auto;
+}
+
+.planform {
+    width: 100%;
+    height: auto;
+    overflow: visible;
+}
+
+.planform path {
+    fill: none;
+    vector-effect: non-scaling-stroke;
+    stroke-linejoin: round;
+}
+
+.pfStart {
+    stroke: #8796a5;
+    stroke-width: 1.25;
+    stroke-dasharray: 5 5;
+}
+
+.pfTarget {
+    stroke: #fde725;
+    stroke-width: 1.5;
+    stroke-dasharray: 2 4;
+}
+
+.pfSolved {
+    fill: rgba(79, 209, 165, 0.14) !important;
+    stroke: #4fd1a5;
+    stroke-width: 2;
+}
+
+.fixtures {
+    align-self: stretch;
+    display: grid;
+    align-content: center;
+    gap: 0.125rem;
+    width: 100%;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+}
+
+.fixtures li {
+    display: flex;
+    justify-content: space-between;
     gap: 1rem;
-    padding: 0.5rem 0;
-    border-bottom: 1px solid var(--zm-hair);
+    padding: 0.4375rem 0.25rem;
+    border-bottom: 1px solid #1f2a35;
+    font-size: 0.875rem;
+    color: #a9b6c3;
 }
 
-.conventions dt {
-    font-weight: 600;
+.fixtures li:last-child {
+    border-bottom: 0;
 }
 
-.conventions dd {
+.fixtures code {
+    padding: 0;
+    background: none;
+    color: #e6edf3;
+    font-size: 0.8125rem;
+}
+
+.fixtures li::before {
+    content: "";
+    flex: none;
+    width: 0.5rem;
+    height: 0.5rem;
+    margin: 0.375rem 0 0;
+    border-radius: 50%;
+    background: #4fd1a5;
+    order: -1;
+}
+
+.fixtures li code {
+    margin-right: auto;
+}
+
+/* ── First analysis ── */
+
+.code {
+    display: grid;
+    grid-template-columns: minmax(0, 5fr) minmax(0, 7fr);
+    gap: 3rem;
+    align-items: start;
+}
+
+.codeText p {
+    max-width: 30rem;
+    margin-bottom: 2rem;
+    font-size: 1.0625rem;
+    color: var(--z-ink-2);
+}
+
+.codeText .sectionTitle {
+    margin-bottom: 1.25rem;
+}
+
+.codeBlock {
+    min-width: 0;
+}
+
+.codeBlock :global(.theme-code-block) {
     margin: 0;
 }
 
-@media (min-width: 997px) {
-    .sheet {
-        flex-direction: row;
+.primaryAlt {
+    background: var(--z-ink);
+    color: var(--z-ground);
+}
+
+.primaryAlt:hover {
+    color: var(--z-ground);
+    text-decoration: none;
+    opacity: 0.88;
+}
+
+.secondary {
+    border: 1px solid var(--z-line-strong);
+    color: var(--z-ink);
+}
+
+.secondary:hover {
+    border-color: var(--z-ink-3);
+    color: var(--z-ink);
+    text-decoration: none;
+}
+
+.terms {
+    max-width: 82rem;
+    margin: 0 auto;
+    padding: 6rem 3.5rem 2rem;
+    font-size: 0.8125rem;
+    color: var(--z-ink-3);
+}
+
+/* ── Narrower screens ── */
+
+@media (max-width: 1100px) {
+    .render {
+        left: 12%;
+        right: -10%;
+        top: 34%;
     }
 
-    .sheet :global(.theme-doc-sidebar-container) {
-        padding-top: 1.5rem;
+    /* The caption leaves the headline's row and sits above the colour bar. */
+    .caption {
+        top: auto;
+        bottom: 6.5rem;
     }
 
-    .main {
-        flex: 1 1 auto;
-        margin-left: var(--zm-gutter);
-        padding: 1.5rem 1.5rem 5rem var(--zm-inset);
-        border-left: 1px solid var(--zm-hair);
+    .capabilities {
+        grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
     }
 
-    .name {
-        font-size: 3.75rem;
-    }
-
-    .routes {
-        grid-template-columns: 1fr 1fr;
-        max-width: 62rem;
+    .code {
+        grid-template-columns: minmax(0, 1fr);
     }
 }
 
-@media (min-width: 1440px) {
-    .main {
-        grid-template-columns: minmax(0, 23rem) minmax(0, 1fr);
-        grid-template-areas: "intro figure" "routes routes" "conventions conventions";
-        column-gap: 3rem;
-        row-gap: 2.25rem;
-        align-items: start;
+@media (max-width: 760px) {
+    .hero {
+        display: flex;
+        flex-direction: column;
+        min-height: 0;
+        padding: calc(var(--ifm-navbar-height) + 1.5rem) 1.125rem 2rem;
     }
 
-    .figure {
-        padding-top: 1.75rem;
+    .render {
+        position: relative;
+        left: auto;
+        right: auto;
+        top: auto;
+        order: 2;
+        width: 175%;
+        margin: 0 0 -24% -42%;
+        mask-image: linear-gradient(to bottom, transparent 8%, #000 48%);
+        -webkit-mask-composite: source-over;
+        mask-composite: add;
+    }
+
+    .caption {
+        position: static;
+        order: 3;
+        margin-top: 0;
+        text-align: left;
+    }
+
+    .readouts {
+        order: 4;
+        gap: 1.25rem 2rem;
+        margin-top: 1.5rem;
+    }
+
+    .scale {
+        margin-left: 0;
+        width: 100%;
+    }
+
+    .lede {
+        font-size: 1.0625rem;
+    }
+
+    .install code {
+        font-size: 0.875rem;
+    }
+
+    .section,
+    .terms {
+        padding-left: 1.125rem;
+        padding-right: 1.125rem;
+    }
+
+    .section {
+        padding-top: 4rem;
+    }
+
+    .capabilities {
+        grid-template-columns: minmax(0, 1fr);
     }
 }

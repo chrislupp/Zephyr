@@ -1,7 +1,6 @@
-// The contents of the manual, as the index sheet prints them. Keep this in
-// step with `sidebars.ts`: same sections, same order. Sheet numbers are not
-// stored here; the page counts them the same way the rail does. Every `to` is
-// checked by the build (`onBrokenLinks: "throw"`).
+// The contents of the documentation, for the rail on pages outside the docs
+// plugin. Keep this in step with `sidebars.ts`: same sections, same order.
+// Every `to` is checked by the build (`onBrokenLinks: "throw"`).
 
 export type Sheet = { label: string; to: string };
 export type Section = { label: string; to?: string; sheets: Sheet[] };
@@ -123,17 +122,3 @@ export const api: Section[] = [
         sheets: [{ label: "ZephyrError", to: "/docs/api/errors" }],
     },
 ];
-
-/** The sheet number of `to` within a book: "4" or "2.1"; empty if absent. */
-export function sheetNumber(sections: Section[], to: string, prefix = ""): string {
-    for (const [i, section] of sections.entries()) {
-        if (section.to === to) {
-            return `${prefix}${i + 1}`;
-        }
-        const j = section.sheets.findIndex((sheet) => sheet.to === to);
-        if (j >= 0) {
-            return `${prefix}${i + 1}.${j + 1}`;
-        }
-    }
-    return "";
-}
